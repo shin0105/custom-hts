@@ -62,7 +62,7 @@ backend/
 - `GET /api/korean/quote/{symbol}` - Get real-time quote
 - `GET /api/korean/candle/{symbol}` - Get daily/weekly/monthly candle data
 - `GET /api/korean/candle-minute/{symbol}` - Get minute candle data
-- `GET /api/korean/account/{account_number}` - Get account balance and positions
+- `GET /api/korean/account/{account_number}` - Get account balance and positions ⚠️ **Requires authentication (not yet implemented)**
 - `GET /api/korean/financials/{symbol}` - Get financial statements
 - `GET /api/korean/search` - Search Korean stocks
 

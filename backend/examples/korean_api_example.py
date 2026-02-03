@@ -6,7 +6,6 @@ to fetch stock quotes, candle charts, and account balance.
 """
 
 import asyncio
-from datetime import datetime
 from src.services.korean_market import korean_market_service
 
 
@@ -68,30 +67,8 @@ async def main():
     # 4. Get account balance (requires valid account number)
     print("\n4. Getting account balance...")
     print("   Note: This requires a valid account number and will fail")
-    print("   with demo credentials. Example account: '12345678'")
-    
-    # Uncomment below to test with your actual account
-    # account_number = "12345678"  # Replace with your account number
-    # account_data = await korean_market_service.get_account_balance(account_number)
-    # if account_data:
-    #     balance = account_data["balance"]
-    #     positions = account_data["positions"]
-    #     
-    #     print(f"   Account: {balance.account_number}")
-    #     print(f"   Total Evaluation: {balance.total_evaluation:,.0f} KRW")
-    #     print(f"   Cash Balance: {balance.cash_balance:,.0f} KRW")
-    #     print(f"   Investment: {balance.investment_amount:,.0f} KRW")
-    #     print(f"   P&L: {balance.profit_loss:+,.0f} KRW ({balance.profit_loss_percent:+.2f}%)")
-    #     
-    #     if positions:
-    #         print(f"\n   Positions ({len(positions)}):")
-    #         for pos in positions:
-    #             print(f"   - {pos.name} ({pos.symbol})")
-    #             print(f"     Qty: {pos.quantity:,} @ {pos.average_price:,.0f} KRW")
-    #             print(f"     Current: {pos.current_price:,.0f} KRW")
-    #             print(f"     P&L: {pos.profit_loss:+,.0f} KRW ({pos.profit_loss_percent:+.2f}%)")
-    # else:
-    #     print("   Failed to fetch account balance")
+    print("   with demo credentials.")
+    print("   WARNING: This endpoint lacks authentication in current implementation.")
     
     print("\n" + "=" * 60)
     print("Example completed!")

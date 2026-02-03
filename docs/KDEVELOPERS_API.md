@@ -107,7 +107,7 @@ Different API endpoints require different transaction IDs:
 ### KoreanCandleData
 Represents OHLCV (Open, High, Low, Close, Volume) candle data:
 - `symbol`: Stock symbol (e.g., "005930")
-- `date`: Date/time in YYYYMMDD or HHMMSS format
+- `date`: For daily/weekly/monthly candles, trading date in `YYYYMMDD` format; for minute candles, candle time in `HHMMSS` format
 - `open`: Opening price in KRW
 - `high`: High price in KRW
 - `low`: Low price in KRW

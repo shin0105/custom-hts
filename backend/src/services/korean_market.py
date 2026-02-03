@@ -6,8 +6,6 @@ from ..models.korean import (
     KoreanStockQuote,
     KoreanFinancialStatement,
     KoreanCandleData,
-    KoreanAccountBalance,
-    KoreanStockPosition,
 )
 from ..integrations.kdevelopers import kdevelopers_client
 from ..integrations.opendart import opendart_client
@@ -97,7 +95,7 @@ class KoreanMarketService:
 
         Args:
             symbol: Stock code
-            interval: Minute interval (1, 3, 5, 10, 15, 30, 60)
+            interval: Minute interval (1, 5, 10, 30, 60)
             limit: Number of candles to retrieve
 
         Returns:

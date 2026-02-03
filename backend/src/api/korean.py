@@ -3,15 +3,30 @@
 from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+from enum import Enum
 from ..models.korean import (
     KoreanStockQuote,
     KoreanFinancialStatement,
     KoreanCandleData,
-    KoreanAccountBalance,
-    KoreanStockPosition,
 )
 from ..services.korean_market import korean_market_service
 from ..integrations.opendart import opendart_client
+
+
+class PeriodType(str, Enum):
+    """Valid period types for candle data."""
+    DAILY = "D"
+    WEEKLY = "W"
+    MONTHLY = "M"
+
+
+class MinuteInterval(int, Enum):
+    """Valid minute intervals for candle data."""
+    ONE = 1
+    FIVE = 5
+    TEN = 10
+    THIRTY = 30
+    SIXTY = 60
 
 router = APIRouter(prefix="/korean", tags=["Korean Market"])
 
@@ -76,8 +91,8 @@ async def korean_market_health() -> dict:
 @router.get("/candle/{symbol}", response_model=List[KoreanCandleData])
 async def get_korean_candle(
     symbol: str,
-    period: str = Query(
-        "D", description="Period type (D: daily, W: weekly, M: monthly)"
+    period: PeriodType = Query(
+        PeriodType.DAILY, description="Period type (D: daily, W: weekly, M: monthly)"
     ),
     adjust_price: bool = Query(True, description="Adjust for stock splits"),
     limit: int = Query(100, ge=1, le=500, description="Number of candles"),
@@ -95,7 +110,7 @@ async def get_korean_candle(
         List of candle data (OHLCV)
     """
     candles = await korean_market_service.get_daily_candle(
-        symbol, period, adjust_price, limit
+        symbol, period.value, adjust_price, limit
     )
     if not candles:
         raise HTTPException(
@@ -108,7 +123,7 @@ async def get_korean_candle(
 @router.get("/candle-minute/{symbol}", response_model=List[KoreanCandleData])
 async def get_korean_minute_candle(
     symbol: str,
-    interval: int = Query(1, description="Minute interval (1, 5, 10, 30, 60)"),
+    interval: MinuteInterval = Query(MinuteInterval.ONE, description="Minute interval (1, 5, 10, 30, 60)"),
     limit: int = Query(100, ge=1, le=500, description="Number of candles"),
 ) -> List[KoreanCandleData]:
     """
@@ -116,14 +131,14 @@ async def get_korean_minute_candle(
 
     Args:
         symbol: Stock code
-        interval: Minute interval
+        interval: Minute interval (1, 5, 10, 30, or 60 minutes)
         limit: Number of candles to retrieve (1-500)
 
     Returns:
         List of minute candle data (OHLCV)
     """
     candles = await korean_market_service.get_minute_candle(
-        symbol, interval, limit
+        symbol, interval.value, limit
     )
     if not candles:
         raise HTTPException(
@@ -142,6 +157,11 @@ async def get_korean_account_balance(
 ) -> Dict[str, Any]:
     """
     Get account balance and stock positions.
+    
+    WARNING: This endpoint currently lacks authentication and authorization.
+    In production, this should be protected with user authentication and
+    the account_number should be derived from the authenticated user context
+    rather than being a path parameter accessible by anyone.
 
     Args:
         account_number: Account number (8 digits)

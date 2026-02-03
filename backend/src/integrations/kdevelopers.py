@@ -221,7 +221,7 @@ class KDevelopersClient:
 
         Args:
             symbol: Stock code (e.g., "005930" for Samsung Electronics)
-            interval: Minute interval (1, 3, 5, 10, 15, 30, 60)
+            interval: Minute interval (1, 5, 10, 30, 60)
             limit: Number of candles to retrieve (default: 100)
 
         Returns:
@@ -246,6 +246,7 @@ class KDevelopersClient:
                 "FID_INPUT_ISCD": symbol,  # Stock code
                 "FID_INPUT_HOUR_1": "",  # Time filter (empty for all)
                 "FID_PW_DATA_INCU_YN": "Y",  # Include previous data
+                "FID_TICK_RANGE": str(interval),  # Minute interval
             }
 
             response = requests.get(
@@ -331,7 +332,13 @@ class KDevelopersClient:
 
             data = response.json()
             output1 = data.get("output1", [])  # Stock positions
-            output2 = data.get("output2", [{}])[0]  # Account summary
+            
+            # Safely access output2 with proper handling for empty lists
+            raw_output2 = data.get("output2")
+            if isinstance(raw_output2, list) and raw_output2:
+                output2 = raw_output2[0]  # Account summary
+            else:
+                output2 = {}  # Fallback when account summary is missing or empty
 
             # Parse account balance
             total_evaluation = safe_float(output2.get("tot_evlu_amt"))

@@ -58,7 +58,13 @@ class KoreanCandleData(BaseModel):
     """Korean stock candle/OHLCV data."""
 
     symbol: str = Field(..., description="Stock symbol")
-    date: str = Field(..., description="Date (YYYYMMDD format)")
+    date: str = Field(
+        ...,
+        description=(
+            "Candle date/time (YYYYMMDD for daily/period candles, "
+            "HHMMSS for minute candles)"
+        ),
+    )
     open: float = Field(..., description="Opening price in KRW")
     high: float = Field(..., description="High price in KRW")
     low: float = Field(..., description="Low price in KRW")
