@@ -1,0 +1,56 @@
+"""Pydantic models for US market data."""
+
+from typing import Optional
+from datetime import datetime
+from pydantic import BaseModel, Field
+
+
+class USStockQuote(BaseModel):
+    """US stock quote data."""
+
+    symbol: str = Field(..., description="Stock ticker symbol (e.g., AAPL)")
+    name: str = Field(..., description="Company name")
+    current_price: float = Field(..., description="Current price in USD")
+    change: float = Field(..., description="Price change in USD")
+    change_percent: float = Field(..., description="Price change percentage")
+    volume: int = Field(..., description="Trading volume")
+    timestamp: datetime = Field(..., description="Quote timestamp")
+    high: Optional[float] = Field(None, description="Day high")
+    low: Optional[float] = Field(None, description="Day low")
+    open: Optional[float] = Field(None, description="Opening price")
+    previous_close: Optional[float] = Field(None, description="Previous close")
+    market_cap: Optional[float] = Field(None, description="Market cap in USD")
+
+
+class USFinancialStatement(BaseModel):
+    """US company financial statement data."""
+
+    symbol: str = Field(..., description="Stock ticker symbol")
+    company_name: str = Field(..., description="Company name")
+    year: int = Field(..., description="Fiscal year")
+    quarter: Optional[int] = Field(None, description="Quarter (1-4)")
+    revenue: Optional[float] = Field(None, description="Revenue in USD")
+    operating_income: Optional[float] = Field(
+        None, description="Operating income in USD"
+    )
+    net_income: Optional[float] = Field(None, description="Net income in USD")
+    total_assets: Optional[float] = Field(
+        None, description="Total assets in USD"
+    )
+    total_liabilities: Optional[float] = Field(
+        None, description="Total liabilities in USD"
+    )
+    total_equity: Optional[float] = Field(
+        None, description="Total equity in USD"
+    )
+    eps: Optional[float] = Field(None, description="Earnings per share")
+    pe_ratio: Optional[float] = Field(None, description="P/E ratio")
+    updated_at: datetime = Field(..., description="Data update timestamp")
+
+
+class USSearchResult(BaseModel):
+    """US stock search result."""
+
+    symbol: str = Field(..., description="Stock ticker symbol")
+    name: str = Field(..., description="Company name")
+    exchange: str = Field(..., description="Exchange (NYSE, NASDAQ, etc.)")

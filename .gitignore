@@ -91,3 +91,18 @@ config.ini
 credentials.json
 *.key
 *.pem
+
+# Node modules
+node_modules/
+
+# Frontend build output
+frontend/dist/
+frontend/.vite/
+
+# Dependency directories
+backend/.venv/
+
+# Lock files (optional - keep if you want reproducible builds)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
