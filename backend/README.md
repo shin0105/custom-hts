@@ -60,6 +60,9 @@ backend/
 
 ### Korean Market
 - `GET /api/korean/quote/{symbol}` - Get real-time quote
+- `GET /api/korean/candle/{symbol}` - Get daily/weekly/monthly candle data
+- `GET /api/korean/candle-minute/{symbol}` - Get minute candle data
+- `GET /api/korean/account/{account_number}` - Get account balance and positions
 - `GET /api/korean/financials/{symbol}` - Get financial statements
 - `GET /api/korean/search` - Search Korean stocks
 
@@ -91,6 +94,20 @@ Run tests with coverage:
 ```bash
 uv run pytest --cov=src --cov-report=html
 ```
+
+## Examples
+
+See the `examples/` directory for usage examples:
+
+```bash
+# Run Korean API example
+uv run python examples/korean_api_example.py
+```
+
+Examples demonstrate:
+- Real-time stock quotes
+- Candle chart data (daily/minute)
+- Account balance and positions
 
 ## Code Quality
 
