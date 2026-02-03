@@ -9,16 +9,18 @@ This script demonstrates:
 4. Retrieving cash flow statement data
 
 Usage:
-    python test_opendart_demo.py
+    cd backend
+    PYTHONPATH=/home/runner/work/custom-hts/custom-hts/backend/src python test_opendart_demo.py
 """
 
 import sys
 from pathlib import Path
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+backend_dir = Path(__file__).parent
+sys.path.insert(0, str(backend_dir / "src"))
 
-from integrations.opendart import opendart_client
+from src.integrations.opendart import opendart_client
 from datetime import datetime
 import json
 
