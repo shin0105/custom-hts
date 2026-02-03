@@ -200,3 +200,30 @@ MIT License - see LICENSE file for details
 ## Support
 
 For issues and questions, please open an issue on GitHub.
+
+## Documentation
+
+- [Setup Guide](docs/SETUP.md) - Detailed setup instructions
+- [API Documentation](docs/API.md) - Complete API reference
+- [Database Schema](database/schema.md) - Database design and tables
+- [Backend README](backend/README.md) - Backend specific documentation
+- [Frontend README](frontend/README.md) - Frontend specific documentation
+
+## Project Status
+
+This is a functional HTS (Home Trading System) application with:
+- ✅ Complete backend API with FastAPI
+- ✅ React TypeScript frontend with routing
+- ✅ Korean market integration (KDevelopers + OPENDART)
+- ✅ US market integration (Yahoo Finance)
+- ✅ Database schema for data caching
+- ✅ Comprehensive documentation
+- ✅ Basic test coverage
+
+Future enhancements:
+- Real-time WebSocket data updates
+- Advanced charting with technical indicators
+- User authentication and watchlists
+- Portfolio tracking
+- Price alerts
+- Mobile-responsive improvements
