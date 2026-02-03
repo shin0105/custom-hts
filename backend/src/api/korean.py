@@ -2,8 +2,14 @@
 
 from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime
-from typing import Optional, Dict, Any
-from ..models.korean import KoreanStockQuote, KoreanFinancialStatement
+from typing import Optional, List, Dict, Any
+from ..models.korean import (
+    KoreanStockQuote,
+    KoreanFinancialStatement,
+    KoreanCandleData,
+    KoreanAccountBalance,
+    KoreanStockPosition,
+)
 from ..services.korean_market import korean_market_service
 from ..integrations.opendart import opendart_client
 
@@ -32,9 +38,7 @@ async def get_korean_quote(symbol: str) -> KoreanStockQuote:
 @router.get("/financials/{symbol}", response_model=KoreanFinancialStatement)
 async def get_korean_financials(
     symbol: str,
-    year: int = Query(
-        datetime.now().year, description="Fiscal year"
-    ),
+    year: int = Query(datetime.now().year, description="Fiscal year"),
     quarter: Optional[int] = Query(
         None, ge=1, le=4, description="Quarter (1-4)"
     ),
@@ -69,14 +73,103 @@ async def korean_market_health() -> dict:
     return {"status": "healthy", "market": "Korean"}
 
 
+@router.get("/candle/{symbol}", response_model=List[KoreanCandleData])
+async def get_korean_candle(
+    symbol: str,
+    period: str = Query(
+        "D", description="Period type (D: daily, W: weekly, M: monthly)"
+    ),
+    adjust_price: bool = Query(True, description="Adjust for stock splits"),
+    limit: int = Query(100, ge=1, le=500, description="Number of candles"),
+) -> List[KoreanCandleData]:
+    """
+    Get candle chart data for a Korean stock.
+
+    Args:
+        symbol: Stock code (e.g., 005930 for Samsung Electronics)
+        period: Period type (D/W/M for daily/weekly/monthly)
+        adjust_price: Whether to adjust for stock splits
+        limit: Number of candles to retrieve (1-500)
+
+    Returns:
+        List of candle data (OHLCV)
+    """
+    candles = await korean_market_service.get_daily_candle(
+        symbol, period, adjust_price, limit
+    )
+    if not candles:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Candle data not found for symbol {symbol}",
+        )
+    return candles
+
+
+@router.get("/candle-minute/{symbol}", response_model=List[KoreanCandleData])
+async def get_korean_minute_candle(
+    symbol: str,
+    interval: int = Query(1, description="Minute interval (1, 5, 10, 30, 60)"),
+    limit: int = Query(100, ge=1, le=500, description="Number of candles"),
+) -> List[KoreanCandleData]:
+    """
+    Get minute candle chart data for a Korean stock.
+
+    Args:
+        symbol: Stock code
+        interval: Minute interval
+        limit: Number of candles to retrieve (1-500)
+
+    Returns:
+        List of minute candle data (OHLCV)
+    """
+    candles = await korean_market_service.get_minute_candle(
+        symbol, interval, limit
+    )
+    if not candles:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Minute candle data not found for symbol {symbol}",
+        )
+    return candles
+
+
+@router.get("/account/{account_number}")
+async def get_korean_account_balance(
+    account_number: str,
+    account_product_code: str = Query(
+        "01", description="Account product code"
+    ),
+) -> Dict[str, Any]:
+    """
+    Get account balance and stock positions.
+
+    Args:
+        account_number: Account number (8 digits)
+        account_product_code: Account product code (default: "01")
+
+    Returns:
+        Account balance and list of stock positions
+    """
+    result = await korean_market_service.get_account_balance(
+        account_number, account_product_code
+    )
+    if not result:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Account balance not found for account {account_number}",
+        )
+    return result
+
+
 @router.get("/financials/{symbol}/balance-sheet")
 async def get_balance_sheet(
     symbol: str,
-    year: int = Query(
-        datetime.now().year - 1, description="Fiscal year"
-    ),
+    year: int = Query(datetime.now().year - 1, description="Fiscal year"),
     quarter: Optional[int] = Query(
-        None, ge=1, le=4, description="Quarter (1-4 for quarterly, None for annual)"
+        None,
+        ge=1,
+        le=4,
+        description="Quarter (1-4 for quarterly, None for annual)",
     ),
 ) -> Dict[str, Any]:
     """
@@ -100,30 +193,31 @@ async def get_balance_sheet(
         Dictionary with all balance sheet line items
     """
     balance_sheet = opendart_client.get_balance_sheet(symbol, year, quarter)
-    
+
     if not balance_sheet:
         raise HTTPException(
             status_code=404,
             detail=f"Balance sheet not found for {symbol} (year: {year}, quarter: {quarter})",
         )
-    
+
     return {
         "symbol": symbol,
         "year": year,
         "quarter": quarter,
         "statement_type": "balance_sheet",
-        "data": balance_sheet
+        "data": balance_sheet,
     }
 
 
 @router.get("/financials/{symbol}/income-statement")
 async def get_income_statement(
     symbol: str,
-    year: int = Query(
-        datetime.now().year - 1, description="Fiscal year"
-    ),
+    year: int = Query(datetime.now().year - 1, description="Fiscal year"),
     quarter: Optional[int] = Query(
-        None, ge=1, le=4, description="Quarter (1-4 for quarterly, None for annual)"
+        None,
+        ge=1,
+        le=4,
+        description="Quarter (1-4 for quarterly, None for annual)",
     ),
 ) -> Dict[str, Any]:
     """
@@ -147,31 +241,34 @@ async def get_income_statement(
     Returns:
         Dictionary with all income statement line items
     """
-    income_statement = opendart_client.get_income_statement(symbol, year, quarter)
-    
+    income_statement = opendart_client.get_income_statement(
+        symbol, year, quarter
+    )
+
     if not income_statement:
         raise HTTPException(
             status_code=404,
             detail=f"Income statement not found for {symbol} (year: {year}, quarter: {quarter})",
         )
-    
+
     return {
         "symbol": symbol,
         "year": year,
         "quarter": quarter,
         "statement_type": "income_statement",
-        "data": income_statement
+        "data": income_statement,
     }
 
 
 @router.get("/financials/{symbol}/cash-flow")
 async def get_cash_flow(
     symbol: str,
-    year: int = Query(
-        datetime.now().year - 1, description="Fiscal year"
-    ),
+    year: int = Query(datetime.now().year - 1, description="Fiscal year"),
     quarter: Optional[int] = Query(
-        None, ge=1, le=4, description="Quarter (1-4 for quarterly, None for annual)"
+        None,
+        ge=1,
+        le=4,
+        description="Quarter (1-4 for quarterly, None for annual)",
     ),
 ) -> Dict[str, Any]:
     """
@@ -192,17 +289,17 @@ async def get_cash_flow(
         Dictionary with all cash flow line items
     """
     cash_flow = opendart_client.get_cash_flow(symbol, year, quarter)
-    
+
     if not cash_flow:
         raise HTTPException(
             status_code=404,
             detail=f"Cash flow statement not found for {symbol} (year: {year}, quarter: {quarter})",
         )
-    
+
     return {
         "symbol": symbol,
         "year": year,
         "quarter": quarter,
         "statement_type": "cash_flow",
-        "data": cash_flow
+        "data": cash_flow,
     }

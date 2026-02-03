@@ -2,13 +2,18 @@
 
 import requests
 import json
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 import hashlib
 import hmac
 import base64
 from ..utils.config import settings
-from ..models.korean import KoreanStockQuote
+from ..models.korean import (
+    KoreanStockQuote,
+    KoreanCandleData,
+    KoreanAccountBalance,
+    KoreanStockPosition,
+)
 from ..utils.helpers import safe_float, safe_int, calculate_change_percent
 
 
@@ -129,6 +134,251 @@ class KDevelopersClient:
             )
         except Exception as e:
             print(f"Failed to get quote for {symbol}: {e}")
+            return None
+
+    def get_daily_candle(
+        self,
+        symbol: str,
+        period: str = "D",
+        adjust_price: bool = True,
+        limit: int = 100,
+    ) -> Optional[List[KoreanCandleData]]:
+        """
+        Get daily/period candle chart data for a Korean stock.
+
+        Args:
+            symbol: Stock code (e.g., "005930" for Samsung Electronics)
+            period: Period type - "D" (daily), "W" (weekly), "M" (monthly)
+            adjust_price: Whether to adjust for stock splits
+            limit: Number of candles to retrieve (default: 100)
+
+        Returns:
+            List of KoreanCandleData objects or None if fetch fails
+        """
+        token = self._get_access_token()
+        if not token:
+            return None
+
+        try:
+            url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-daily-price"
+            headers = {
+                "content-type": "application/json",
+                "authorization": f"Bearer {token}",
+                "appkey": self.api_key,
+                "appsecret": self.api_secret,
+                "tr_id": "FHKST01010400",  # Transaction ID for daily price
+            }
+
+            params = {
+                "FID_COND_MRKT_DIV_CODE": "J",  # Market division
+                "FID_INPUT_ISCD": symbol,  # Stock code
+                "FID_PERIOD_DIV_CODE": period,  # Period (D/W/M)
+                "FID_ORG_ADJ_PRC": "0" if adjust_price else "1",
+            }
+
+            response = requests.get(
+                url, headers=headers, params=params, timeout=10
+            )
+            response.raise_for_status()
+
+            data = response.json()
+            output_list = data.get("output", [])
+
+            # Parse the response
+            candles = []
+            for i, item in enumerate(output_list):
+                if i >= limit:
+                    break
+
+                close_price = safe_float(item.get("stck_clpr"))
+                open_price = safe_float(item.get("stck_oprc"))
+                change = safe_float(item.get("prdy_vrss"))
+                change_percent = safe_float(item.get("prdy_ctrt"))
+
+                candle = KoreanCandleData(
+                    symbol=symbol,
+                    date=item.get("stck_bsop_date", ""),
+                    open=open_price,
+                    high=safe_float(item.get("stck_hgpr")),
+                    low=safe_float(item.get("stck_lwpr")),
+                    close=close_price,
+                    volume=safe_int(item.get("acml_vol")),
+                    change=change,
+                    change_percent=change_percent,
+                )
+                candles.append(candle)
+
+            return candles
+        except Exception as e:
+            print(f"Failed to get candle data for {symbol}: {e}")
+            return None
+
+    def get_minute_candle(
+        self, symbol: str, interval: int = 1, limit: int = 100
+    ) -> Optional[List[KoreanCandleData]]:
+        """
+        Get minute candle chart data for a Korean stock.
+
+        Args:
+            symbol: Stock code (e.g., "005930" for Samsung Electronics)
+            interval: Minute interval (1, 3, 5, 10, 15, 30, 60)
+            limit: Number of candles to retrieve (default: 100)
+
+        Returns:
+            List of KoreanCandleData objects or None if fetch fails
+        """
+        token = self._get_access_token()
+        if not token:
+            return None
+
+        try:
+            url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
+            headers = {
+                "content-type": "application/json",
+                "authorization": f"Bearer {token}",
+                "appkey": self.api_key,
+                "appsecret": self.api_secret,
+                "tr_id": "FHKST03010200",  # Transaction ID for minute price
+            }
+
+            params = {
+                "FID_COND_MRKT_DIV_CODE": "J",  # Market division
+                "FID_INPUT_ISCD": symbol,  # Stock code
+                "FID_INPUT_HOUR_1": "",  # Time filter (empty for all)
+                "FID_PW_DATA_INCU_YN": "Y",  # Include previous data
+            }
+
+            response = requests.get(
+                url, headers=headers, params=params, timeout=10
+            )
+            response.raise_for_status()
+
+            data = response.json()
+            output_list = data.get("output2", [])
+
+            # Parse the response
+            candles = []
+            for i, item in enumerate(output_list):
+                if i >= limit:
+                    break
+
+                close_price = safe_float(item.get("stck_prpr"))
+                open_price = safe_float(item.get("stck_oprc"))
+
+                candle = KoreanCandleData(
+                    symbol=symbol,
+                    date=item.get("stck_cntg_hour", ""),  # Time in HHMMSS
+                    open=open_price,
+                    high=safe_float(item.get("stck_hgpr")),
+                    low=safe_float(item.get("stck_lwpr")),
+                    close=close_price,
+                    volume=safe_int(item.get("cntg_vol")),
+                    change=safe_float(item.get("prdy_vrss")),
+                    change_percent=safe_float(item.get("prdy_ctrt")),
+                )
+                candles.append(candle)
+
+            return candles
+        except Exception as e:
+            print(f"Failed to get minute candle data for {symbol}: {e}")
+            return None
+
+    def get_account_balance(
+        self, account_number: str, account_product_code: str = "01"
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get account balance and positions.
+
+        Args:
+            account_number: Account number (8 digits)
+            account_product_code: Account product code (default: "01")
+
+        Returns:
+            Dictionary containing balance info and positions, or None if fails
+        """
+        token = self._get_access_token()
+        if not token:
+            return None
+
+        try:
+            url = f"{self.base_url}/uapi/domestic-stock/v1/trading/inquire-balance"
+            headers = {
+                "content-type": "application/json",
+                "authorization": f"Bearer {token}",
+                "appkey": self.api_key,
+                "appsecret": self.api_secret,
+                "tr_id": "TTTC8434R",  # Real account (use VTTC8434R for mock)
+            }
+
+            params = {
+                "CANO": account_number,  # Account number
+                "ACNT_PRDT_CD": account_product_code,  # Account product code
+                "AFHR_FLPR_YN": "N",  # After-hours flag
+                "OFL_YN": "",  # Offline flag
+                "INQR_DVSN": "02",  # Inquiry division (01: total, 02: detail)
+                "UNPR_DVSN": "01",  # Unit price division
+                "FUND_STTL_ICLD_YN": "N",  # Fund settlement included
+                "FNCG_AMT_AUTO_RDPT_YN": "N",  # Financing auto redemption
+                "PRCS_DVSN": "01",  # Process division
+                "CTX_AREA_FK100": "",  # Continuation key
+                "CTX_AREA_NK100": "",  # Continuation key
+            }
+
+            response = requests.get(
+                url, headers=headers, params=params, timeout=10
+            )
+            response.raise_for_status()
+
+            data = response.json()
+            output1 = data.get("output1", [])  # Stock positions
+            output2 = data.get("output2", [{}])[0]  # Account summary
+
+            # Parse account balance
+            total_evaluation = safe_float(output2.get("tot_evlu_amt"))
+            cash_balance = safe_float(output2.get("dnca_tot_amt"))
+            total_purchase = safe_float(output2.get("pchs_amt_smtl_amt"))
+            profit_loss = safe_float(output2.get("evlu_pfls_smtl_amt"))
+            profit_loss_percent = safe_float(
+                output2.get("tot_evlu_pfls_rt")
+            )
+
+            balance = KoreanAccountBalance(
+                account_number=account_number,
+                total_evaluation=total_evaluation,
+                cash_balance=cash_balance,
+                investment_amount=total_purchase,
+                profit_loss=profit_loss,
+                profit_loss_percent=profit_loss_percent,
+                timestamp=datetime.now(),
+            )
+
+            # Parse stock positions
+            positions = []
+            for item in output1:
+                symbol = item.get("pdno", "")
+                if not symbol:
+                    continue
+
+                position = KoreanStockPosition(
+                    symbol=symbol,
+                    name=item.get("prdt_name", symbol),
+                    quantity=safe_int(item.get("hldg_qty")),
+                    average_price=safe_float(item.get("pchs_avg_pric")),
+                    current_price=safe_float(item.get("prpr")),
+                    evaluation_amount=safe_float(item.get("evlu_amt")),
+                    profit_loss=safe_float(item.get("evlu_pfls_amt")),
+                    profit_loss_percent=safe_float(
+                        item.get("evlu_pfls_rt")
+                    ),
+                )
+                positions.append(position)
+
+            return {
+                "balance": balance,
+                "positions": positions,
+            }
+        except Exception as e:
+            print(f"Failed to get account balance: {e}")
             return None
 
 

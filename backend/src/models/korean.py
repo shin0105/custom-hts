@@ -52,3 +52,54 @@ class KoreanSearchResult(BaseModel):
     symbol: str = Field(..., description="Stock symbol")
     name: str = Field(..., description="Company name in Korean")
     market: str = Field(..., description="Market (KOSPI, KOSDAQ, etc.)")
+
+
+class KoreanCandleData(BaseModel):
+    """Korean stock candle/OHLCV data."""
+
+    symbol: str = Field(..., description="Stock symbol")
+    date: str = Field(..., description="Date (YYYYMMDD format)")
+    open: float = Field(..., description="Opening price in KRW")
+    high: float = Field(..., description="High price in KRW")
+    low: float = Field(..., description="Low price in KRW")
+    close: float = Field(..., description="Closing price in KRW")
+    volume: int = Field(..., description="Trading volume")
+    change: Optional[float] = Field(None, description="Price change in KRW")
+    change_percent: Optional[float] = Field(
+        None, description="Price change percentage"
+    )
+
+
+class KoreanAccountBalance(BaseModel):
+    """Korean stock account balance information."""
+
+    account_number: str = Field(..., description="Account number")
+    total_evaluation: float = Field(
+        ..., description="Total evaluation amount in KRW"
+    )
+    cash_balance: float = Field(..., description="Cash balance in KRW")
+    investment_amount: float = Field(
+        ..., description="Total investment amount in KRW"
+    )
+    profit_loss: float = Field(..., description="Total profit/loss in KRW")
+    profit_loss_percent: float = Field(
+        ..., description="Total profit/loss percentage"
+    )
+    timestamp: datetime = Field(..., description="Balance timestamp")
+
+
+class KoreanStockPosition(BaseModel):
+    """Korean stock position in account."""
+
+    symbol: str = Field(..., description="Stock symbol")
+    name: str = Field(..., description="Company name in Korean")
+    quantity: int = Field(..., description="Number of shares held")
+    average_price: float = Field(..., description="Average purchase price")
+    current_price: float = Field(..., description="Current market price")
+    evaluation_amount: float = Field(
+        ..., description="Current evaluation amount"
+    )
+    profit_loss: float = Field(..., description="Profit/loss in KRW")
+    profit_loss_percent: float = Field(
+        ..., description="Profit/loss percentage"
+    )
