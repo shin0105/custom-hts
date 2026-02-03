@@ -4,11 +4,15 @@ import requests
 import zipfile
 import io
 import xml.etree.ElementTree as ET
+import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from ..utils.config import settings
 from ..models.korean import KoreanFinancialStatement
 from ..utils.helpers import safe_float, safe_int
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class OpenDartClient:
@@ -71,7 +75,10 @@ class OpenDartClient:
         corp_code = self._corp_code_cache.get(stock_code)
         
         if not corp_code:
-            print(f"Corp code not found for {stock_code}. Add to mapping or download corp code list.")
+            logger.warning(
+                f"Corp code not found for {stock_code}. "
+                "Add to mapping or download corp code list."
+            )
         
         return corp_code
     
@@ -112,11 +119,11 @@ class OpenDartClient:
                     # Only add entries with valid stock codes
                     self._corp_code_cache[stock_code.strip()] = corp_code.strip()
             
-            print(f"Successfully loaded {len(self._corp_code_cache)} corp codes")
+            logger.info(f"Successfully loaded {len(self._corp_code_cache)} corp codes")
             return True
             
         except Exception as e:
-            print(f"Failed to download corp code list: {e}")
+            logger.error(f"Failed to download corp code list: {e}")
             return False
 
     def get_financial_statement(
@@ -139,12 +146,12 @@ class OpenDartClient:
             KoreanFinancialStatement object or None if fetch fails
         """
         if not self.api_key:
-            print("DART API key not configured")
+            logger.warning("DART API key not configured")
             return None
 
         corp_code = self.get_corp_code(symbol)
         if not corp_code:
-            print(f"Corp code not found for symbol {symbol}")
+            logger.warning(f"Corp code not found for symbol {symbol}")
             return None
 
         try:
@@ -166,7 +173,10 @@ class OpenDartClient:
                 "fs_div": fs_div,
             }
 
-            print(f"Fetching financial data for {symbol} (corp_code: {corp_code}), year: {year}, quarter: {quarter}")
+            logger.debug(
+                f"Fetching financial data for {symbol} "
+                f"(corp_code: {corp_code}), year: {year}, quarter: {quarter}"
+            )
             
             response = requests.get(url, params=params, timeout=30)
             response.raise_for_status()
@@ -177,12 +187,15 @@ class OpenDartClient:
             status = data.get("status", "")
             if status != "000":
                 error_msg = data.get("message", "Unknown error")
-                print(f"DART API error (status: {status}): {error_msg}")
+                logger.error(f"DART API error (status: {status}): {error_msg}")
                 return None
 
             list_data = data.get("list", [])
             if not list_data:
-                print(f"No financial data available for {symbol} (year: {year}, quarter: {quarter})")
+                logger.warning(
+                    f"No financial data available for {symbol} "
+                    f"(year: {year}, quarter: {quarter})"
+                )
                 return None
 
             # Extract key financial data
@@ -203,10 +216,10 @@ class OpenDartClient:
                 updated_at=datetime.now(),
             )
         except requests.exceptions.RequestException as e:
-            print(f"Network error fetching financial statement for {symbol}: {e}")
+            logger.error(f"Network error fetching financial statement for {symbol}: {e}")
             return None
         except Exception as e:
-            print(f"Failed to get financial statement for {symbol}: {e}")
+            logger.error(f"Failed to get financial statement for {symbol}: {e}")
             return None
     
     def get_financial_statement_raw(
@@ -232,7 +245,7 @@ class OpenDartClient:
             List of financial line items or None if fetch fails
         """
         if not self.api_key:
-            print("DART API key not configured")
+            logger.warning("DART API key not configured")
             return None
 
         corp_code = self.get_corp_code(symbol)
@@ -262,13 +275,13 @@ class OpenDartClient:
             data = response.json()
 
             if data.get("status") != "000":
-                print(f"DART API error: {data.get('message')}")
+                logger.error(f"DART API error: {data.get('message')}")
                 return None
 
             return data.get("list", [])
             
         except Exception as e:
-            print(f"Failed to get raw financial data for {symbol}: {e}")
+            logger.error(f"Failed to get raw financial data for {symbol}: {e}")
             return None
 
     def _parse_financial_data(

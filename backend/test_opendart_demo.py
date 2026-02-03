@@ -10,7 +10,7 @@ This script demonstrates:
 
 Usage:
     cd backend
-    PYTHONPATH=/home/runner/work/custom-hts/custom-hts/backend/src python test_opendart_demo.py
+    PYTHONPATH=$(pwd)/src python test_opendart_demo.py
 """
 
 import sys
