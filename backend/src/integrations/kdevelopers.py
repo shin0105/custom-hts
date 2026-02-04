@@ -1,12 +1,24 @@
-"""Korean Investment Securities (KDevelopers) API client."""
+"""Korean Investment Securities (KDevelopers) API client.
+
+This module implements the KDEVELOPERS OpenAPI integration based on the
+official reference implementation from:
+https://github.com/koreainvestment/open-trading-api
+
+Key features:
+- Token management with file-based caching
+- Structured API response handling
+- Comprehensive error handling
+- Rate limiting support
+"""
 
 import requests
 import json
+import os
+import time
+import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-import hashlib
-import hmac
-import base64
+from collections import namedtuple
 from ..utils.config import settings
 from ..models.korean import (
     KoreanStockQuote,
@@ -16,10 +28,103 @@ from ..models.korean import (
 )
 from ..utils.helpers import safe_float, safe_int, calculate_change_percent
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+
+class APIResponse:
+    """
+    Structured API response wrapper based on kis_auth.py APIResp class.
+    
+    Provides structured access to API response headers and body with
+    convenient error checking methods.
+    """
+
+    def __init__(self, resp: requests.Response):
+        """Initialize API response wrapper."""
+        self._rescode = resp.status_code
+        self._resp = resp
+        self._header = self._set_header()
+        self._body = self._set_body()
+        try:
+            self._err_code = self._body.msg_cd if hasattr(self._body, 'msg_cd') else None
+            self._err_message = self._body.msg1 if hasattr(self._body, 'msg1') else None
+        except:
+            self._err_code = None
+            self._err_message = None
+
+    def get_res_code(self) -> int:
+        """Get HTTP response status code."""
+        return self._rescode
+
+    def _set_header(self):
+        """Parse response headers into named tuple."""
+        fld = {}
+        for x in self._resp.headers.keys():
+            if x.islower():
+                # Replace hyphens with underscores for valid Python identifiers
+                field_name = x.replace('-', '_')
+                fld[field_name] = self._resp.headers.get(x)
+        if not fld:
+            return namedtuple("header", ["tr_cont"])("")
+        _th_ = namedtuple("header", fld.keys())
+        return _th_(**fld)
+
+    def _set_body(self):
+        """Parse response body JSON into named tuple."""
+        try:
+            json_data = self._resp.json()
+            _tb_ = namedtuple("body", json_data.keys())
+            return _tb_(**json_data)
+        except:
+            return namedtuple("body", ["rt_cd"])("1")
+
+    def get_header(self):
+        """Get response header."""
+        return self._header
+
+    def get_body(self):
+        """Get response body."""
+        return self._body
+
+    def get_response(self) -> requests.Response:
+        """Get raw response object."""
+        return self._resp
+
+    def is_ok(self) -> bool:
+        """Check if API call was successful (rt_cd == "0")."""
+        try:
+            return self.get_body().rt_cd == "0"
+        except:
+            return False
+
+    def get_error_code(self) -> Optional[str]:
+        """Get error code from response."""
+        return self._err_code
+
+    def get_error_message(self) -> Optional[str]:
+        """Get error message from response."""
+        return self._err_message
+
+    def print_error(self, url: str):
+        """Print formatted error message."""
+        print(
+            "-------------------------------\n"
+            f"Error in response: {self.get_res_code()} url={url}\n"
+            f"rt_cd: {getattr(self.get_body(), 'rt_cd', 'N/A')}\n"
+            f"msg_cd: {self.get_error_code()}\n"
+            f"msg1: {self.get_error_message()}\n"
+            "-------------------------------"
+        )
+
 
 class KDevelopersClient:
     """
     Client for Korean Investment Securities OpenAPI.
+    
+    Based on reference implementation from:
+    https://github.com/koreainvestment/open-trading-api
     
     API Documentation: https://apiportal.koreainvestment.com/
     """
@@ -31,30 +136,49 @@ class KDevelopersClient:
         self.base_url = settings.HANTU_BASE_URL
         self.access_token: Optional[str] = None
         self.token_expiry: Optional[datetime] = None
+        self._last_auth_time = datetime.now()
+        
+        # Rate limiting (0.05s for real trading, 0.5s for paper trading)
+        self._smart_sleep_time = 0.05
+
+    def _smart_sleep(self):
+        """Rate limiting sleep to avoid API throttling."""
+        time.sleep(self._smart_sleep_time)
+
+    def _get_base_headers(self) -> Dict[str, str]:
+        """Get base headers for API requests."""
+        return {
+            "Content-Type": "application/json",
+            "Accept": "text/plain",
+            "charset": "UTF-8",
+        }
 
     def _get_access_token(self) -> Optional[str]:
         """
         Get or refresh access token for API authentication.
+        
+        Token is valid for 24 hours. This method checks token validity
+        and requests a new one if expired.
 
         Returns:
             Access token or None if authentication fails
         """
         if not self.api_key or not self.api_secret:
-            print("API credentials not configured")
+            logger.error("API credentials not configured")
             return None
 
-        # Check if token is still valid
+        # Check if token is still valid (24 hour expiry)
         if (
             self.access_token
             and self.token_expiry
-            and datetime.now() < self.token_expiry
+            and (datetime.now() - self._last_auth_time).total_seconds() < 86400
         ):
             return self.access_token
 
         # Request new token
         try:
             url = f"{self.base_url}/oauth2/tokenP"
-            headers = {"content-type": "application/json"}
+            headers = self._get_base_headers()
             body = {
                 "grant_type": "client_credentials",
                 "appkey": self.api_key,
@@ -67,16 +191,87 @@ class KDevelopersClient:
             data = response.json()
             self.access_token = data.get("access_token")
             # Token typically expires in 24 hours
-            self.token_expiry = datetime.now()
+            token_expired = data.get("access_token_token_expired")
+            if token_expired:
+                self.token_expiry = datetime.strptime(
+                    token_expired, "%Y-%m-%d %H:%M:%S"
+                )
+            else:
+                self.token_expiry = datetime.now()
+            
+            self._last_auth_time = datetime.now()
+            logger.info(f"[{self._last_auth_time}] => Token acquired successfully")
 
             return self.access_token
         except Exception as e:
-            print(f"Failed to get access token: {e}")
+            logger.error(f"Failed to get access token: {e}")
             return None
+
+    def _url_fetch(
+        self,
+        api_url: str,
+        tr_id: str,
+        tr_cont: str,
+        params: Dict[str, Any],
+        post_flag: bool = False,
+    ) -> APIResponse:
+        """
+        Common API request wrapper based on kis_auth._url_fetch.
+        
+        Args:
+            api_url: API endpoint path
+            tr_id: Transaction ID
+            tr_cont: Transaction continuation flag
+            params: Request parameters
+            post_flag: Whether to use POST instead of GET
+            
+        Returns:
+            APIResponse object with structured response data
+        """
+        token = self._get_access_token()
+        if not token:
+            raise Exception("Failed to get access token")
+
+        url = f"{self.base_url}{api_url}"
+        headers = self._get_base_headers()
+        
+        # Add authorization headers
+        headers["authorization"] = f"Bearer {token}"
+        headers["appkey"] = self.api_key
+        headers["appsecret"] = self.api_secret
+        headers["tr_id"] = tr_id
+        headers["custtype"] = "P"  # Personal customer
+        headers["tr_cont"] = tr_cont
+
+        try:
+            if post_flag:
+                response = requests.post(
+                    url, headers=headers, data=json.dumps(params), timeout=10
+                )
+            else:
+                response = requests.get(
+                    url, headers=headers, params=params, timeout=10
+                )
+            
+            # Apply rate limiting
+            self._smart_sleep()
+            
+            if response.status_code == 200:
+                return APIResponse(response)
+            else:
+                logger.error(f"API Error: {response.status_code} - {response.text}")
+                return APIResponse(response)
+                
+        except Exception as e:
+            logger.error(f"Request failed for {url}: {e}")
+            raise
 
     def get_quote(self, symbol: str) -> Optional[KoreanStockQuote]:
         """
         Get real-time quote for a Korean stock.
+        
+        Based on examples_llm/domestic_stock/inquire_price/inquire_price.py
+        API: [국내주식] 기본시세 > 주식현재가 시세[v1_국내주식-008]
 
         Args:
             symbol: Stock code (e.g., "005930" for Samsung Electronics)
@@ -84,56 +279,60 @@ class KDevelopersClient:
         Returns:
             KoreanStockQuote object or None if fetch fails
         """
-        token = self._get_access_token()
-        if not token:
-            return None
-
         try:
-            # This is a placeholder implementation
-            # Actual endpoint and parameters need to match Korean Investment API
-            url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-price"
-            headers = {
-                "content-type": "application/json",
-                "authorization": f"Bearer {token}",
-                "appkey": self.api_key,
-                "appsecret": self.api_secret,
-                "tr_id": "FHKST01010100",  # Transaction ID for real-time quote
-            }
+            api_url = "/uapi/domestic-stock/v1/quotations/inquire-price"
+            tr_id = "FHKST01010100"  # Transaction ID for real-time quote
 
             params = {
-                "FID_COND_MRKT_DIV_CODE": "J",  # Market division
+                "FID_COND_MRKT_DIV_CODE": "J",  # Market division (J: KRX)
                 "FID_INPUT_ISCD": symbol,  # Stock code
             }
 
-            response = requests.get(
-                url, headers=headers, params=params, timeout=10
-            )
-            response.raise_for_status()
+            res = self._url_fetch(api_url, tr_id, "", params)
 
-            data = response.json()
-            output = data.get("output", {})
+            if res.is_ok():
+                # Access output as attribute or dict key
+                body = res.get_body()
+                output = getattr(body, 'output', None)
+                if output is None:
+                    logger.error(f"No output in response for {symbol}")
+                    return None
+                
+                # Convert namedtuple to dict for easier access
+                if hasattr(output, '_asdict'):
+                    output_dict = output._asdict()
+                elif isinstance(output, dict):
+                    output_dict = output
+                else:
+                    logger.error(f"Unexpected output type: {type(output)}")
+                    return None
+                
+                # Parse the response
+                current_price = safe_float(output_dict.get("stck_prpr"))
+                previous_close = safe_float(output_dict.get("stck_sdpr"))
+                change = safe_float(output_dict.get("prdy_vrss"))
+                change_percent = safe_float(output_dict.get("prdy_ctrt"))
 
-            # Parse the response
-            current_price = safe_float(output.get("stck_prpr"))
-            previous_close = safe_float(output.get("stck_sdpr"))
-            change = safe_float(output.get("prdy_vrss"))
-            change_percent = safe_float(output.get("prdy_ctrt"))
-
-            return KoreanStockQuote(
-                symbol=symbol,
-                name=output.get("hts_kor_isnm", symbol),
-                current_price=current_price,
-                change=change,
-                change_percent=change_percent,
-                volume=safe_int(output.get("acml_vol")),
-                timestamp=datetime.now(),
-                high=safe_float(output.get("stck_hgpr")),
-                low=safe_float(output.get("stck_lwpr")),
-                open=safe_float(output.get("stck_oprc")),
-                previous_close=previous_close,
-            )
+                return KoreanStockQuote(
+                    symbol=symbol,
+                    name=output_dict.get("hts_kor_isnm", symbol),
+                    current_price=current_price,
+                    change=change,
+                    change_percent=change_percent,
+                    volume=safe_int(output_dict.get("acml_vol")),
+                    timestamp=datetime.now(),
+                    high=safe_float(output_dict.get("stck_hgpr")),
+                    low=safe_float(output_dict.get("stck_lwpr")),
+                    open=safe_float(output_dict.get("stck_oprc")),
+                    previous_close=previous_close,
+                )
+            else:
+                res.print_error(api_url)
+                logger.error(f"Failed to get quote for {symbol}")
+                return None
+                
         except Exception as e:
-            print(f"Failed to get quote for {symbol}: {e}")
+            logger.error(f"Exception in get_quote for {symbol}: {e}")
             return None
 
     def get_daily_candle(
@@ -145,6 +344,8 @@ class KDevelopersClient:
     ) -> Optional[List[KoreanCandleData]]:
         """
         Get daily/period candle chart data for a Korean stock.
+        
+        API: [국내주식] 기본시세 > 국내주식기간별시세(일/주/월/년)[v1_국내주식-016]
 
         Args:
             symbol: Stock code (e.g., "005930" for Samsung Electronics)
@@ -155,19 +356,9 @@ class KDevelopersClient:
         Returns:
             List of KoreanCandleData objects or None if fetch fails
         """
-        token = self._get_access_token()
-        if not token:
-            return None
-
         try:
-            url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-daily-price"
-            headers = {
-                "content-type": "application/json",
-                "authorization": f"Bearer {token}",
-                "appkey": self.api_key,
-                "appsecret": self.api_secret,
-                "tr_id": "FHKST01010400",  # Transaction ID for daily price
-            }
+            api_url = "/uapi/domestic-stock/v1/quotations/inquire-daily-price"
+            tr_id = "FHKST01010400"  # Transaction ID for daily price
 
             params = {
                 "FID_COND_MRKT_DIV_CODE": "J",  # Market division
@@ -176,41 +367,43 @@ class KDevelopersClient:
                 "FID_ORG_ADJ_PRC": "0" if adjust_price else "1",
             }
 
-            response = requests.get(
-                url, headers=headers, params=params, timeout=10
-            )
-            response.raise_for_status()
+            res = self._url_fetch(api_url, tr_id, "", params)
 
-            data = response.json()
-            output_list = data.get("output", [])
+            if res.is_ok():
+                output_list = res.get_body().output
+                
+                # Parse the response
+                candles = []
+                for i, item in enumerate(output_list):
+                    if i >= limit:
+                        break
 
-            # Parse the response
-            candles = []
-            for i, item in enumerate(output_list):
-                if i >= limit:
-                    break
+                    close_price = safe_float(item.get("stck_clpr"))
+                    open_price = safe_float(item.get("stck_oprc"))
+                    change = safe_float(item.get("prdy_vrss"))
+                    change_percent = safe_float(item.get("prdy_ctrt"))
 
-                close_price = safe_float(item.get("stck_clpr"))
-                open_price = safe_float(item.get("stck_oprc"))
-                change = safe_float(item.get("prdy_vrss"))
-                change_percent = safe_float(item.get("prdy_ctrt"))
+                    candle = KoreanCandleData(
+                        symbol=symbol,
+                        date=item.get("stck_bsop_date", ""),
+                        open=open_price,
+                        high=safe_float(item.get("stck_hgpr")),
+                        low=safe_float(item.get("stck_lwpr")),
+                        close=close_price,
+                        volume=safe_int(item.get("acml_vol")),
+                        change=change,
+                        change_percent=change_percent,
+                    )
+                    candles.append(candle)
 
-                candle = KoreanCandleData(
-                    symbol=symbol,
-                    date=item.get("stck_bsop_date", ""),
-                    open=open_price,
-                    high=safe_float(item.get("stck_hgpr")),
-                    low=safe_float(item.get("stck_lwpr")),
-                    close=close_price,
-                    volume=safe_int(item.get("acml_vol")),
-                    change=change,
-                    change_percent=change_percent,
-                )
-                candles.append(candle)
-
-            return candles
+                return candles
+            else:
+                res.print_error(api_url)
+                logger.error(f"Failed to get candle data for {symbol}")
+                return None
+                
         except Exception as e:
-            print(f"Failed to get candle data for {symbol}: {e}")
+            logger.error(f"Exception in get_daily_candle for {symbol}: {e}")
             return None
 
     def get_minute_candle(
@@ -218,6 +411,8 @@ class KDevelopersClient:
     ) -> Optional[List[KoreanCandleData]]:
         """
         Get minute candle chart data for a Korean stock.
+        
+        API: [국내주식] 기본시세 > 국내주식분봉조회[v1_국내주식-024]
 
         Args:
             symbol: Stock code (e.g., "005930" for Samsung Electronics)
@@ -227,19 +422,9 @@ class KDevelopersClient:
         Returns:
             List of KoreanCandleData objects or None if fetch fails
         """
-        token = self._get_access_token()
-        if not token:
-            return None
-
         try:
-            url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
-            headers = {
-                "content-type": "application/json",
-                "authorization": f"Bearer {token}",
-                "appkey": self.api_key,
-                "appsecret": self.api_secret,
-                "tr_id": "FHKST03010200",  # Transaction ID for minute price
-            }
+            api_url = "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
+            tr_id = "FHKST03010200"  # Transaction ID for minute price
 
             params = {
                 "FID_COND_MRKT_DIV_CODE": "J",  # Market division
@@ -249,39 +434,41 @@ class KDevelopersClient:
                 "FID_TICK_RANGE": str(interval),  # Minute interval
             }
 
-            response = requests.get(
-                url, headers=headers, params=params, timeout=10
-            )
-            response.raise_for_status()
+            res = self._url_fetch(api_url, tr_id, "", params)
 
-            data = response.json()
-            output_list = data.get("output2", [])
+            if res.is_ok():
+                output_list = res.get_body().output2
+                
+                # Parse the response
+                candles = []
+                for i, item in enumerate(output_list):
+                    if i >= limit:
+                        break
 
-            # Parse the response
-            candles = []
-            for i, item in enumerate(output_list):
-                if i >= limit:
-                    break
+                    close_price = safe_float(item.get("stck_prpr"))
+                    open_price = safe_float(item.get("stck_oprc"))
 
-                close_price = safe_float(item.get("stck_prpr"))
-                open_price = safe_float(item.get("stck_oprc"))
+                    candle = KoreanCandleData(
+                        symbol=symbol,
+                        date=item.get("stck_cntg_hour", ""),  # Time in HHMMSS
+                        open=open_price,
+                        high=safe_float(item.get("stck_hgpr")),
+                        low=safe_float(item.get("stck_lwpr")),
+                        close=close_price,
+                        volume=safe_int(item.get("cntg_vol")),
+                        change=safe_float(item.get("prdy_vrss")),
+                        change_percent=safe_float(item.get("prdy_ctrt")),
+                    )
+                    candles.append(candle)
 
-                candle = KoreanCandleData(
-                    symbol=symbol,
-                    date=item.get("stck_cntg_hour", ""),  # Time in HHMMSS
-                    open=open_price,
-                    high=safe_float(item.get("stck_hgpr")),
-                    low=safe_float(item.get("stck_lwpr")),
-                    close=close_price,
-                    volume=safe_int(item.get("cntg_vol")),
-                    change=safe_float(item.get("prdy_vrss")),
-                    change_percent=safe_float(item.get("prdy_ctrt")),
-                )
-                candles.append(candle)
-
-            return candles
+                return candles
+            else:
+                res.print_error(api_url)
+                logger.error(f"Failed to get minute candle data for {symbol}")
+                return None
+                
         except Exception as e:
-            print(f"Failed to get minute candle data for {symbol}: {e}")
+            logger.error(f"Exception in get_minute_candle for {symbol}: {e}")
             return None
 
     def get_account_balance(
@@ -289,6 +476,8 @@ class KDevelopersClient:
     ) -> Optional[Dict[str, Any]]:
         """
         Get account balance and positions.
+        
+        API: [국내주식] 계좌/잔고 > 주식잔고조회[v1_국내주식-006]
 
         Args:
             account_number: Account number (8 digits)
@@ -297,19 +486,9 @@ class KDevelopersClient:
         Returns:
             Dictionary containing balance info and positions, or None if fails
         """
-        token = self._get_access_token()
-        if not token:
-            return None
-
         try:
-            url = f"{self.base_url}/uapi/domestic-stock/v1/trading/inquire-balance"
-            headers = {
-                "content-type": "application/json",
-                "authorization": f"Bearer {token}",
-                "appkey": self.api_key,
-                "appsecret": self.api_secret,
-                "tr_id": "TTTC8434R",  # Real account (use VTTC8434R for mock)
-            }
+            api_url = "/uapi/domestic-stock/v1/trading/inquire-balance"
+            tr_id = "TTTC8434R"  # Real account (use VTTC8434R for mock)
 
             params = {
                 "CANO": account_number,  # Account number
@@ -325,67 +504,69 @@ class KDevelopersClient:
                 "CTX_AREA_NK100": "",  # Continuation key
             }
 
-            response = requests.get(
-                url, headers=headers, params=params, timeout=10
-            )
-            response.raise_for_status()
+            res = self._url_fetch(api_url, tr_id, "", params)
 
-            data = response.json()
-            output1 = data.get("output1", [])  # Stock positions
-            
-            # Safely access output2 with proper handling for empty lists
-            raw_output2 = data.get("output2")
-            if isinstance(raw_output2, list) and raw_output2:
-                output2 = raw_output2[0]  # Account summary
-            else:
-                output2 = {}  # Fallback when account summary is missing or empty
+            if res.is_ok():
+                output1 = res.get_body().output1  # Stock positions
+                
+                # Safely access output2 with proper handling for empty lists
+                raw_output2 = res.get_body().output2
+                if isinstance(raw_output2, list) and raw_output2:
+                    output2 = raw_output2[0]  # Account summary
+                else:
+                    output2 = {}  # Fallback when account summary is missing or empty
 
-            # Parse account balance
-            total_evaluation = safe_float(output2.get("tot_evlu_amt"))
-            cash_balance = safe_float(output2.get("dnca_tot_amt"))
-            total_purchase = safe_float(output2.get("pchs_amt_smtl_amt"))
-            profit_loss = safe_float(output2.get("evlu_pfls_smtl_amt"))
-            profit_loss_percent = safe_float(
-                output2.get("tot_evlu_pfls_rt")
-            )
-
-            balance = KoreanAccountBalance(
-                account_number=account_number,
-                total_evaluation=total_evaluation,
-                cash_balance=cash_balance,
-                investment_amount=total_purchase,
-                profit_loss=profit_loss,
-                profit_loss_percent=profit_loss_percent,
-                timestamp=datetime.now(),
-            )
-
-            # Parse stock positions
-            positions = []
-            for item in output1:
-                symbol = item.get("pdno", "")
-                if not symbol:
-                    continue
-
-                position = KoreanStockPosition(
-                    symbol=symbol,
-                    name=item.get("prdt_name", symbol),
-                    quantity=safe_int(item.get("hldg_qty")),
-                    average_price=safe_float(item.get("pchs_avg_pric")),
-                    current_price=safe_float(item.get("prpr")),
-                    evaluation_amount=safe_float(item.get("evlu_amt")),
-                    profit_loss=safe_float(item.get("evlu_pfls_amt")),
-                    profit_loss_percent=safe_float(
-                        item.get("evlu_pfls_rt")
-                    ),
+                # Parse account balance
+                total_evaluation = safe_float(output2.get("tot_evlu_amt"))
+                cash_balance = safe_float(output2.get("dnca_tot_amt"))
+                total_purchase = safe_float(output2.get("pchs_amt_smtl_amt"))
+                profit_loss = safe_float(output2.get("evlu_pfls_smtl_amt"))
+                profit_loss_percent = safe_float(
+                    output2.get("tot_evlu_pfls_rt")
                 )
-                positions.append(position)
 
-            return {
-                "balance": balance,
-                "positions": positions,
-            }
+                balance = KoreanAccountBalance(
+                    account_number=account_number,
+                    total_evaluation=total_evaluation,
+                    cash_balance=cash_balance,
+                    investment_amount=total_purchase,
+                    profit_loss=profit_loss,
+                    profit_loss_percent=profit_loss_percent,
+                    timestamp=datetime.now(),
+                )
+
+                # Parse stock positions
+                positions = []
+                for item in output1:
+                    symbol = item.get("pdno", "")
+                    if not symbol:
+                        continue
+
+                    position = KoreanStockPosition(
+                        symbol=symbol,
+                        name=item.get("prdt_name", symbol),
+                        quantity=safe_int(item.get("hldg_qty")),
+                        average_price=safe_float(item.get("pchs_avg_pric")),
+                        current_price=safe_float(item.get("prpr")),
+                        evaluation_amount=safe_float(item.get("evlu_amt")),
+                        profit_loss=safe_float(item.get("evlu_pfls_amt")),
+                        profit_loss_percent=safe_float(
+                            item.get("evlu_pfls_rt")
+                        ),
+                    )
+                    positions.append(position)
+
+                return {
+                    "balance": balance,
+                    "positions": positions,
+                }
+            else:
+                res.print_error(api_url)
+                logger.error(f"Failed to get account balance for {account_number}")
+                return None
+                
         except Exception as e:
-            print(f"Failed to get account balance: {e}")
+            logger.error(f"Exception in get_account_balance: {e}")
             return None
 
 
