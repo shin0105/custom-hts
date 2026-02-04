@@ -465,6 +465,200 @@ class OpenDartClient:
                     cash_flow[account_nm] = None
         
         return cash_flow
+    
+    def find_corp_code(self, corp_name_or_stock_code: str) -> Optional[str]:
+        """
+        Find corp code by company name or stock code.
+        
+        This method searches the local cache first. If the corp code is not found,
+        it will attempt to search through the downloaded corp code list if available.
+        
+        Args:
+            corp_name_or_stock_code: Company name or stock code
+            
+        Returns:
+            Corp code if found, None otherwise
+        """
+        # First try as stock code
+        stock_code = corp_name_or_stock_code.strip().zfill(6)
+        corp_code = self._corp_code_cache.get(stock_code)
+        
+        if corp_code:
+            return corp_code
+        
+        # If not found and looks like a stock code, log warning
+        if stock_code.isdigit() and len(stock_code) == 6:
+            logger.warning(f"Corp code not found for stock code {stock_code}")
+            return None
+        
+        # For company names, would need to download full corp code list
+        # For now, return None and suggest downloading the full list
+        logger.warning(
+            f"Corp code not found for '{corp_name_or_stock_code}'. "
+            "Call download_corp_code_list() to search by company name."
+        )
+        return None
+    
+    def get_company_info(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """
+        Get detailed company information from OPENDART.
+        
+        Returns comprehensive company profile including CEO, address, industry, etc.
+        This uses the OPENDART company.json endpoint.
+        
+        Args:
+            symbol: Stock code (e.g., "005930")
+            
+        Returns:
+            Dictionary with company information or None if not available
+        """
+        if not self.api_key:
+            logger.warning("DART API key not configured")
+            return None
+        
+        corp_code = self.get_corp_code(symbol)
+        if not corp_code:
+            logger.warning(f"Corp code not found for symbol {symbol}")
+            return None
+        
+        try:
+            url = f"{self.base_url}/company.json"
+            params = {
+                "crtfc_key": self.api_key,
+                "corp_code": corp_code
+            }
+            
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # Check API response status
+            status = data.get("status", "")
+            if status != "000":
+                error_msg = data.get("message", "Unknown error")
+                logger.error(f"DART API error (status: {status}): {error_msg}")
+                return None
+            
+            return data
+            
+        except Exception as e:
+            logger.error(f"Failed to get company info for {symbol}: {e}")
+            return None
+    
+    def get_disclosure_list(
+        self,
+        corp: Optional[str] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        kind: Optional[str] = None,
+        final: bool = True
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        Get list of corporate disclosures from OPENDART.
+        
+        This uses the OPENDART list.json endpoint to retrieve disclosure listings.
+        
+        Args:
+            corp: Stock code or company name (optional)
+            start: Start date (YYYY-MM-DD or YYYYMMDD)
+            end: End date (YYYY-MM-DD or YYYYMMDD)
+            kind: Disclosure type:
+                - 'A': Regular disclosure (정기공시)
+                - 'B': Major matters (주요사항보고)
+                - 'C': Issue disclosure (발행공시)
+                - 'D': Equity disclosure (지분공시)
+                - 'E': Other disclosure (기타공시)
+                - 'F': External audit (외부감사관련)
+                - 'G': Fund disclosure (펀드공시)
+                - 'H': Asset securitization (자산유동화)
+                - 'I': Exchange disclosure (거래소공시)
+                - 'J': Fair Trade Commission (공정위공시)
+            final: If True, only return final reports (exclude corrections)
+            
+        Returns:
+            List of disclosure dictionaries or None if not available
+        """
+        if not self.api_key:
+            logger.warning("DART API key not configured")
+            return None
+        
+        try:
+            url = f"{self.base_url}/list.json"
+            params = {
+                "crtfc_key": self.api_key
+            }
+            
+            # Add corp_code if company specified
+            if corp:
+                corp_code = self.find_corp_code(corp)
+                if corp_code:
+                    params["corp_code"] = corp_code
+            
+            # Add date parameters (convert to YYYYMMDD format if needed)
+            if start:
+                params["bgn_de"] = start.replace("-", "")
+            if end:
+                params["end_de"] = end.replace("-", "")
+            
+            # Add disclosure type
+            if kind:
+                params["pblntf_ty"] = kind
+            
+            # Add final flag (Y/N)
+            params["last_reprt_at"] = "Y" if final else "N"
+            
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # Check API response status
+            status = data.get("status", "")
+            if status != "000":
+                error_msg = data.get("message", "Unknown error")
+                logger.error(f"DART API error (status: {status}): {error_msg}")
+                return None
+            
+            return data.get("list", [])
+            
+        except Exception as e:
+            logger.error(f"Failed to get disclosure list: {e}")
+            return None
+    
+    def get_finstate_all(
+        self,
+        symbol: str,
+        year: int,
+        reprt_code: str = "11011",
+        fs_div: str = "CFS"
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        Get all financial statement line items.
+        
+        This is an alias for get_financial_statement_raw() that returns
+        comprehensive financial data with all line items, similar to
+        OpenDartReader's finstate_all() method.
+        
+        Args:
+            symbol: Stock code
+            year: Fiscal year
+            reprt_code: Report code (11011=annual, 11013=Q1, 11012=Q2, 11014=Q3)
+            fs_div: Financial statement division (CFS/OFS)
+            
+        Returns:
+            List of all financial statement line items or None
+        """
+        # Map report code to quarter for compatibility
+        quarter_map = {
+            "11013": 1,
+            "11012": 2,
+            "11014": 3,
+            "11011": None  # Annual
+        }
+        quarter = quarter_map.get(reprt_code)
+        
+        return self.get_financial_statement_raw(symbol, year, quarter, fs_div)
 
 
 # Global instance
