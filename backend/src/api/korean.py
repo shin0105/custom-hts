@@ -350,3 +350,145 @@ async def get_cash_flow(
         "statement_type": "cash_flow",
         "data": cash_flow,
     }
+
+
+@router.get("/company/{symbol}")
+async def get_company_info(symbol: str) -> Dict[str, Any]:
+    """
+    Get detailed company information for a Korean company.
+
+    Returns comprehensive company profile including:
+    - Company name (Korean and English)
+    - CEO name
+    - Address
+    - Industry code
+    - Website URL
+    - Establishment date
+    - And more...
+
+    Args:
+        symbol: Stock code (e.g., 005930 for Samsung Electronics)
+
+    Returns:
+        Dictionary with company information
+    """
+    company_info = opendart_client.get_company_info(symbol)
+
+    if not company_info:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Company information not found for {symbol}",
+        )
+
+    return {
+        "symbol": symbol,
+        "data": company_info,
+    }
+
+
+@router.get("/disclosures")
+async def get_disclosures(
+    symbol: Optional[str] = Query(None, description="Stock code (optional)"),
+    start: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    kind: Optional[str] = Query(
+        None,
+        description="Disclosure type (A=regular, B=major, C=issue, etc.)",
+    ),
+    final: bool = Query(True, description="Only final reports (exclude corrections)"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
+) -> Dict[str, Any]:
+    """
+    Get list of corporate disclosures.
+
+    Retrieves disclosure listings from OPENDART. Can filter by company,
+    date range, and disclosure type.
+
+    Args:
+        symbol: Stock code (optional, if omitted returns all companies)
+        start: Start date (YYYY-MM-DD or YYYYMMDD)
+        end: End date (YYYY-MM-DD or YYYYMMDD)
+        kind: Disclosure type code (A-J)
+        final: If True, only return final reports
+        limit: Maximum number of results to return
+
+    Returns:
+        Dictionary with disclosure listings
+    """
+    disclosures_df = opendart_client.get_disclosure_list(
+        symbol=symbol, start=start, end=end, kind=kind, final=final
+    )
+
+    if disclosures_df is None or disclosures_df.empty:
+        raise HTTPException(
+            status_code=404,
+            detail="No disclosures found for the specified criteria",
+        )
+
+    # Convert DataFrame to list of dictionaries and limit results
+    disclosures = disclosures_df.head(limit).to_dict(orient="records")
+
+    return {
+        "symbol": symbol,
+        "start": start,
+        "end": end,
+        "kind": kind,
+        "count": len(disclosures),
+        "data": disclosures,
+    }
+
+
+@router.get("/financials/{symbol}/all")
+async def get_all_financials(
+    symbol: str,
+    year: int = Query(datetime.now().year - 1, description="Fiscal year"),
+    quarter: Optional[int] = Query(
+        None,
+        ge=1,
+        le=4,
+        description="Quarter (1-4 for quarterly, None for annual)",
+    ),
+) -> Dict[str, Any]:
+    """
+    Get comprehensive financial statements with all line items.
+
+    Returns complete financial data including all accounts from:
+    - Balance Sheet
+    - Income Statement
+    - Cash Flow Statement
+
+    This is more comprehensive than the summary endpoint.
+
+    Args:
+        symbol: Stock code (e.g., 005930 for Samsung Electronics)
+        year: Fiscal year (defaults to previous year)
+        quarter: Optional quarter (1-4)
+
+    Returns:
+        Dictionary with comprehensive financial data
+    """
+    # Determine report code
+    if quarter:
+        quarter_codes = {1: "11013", 2: "11012", 3: "11014", 4: "11011"}
+        reprt_code = quarter_codes.get(quarter, "11011")
+    else:
+        reprt_code = "11011"
+
+    financials_df = opendart_client.get_finstate_all(symbol, year, reprt_code)
+
+    if financials_df is None or financials_df.empty:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Financial data not found for {symbol} (year: {year}, quarter: {quarter})",
+        )
+
+    # Convert DataFrame to list of dictionaries
+    financials = financials_df.to_dict(orient="records")
+
+    return {
+        "symbol": symbol,
+        "year": year,
+        "quarter": quarter,
+        "count": len(financials),
+        "data": financials,
+    }
