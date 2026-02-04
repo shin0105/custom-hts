@@ -2,8 +2,6 @@
 
 This directory contains test scripts to demonstrate the OPENDART API integration for Korean company financial statements.
 
-**UPDATE**: The backend now uses the [OpenDartReader](https://github.com/FinanceData/OpenDartReader) library for enhanced functionality. See [OPENDARTREADER_INTEGRATION.md](OPENDARTREADER_INTEGRATION.md) for details.
-
 ## Test Scripts
 
 ### 1. test_opendart_structure.py
@@ -21,23 +19,7 @@ cd backend
 PYTHONPATH=$(pwd)/src python test_opendart_structure.py
 ```
 
-### 2. test_opendart_reader_integration.py
-Verifies OpenDartReader library integration and fallback mechanism. **No API key required.**
-
-**Tests:**
-- OpenDartReader library availability
-- New methods (get_company_info, get_disclosure_list, get_finstate_all)
-- Corp code auto-fetch capability
-- Fallback mechanism to raw API
-- Enhanced API capabilities
-
-**Run:**
-```bash
-cd backend
-python test_opendart_reader_integration.py
-```
-
-### 3. test_opendart_demo.py
+### 2. test_opendart_demo.py
 Full demonstration of OPENDART API functionality with real API calls. **Requires a valid DART_API_KEY**.
 
 **Demonstrates:**
@@ -60,24 +42,22 @@ PYTHONPATH=$(pwd)/src python test_opendart_demo.py
 
 ## What Has Been Implemented
 
-### OpenDartReader Integration (NEW)
-
-The backend now integrates with the [OpenDartReader](https://github.com/FinanceData/OpenDartReader) library, providing:
-
-- **Automatic Corp Code Management**: Auto-fetch corp codes using OpenDartReader's built-in functionality
-- **Pandas-Based Parsing**: Use pandas DataFrames for better performance
-- **Enhanced Methods**: Access 30+ OpenDartReader methods for company info, disclosures, etc.
-- **Fallback Mechanism**: Automatically falls back to raw API if OpenDartReader fails
-
-See [OPENDARTREADER_INTEGRATION.md](OPENDARTREADER_INTEGRATION.md) for complete details.
-
 ### Enhanced OPENDART Client Features
+
+The backend implements direct API calls to OPENDART without using external packages, providing:
+
+- **Corp Code Management**: Hardcoded mapping for 10 major Korean companies with ability to download full list
+- **Financial Statement Retrieval**: Complete financial data parsing from OPENDART API
+- **Company Information**: Detailed company profiles using OPENDART company.json endpoint
+- **Disclosure Listings**: Corporate disclosure search using OPENDART list.json endpoint
+- **All Own Functions**: All requests to OPENDART are made by own implementation functions
 
 #### 1. Corp Code Mapping
 - **Problem:** DART uses 8-digit corp codes, different from 6-digit stock codes
 - **Solution:** 
   - Hardcoded mapping for 10 major Korean companies
-  - **NEW**: Automatic corp code lookup using OpenDartReader when not in cache
+  - `download_corp_code_list()` method to fetch and cache complete mapping from DART
+  - `find_corp_code()` method to search by company name or stock code
   - `download_corp_code_list()` method to fetch and cache complete mapping from DART
 
 **Mapped Companies:**
@@ -142,6 +122,33 @@ Returns a dictionary with all cash flow statement line items including:
 
 ##### `get_financial_statement_raw(symbol, year, quarter=None, fs_div='CFS')`
 Returns raw, unprocessed data from DART API for custom processing.
+
+##### `find_corp_code(corp_name_or_stock_code)` (NEW)
+Find corp code by company name or stock code.
+- Searches local cache first
+- Suggests downloading full corp code list for company name searches
+
+##### `get_company_info(symbol)` (NEW)
+Get detailed company information from OPENDART company.json endpoint.
+- Company names (Korean and English)
+- CEO name
+- Address and contact information
+- Industry code
+- Website URLs
+- Establishment date
+
+##### `get_disclosure_list(corp, start, end, kind, final)` (NEW)
+Get list of corporate disclosures from OPENDART list.json endpoint.
+- Filter by company, date range, and disclosure type
+- Support for all disclosure types (A-J)
+- Option to include or exclude corrected reports
+- Returns list of disclosure dictionaries
+
+##### `get_finstate_all(symbol, year, reprt_code, fs_div)` (NEW)
+Get all financial statement line items from OPENDART.
+- Comprehensive financial data with all line items
+- Alias for get_financial_statement_raw() with reprt_code parameter
+- Compatible with OpenDartReader-style API
 
 #### 3. Report Period Support
 

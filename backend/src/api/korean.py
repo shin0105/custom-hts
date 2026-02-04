@@ -388,7 +388,7 @@ async def get_company_info(symbol: str) -> Dict[str, Any]:
 
 @router.get("/disclosures")
 async def get_disclosures(
-    symbol: Optional[str] = Query(None, description="Stock code (optional)"),
+    corp: Optional[str] = Query(None, description="Stock code or company name (optional)"),
     start: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     end: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     kind: Optional[str] = Query(
@@ -405,7 +405,7 @@ async def get_disclosures(
     date range, and disclosure type.
 
     Args:
-        symbol: Stock code (optional, if omitted returns all companies)
+        corp: Stock code or company name (optional, if omitted returns all companies)
         start: Start date (YYYY-MM-DD or YYYYMMDD)
         end: End date (YYYY-MM-DD or YYYYMMDD)
         kind: Disclosure type code (A-J)
@@ -415,26 +415,26 @@ async def get_disclosures(
     Returns:
         Dictionary with disclosure listings
     """
-    disclosures_df = opendart_client.get_disclosure_list(
-        symbol=symbol, start=start, end=end, kind=kind, final=final
+    disclosures = opendart_client.get_disclosure_list(
+        corp=corp, start=start, end=end, kind=kind, final=final
     )
 
-    if disclosures_df is None or disclosures_df.empty:
+    if disclosures is None:
         raise HTTPException(
             status_code=404,
             detail="No disclosures found for the specified criteria",
         )
 
-    # Convert DataFrame to list of dictionaries and limit results
-    disclosures = disclosures_df.head(limit).to_dict(orient="records")
+    # Limit results
+    limited_disclosures = disclosures[:limit] if disclosures else []
 
     return {
-        "symbol": symbol,
+        "corp": corp,
         "start": start,
         "end": end,
         "kind": kind,
-        "count": len(disclosures),
-        "data": disclosures,
+        "count": len(limited_disclosures),
+        "data": limited_disclosures,
     }
 
 
@@ -448,6 +448,7 @@ async def get_all_financials(
         le=4,
         description="Quarter (1-4 for quarterly, None for annual)",
     ),
+    fs_div: str = Query("CFS", description="Financial statement division (CFS/OFS)"),
 ) -> Dict[str, Any]:
     """
     Get comprehensive financial statements with all line items.
@@ -463,6 +464,7 @@ async def get_all_financials(
         symbol: Stock code (e.g., 005930 for Samsung Electronics)
         year: Fiscal year (defaults to previous year)
         quarter: Optional quarter (1-4)
+        fs_div: Financial statement division (CFS for consolidated, OFS for separate)
 
     Returns:
         Dictionary with comprehensive financial data
@@ -474,21 +476,19 @@ async def get_all_financials(
     else:
         reprt_code = "11011"
 
-    financials_df = opendart_client.get_finstate_all(symbol, year, reprt_code)
+    financials = opendart_client.get_finstate_all(symbol, year, reprt_code, fs_div)
 
-    if financials_df is None or financials_df.empty:
+    if financials is None or not financials:
         raise HTTPException(
             status_code=404,
             detail=f"Financial data not found for {symbol} (year: {year}, quarter: {quarter})",
         )
 
-    # Convert DataFrame to list of dictionaries
-    financials = financials_df.to_dict(orient="records")
-
     return {
         "symbol": symbol,
         "year": year,
         "quarter": quarter,
+        "fs_div": fs_div,
         "count": len(financials),
         "data": financials,
     }
