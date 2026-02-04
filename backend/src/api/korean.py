@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any, List
 from enum import Enum
 from ..models.korean import (
     KoreanStockQuote,
@@ -15,6 +15,7 @@ from ..integrations.opendart import opendart_client
 
 class PeriodType(str, Enum):
     """Valid period types for candle data."""
+
     DAILY = "D"
     WEEKLY = "W"
     MONTHLY = "M"
@@ -22,11 +23,34 @@ class PeriodType(str, Enum):
 
 class MinuteInterval(int, Enum):
     """Valid minute intervals for candle data."""
+
     ONE = 1
     FIVE = 5
     TEN = 10
     THIRTY = 30
     SIXTY = 60
+
+
+from ..integrations.opendart import opendart_client
+
+
+class PeriodType(str, Enum):
+    """Valid period types for candle data."""
+
+    DAILY = "D"
+    WEEKLY = "W"
+    MONTHLY = "M"
+
+
+class MinuteInterval(int, Enum):
+    """Valid minute intervals for candle data."""
+
+    ONE = 1
+    FIVE = 5
+    TEN = 10
+    THIRTY = 30
+    SIXTY = 60
+
 
 router = APIRouter(prefix="/korean", tags=["Korean Market"])
 
@@ -92,7 +116,8 @@ async def korean_market_health() -> dict:
 async def get_korean_candle(
     symbol: str,
     period: PeriodType = Query(
-        PeriodType.DAILY, description="Period type (D: daily, W: weekly, M: monthly)"
+        PeriodType.DAILY,
+        description="Period type (D: daily, W: weekly, M: monthly)",
     ),
     adjust_price: bool = Query(True, description="Adjust for stock splits"),
     limit: int = Query(100, ge=1, le=500, description="Number of candles"),
@@ -123,7 +148,9 @@ async def get_korean_candle(
 @router.get("/candle-minute/{symbol}", response_model=List[KoreanCandleData])
 async def get_korean_minute_candle(
     symbol: str,
-    interval: MinuteInterval = Query(MinuteInterval.ONE, description="Minute interval (1, 5, 10, 30, 60)"),
+    interval: MinuteInterval = Query(
+        MinuteInterval.ONE, description="Minute interval (1, 5, 10, 30, 60)"
+    ),
     limit: int = Query(100, ge=1, le=500, description="Number of candles"),
 ) -> List[KoreanCandleData]:
     """
@@ -157,7 +184,7 @@ async def get_korean_account_balance(
 ) -> Dict[str, Any]:
     """
     Get account balance and stock positions.
-    
+
     WARNING: This endpoint currently lacks authentication and authorization.
     In production, this should be protected with user authentication and
     the account_number should be derived from the authenticated user context
