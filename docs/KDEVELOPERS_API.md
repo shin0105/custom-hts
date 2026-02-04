@@ -4,72 +4,120 @@ This document describes the KDevelopers (한국투자증권) OpenAPI integration
 
 ## Overview
 
-The integration provides access to real-time stock data, candle charts, and account information for Korean stocks using the Korean Investment Securities OpenAPI.
+The integration provides access to real-time stock data, historical price data, and account information for Korean stocks using the Korean Investment Securities OpenAPI.
 
 ## API Documentation
 
 Official API Portal: https://apiportal.koreainvestment.com/
 
+## Market Master Files
+
+### Stock Information Files (종목정보파일)
+You can download stock master files for various Korean markets:
+
+- **KOSPI (코스피)**: Download from [종목정보파일 페이지](https://apiportal.koreainvestment.com/apiservice-category)
+- **KOSDAQ (코스닥)**: Download from [종목정보파일 페이지](https://apiportal.koreainvestment.com/apiservice-category)
+- Python parsing sample code: [GitHub Repository](https://github.com/koreainvestment/open-trading-api/tree/main/stocks_info)
+
+Note: These master files (.mst) contain stock codes, names, and other metadata. You can rename .mst to .txt to view as plain text.
+
 ## Implemented Features
 
 ### 1. Stock Price and Quote Data
 
-#### Get Real-time Stock Quote
-- **Endpoint**: `GET /api/korean/quote/{symbol}`
-- **Description**: Get current stock price and trading information
+#### Get Current Stock Price
+- **KIS API Endpoint**: `/uapi/domestic-stock/v1/quotations/inquire-price`
+- **Backend Endpoint**: `GET /api/korean/quote/{symbol}`
+- **Method**: GET
+- **Transaction ID**: `FHKST01010100` (both real and mock)
+- **Description**: Get current stock price and detailed market information
 - **Example**: `/api/korean/quote/005930` (Samsung Electronics)
-- **Response**: Real-time quote with current price, volume, changes, etc.
+- **Required Parameters**:
+  - `FID_COND_MRKT_DIV_CODE`: Market division code (J: KRX, NX: NXT, UN: Unified)
+  - `FID_INPUT_ISCD`: Stock code (e.g., 005930 for Samsung Electronics)
+  
+**Important Note**: For real-time data, use WebSocket API. This REST API provides snapshot data.
 
-### 2. Candle Chart Data (OHLCV)
+### 2. Historical Daily Price Data (OHLCV)
 
-#### Get Daily/Weekly/Monthly Candle Data
-- **Endpoint**: `GET /api/korean/candle/{symbol}`
+#### Get Historical Daily/Weekly/Monthly Candle Data
+- **KIS API Endpoint**: `/uapi/domestic-stock/v1/quotations/inquire-daily-price`
+- **Backend Endpoint**: `GET /api/korean/candle/{symbol}`
+- **Method**: GET
+- **Transaction ID**: `FHKST01010400` (both real and mock)
+- **Description**: Get historical OHLCV (Open, High, Low, Close, Volume) data
+- **Limit**: Maximum 30 days/weeks/months of data
 - **Parameters**:
-  - `period`: Period type (D: daily, W: weekly, M: monthly) - default: "D"
-  - `adjust_price`: Adjust for stock splits - default: true
-  - `limit`: Number of candles (1-500) - default: 100
-- **Example**: `/api/korean/candle/005930?period=D&limit=100`
-- **Response**: List of candle data with open, high, low, close, volume
-
-#### Get Minute Candle Data
-- **Endpoint**: `GET /api/korean/candle-minute/{symbol}`
-- **Parameters**:
-  - `interval`: Minute interval (1, 5, 10, 30, 60) - default: 1
-  - `limit`: Number of candles (1-500) - default: 100
-- **Example**: `/api/korean/candle-minute/005930?interval=5&limit=50`
-- **Response**: List of minute candle data
+  - `FID_COND_MRKT_DIV_CODE`: Market division code (J: KRX, NX: NXT, UN: Unified)
+  - `FID_INPUT_ISCD`: Stock code (e.g., 005930)
+  - `FID_PERIOD_DIV_CODE`: Period type
+    - `D`: Daily (최근 30거래일)
+    - `W`: Weekly (최근 30주)
+    - `M`: Monthly (최근 30개월)
+  - `FID_ORG_ADJ_PRC`: Price adjustment
+    - `0`: Unadjusted price
+    - `1`: Adjusted for splits/mergers
+- **Example**: `/api/korean/candle/005930?period=D&limit=30`
+- **Response**: Array of candle data with date, open, high, low, close, volume
 
 ### 3. Account Balance and Positions
 
 #### Get Account Balance
-- **Endpoint**: `GET /api/korean/account/{account_number}`
+- **KIS API Endpoint**: `/uapi/domestic-stock/v1/trading/inquire-balance`
+- **Backend Endpoint**: `GET /api/korean/account/{account_number}`
+- **Method**: GET
+- **Transaction ID**:
+  - Real: `TTTC8434R`
+  - Mock: `VTTC8434R`
+- **Description**: Query stock account balance and holdings
+- **Important**: This API is slow due to comprehensive data. For simple order preparation, use buy/sell quantity inquiry APIs instead.
+- **Pagination**:
+  - Real account: Max 50 items per call
+  - Mock account: Max 20 items per call
+  - Use continuation query for additional items
 - **Parameters**:
-  - `account_product_code`: Account product code - default: "01"
-- **Example**: `/api/korean/account/12345678`
+  - `CANO`: Account number (first 8 digits)
+  - `ACNT_PRDT_CD`: Account product code (last 2 digits)
+  - `AFHR_FLPR_YN`: After-hours/Exchange flag
+    - `N`: Default
+    - `Y`: After-hours single price
+    - `X`: NXT regular market
+  - `INQR_DVSN`: Inquiry type
+    - `01`: By loan date
+    - `02`: By stock
+  - `UNPR_DVSN`: Unit price type (`01`: Default)
+  - `FUND_STTL_ICLD_YN`: Include fund settlement (`N`/`Y`)
+  - `FNCG_AMT_AUTO_RDPT_YN`: Auto loan repayment (`N`: Default)
+  - `PRCS_DVSN`: Process type
+    - `00`: Include previous day trades
+    - `01`: Exclude previous day trades
+- **Example**: `/api/korean/account/12345678-01`
 - **Response**: Account balance information and list of stock positions
+
 
 **Response Structure**:
 ```json
 {
-  "balance": {
-    "account_number": "12345678",
-    "total_evaluation": 100000000,
-    "cash_balance": 20000000,
-    "investment_amount": 80000000,
-    "profit_loss": 5000000,
-    "profit_loss_percent": 6.25,
-    "timestamp": "2024-01-01T12:00:00"
-  },
-  "positions": [
+  "output1": [
     {
-      "symbol": "005930",
-      "name": "삼성전자",
-      "quantity": 100,
-      "average_price": 70000,
-      "current_price": 72000,
-      "evaluation_amount": 7200000,
-      "profit_loss": 200000,
-      "profit_loss_percent": 2.86
+      "pdno": "005930",
+      "prdt_name": "삼성전자",
+      "hldg_qty": "100",
+      "pchs_avg_pric": "70000.00",
+      "prpr": "72000",
+      "evlu_amt": "7200000",
+      "evlu_pfls_amt": "200000",
+      "evlu_pfls_rt": "2.86"
+    }
+  ],
+  "output2": [
+    {
+      "dnca_tot_amt": "20000000",
+      "tot_evlu_amt": "100000000",
+      "nass_amt": "100000000",
+      "pchs_amt_smtl_amt": "80000000",
+      "evlu_amt_smtl_amt": "85000000",
+      "evlu_pfls_smtl_amt": "5000000"
     }
   ]
 }
@@ -88,54 +136,84 @@ HANTU_API_SECRET=your_app_secret_here
 
 ## API Implementation Details
 
-### Transaction IDs (tr_id)
-
-Different API endpoints require different transaction IDs:
-
-- **Real-time Quote**: `FHKST01010100`
-- **Daily/Period Candle**: `FHKST01010400`
-- **Minute Candle**: `FHKST03010200`
-- **Account Balance**: `TTTC8434R` (real) / `VTTC8434R` (mock)
-
 ### Base URL
 
 - **Production**: `https://openapi.koreainvestment.com:9443`
 - **Mock Trading**: `https://openapivts.koreainvestment.com:29443`
 
+### Common Headers
+
+All API requests require the following headers:
+
+- `content-type`: `application/json; charset=utf-8`
+- `authorization`: Access token from OAuth2
+- `appkey`: Your application key
+- `appsecret`: Your application secret
+- `tr_id`: Transaction ID (varies by endpoint)
+- `custtype`: Customer type (`P`: Personal, `B`: Corporate)
+
+### Transaction IDs (tr_id)
+
+Different API endpoints require different transaction IDs:
+
+- **Current Stock Price**: `FHKST01010100`
+- **Historical Daily Price**: `FHKST01010400`
+- **Account Balance (Real)**: `TTTC8434R`
+- **Account Balance (Mock)**: `VTTC8434R`
+
+### Market Division Codes
+
+- `J`: KRX (Korean Exchange)
+- `NX`: NXT (Next market)
+- `UN`: Unified (통합)
+
 ## Data Models
+
+### KoreanStockQuote
+Represents current stock quote data:
+- `symbol`: Stock code (e.g., "005930")
+- `stck_prpr`: Current stock price
+- `prdy_vrss`: Change from previous day
+- `prdy_vrss_sign`: Change sign (1: up, 2: unchanged, 3/4/5: down)
+- `prdy_ctrt`: Change percentage from previous day
+- `acml_vol`: Accumulated volume
+- `acml_tr_pbmn`: Accumulated trading amount
+- `stck_oprc`: Opening price
+- `stck_hgpr`: High price
+- `stck_lwpr`: Low price
 
 ### KoreanCandleData
 Represents OHLCV (Open, High, Low, Close, Volume) candle data:
-- `symbol`: Stock symbol (e.g., "005930")
-- `date`: For daily/weekly/monthly candles, trading date in `YYYYMMDD` format; for minute candles, candle time in `HHMMSS` format
-- `open`: Opening price in KRW
-- `high`: High price in KRW
-- `low`: Low price in KRW
-- `close`: Closing price in KRW
-- `volume`: Trading volume
-- `change`: Price change in KRW (optional)
-- `change_percent`: Price change percentage (optional)
+- `symbol`: Stock code (e.g., "005930")
+- `stck_bsop_date`: Trading date (YYYYMMDD format)
+- `stck_oprc`: Opening price
+- `stck_hgpr`: High price
+- `stck_lwpr`: Low price
+- `stck_clpr`: Closing price
+- `acml_vol`: Accumulated volume
+- `prdy_vrss`: Change from previous day
+- `prdy_vrss_sign`: Change sign
+- `prdy_ctrt`: Change percentage
 
 ### KoreanAccountBalance
 Represents account balance information:
-- `account_number`: Account number
-- `total_evaluation`: Total evaluation amount in KRW
-- `cash_balance`: Cash balance in KRW
-- `investment_amount`: Total investment amount in KRW
-- `profit_loss`: Total profit/loss in KRW
-- `profit_loss_percent`: Total profit/loss percentage
-- `timestamp`: Balance timestamp
+- `dnca_tot_amt`: Total deposit amount
+- `tot_evlu_amt`: Total evaluation amount
+- `nass_amt`: Net asset amount
+- `pchs_amt_smtl_amt`: Total purchase amount
+- `evlu_amt_smtl_amt`: Total evaluation amount
+- `evlu_pfls_smtl_amt`: Total profit/loss amount
 
 ### KoreanStockPosition
 Represents individual stock position:
-- `symbol`: Stock symbol
-- `name`: Company name in Korean
-- `quantity`: Number of shares held
-- `average_price`: Average purchase price
-- `current_price`: Current market price
-- `evaluation_amount`: Current evaluation amount
-- `profit_loss`: Profit/loss in KRW
-- `profit_loss_percent`: Profit/loss percentage
+- `pdno`: Stock code
+- `prdt_name`: Product name (Korean)
+- `hldg_qty`: Holding quantity
+- `pchs_avg_pric`: Average purchase price
+- `prpr`: Current price
+- `evlu_amt`: Evaluation amount
+- `evlu_pfls_amt`: Profit/loss amount
+- `evlu_pfls_rt`: Profit/loss ratio
 
 ## Usage Examples
 
@@ -144,54 +222,86 @@ Represents individual stock position:
 ```python
 from src.integrations.kdevelopers import kdevelopers_client
 
-# Get real-time quote
+# Get current stock quote
 quote = kdevelopers_client.get_quote("005930")
-print(f"Current price: {quote.current_price} KRW")
+print(f"Current price: {quote.stck_prpr} KRW")
 
-# Get daily candle data
-candles = kdevelopers_client.get_daily_candle("005930", period="D", limit=30)
+# Get daily candle data (last 30 days)
+candles = kdevelopers_client.get_daily_candle("005930", period="D", adjust_price=True)
 for candle in candles:
-    print(f"Date: {candle.date}, Close: {candle.close} KRW")
+    print(f"Date: {candle.stck_bsop_date}, Close: {candle.stck_clpr} KRW")
 
 # Get account balance
-account_data = kdevelopers_client.get_account_balance("12345678")
-balance = account_data["balance"]
-positions = account_data["positions"]
-print(f"Total evaluation: {balance.total_evaluation} KRW")
+account_data = kdevelopers_client.get_account_balance("12345678", "01")
+positions = account_data["output1"]
+balance = account_data["output2"][0]
+print(f"Total evaluation: {balance.tot_evlu_amt} KRW")
 for position in positions:
-    print(f"{position.name}: {position.quantity} shares")
+    print(f"{position.prdt_name}: {position.hldg_qty} shares")
 ```
 
 ### HTTP API Example
 
 ```bash
 # Get stock quote
-curl http://localhost:8000/api/korean/quote/005930
+curl -X GET "https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/inquire-price?FID_COND_MRKT_DIV_CODE=J&FID_INPUT_ISCD=005930" \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer YOUR_TOKEN" \
+  -H "appkey: YOUR_APP_KEY" \
+  -H "appsecret: YOUR_APP_SECRET" \
+  -H "tr_id: FHKST01010100" \
+  -H "custtype: P"
 
 # Get daily candles
-curl "http://localhost:8000/api/korean/candle/005930?period=D&limit=100"
-
-# Get minute candles
-curl "http://localhost:8000/api/korean/candle-minute/005930?interval=5&limit=50"
+curl -X GET "https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/inquire-daily-price?FID_COND_MRKT_DIV_CODE=J&FID_INPUT_ISCD=005930&FID_PERIOD_DIV_CODE=D&FID_ORG_ADJ_PRC=1" \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer YOUR_TOKEN" \
+  -H "appkey: YOUR_APP_KEY" \
+  -H "appsecret: YOUR_APP_SECRET" \
+  -H "tr_id: FHKST01010400" \
+  -H "custtype: P"
 
 # Get account balance
-curl http://localhost:8000/api/korean/account/12345678
+curl -X GET "https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/trading/inquire-balance?CANO=12345678&ACNT_PRDT_CD=01&AFHR_FLPR_YN=N&INQR_DVSN=02&UNPR_DVSN=01&FUND_STTL_ICLD_YN=N&FNCG_AMT_AUTO_RDPT_YN=N&PRCS_DVSN=00" \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer YOUR_TOKEN" \
+  -H "appkey: YOUR_APP_KEY" \
+  -H "appsecret: YOUR_APP_SECRET" \
+  -H "tr_id: TTTC8434R" \
+  -H "custtype: P"
 ```
+
 
 ## Error Handling
 
 The API includes comprehensive error handling:
-- Returns `None` or empty list if data fetch fails
+- Returns proper error codes and messages
 - Logs errors for debugging
 - Returns HTTP 404 if data not found
 - Validates input parameters
+- Handles authentication failures
+
+### Common Error Codes
+
+- `rt_cd = "0"`: Success
+- `rt_cd != "0"`: Failure (check `msg_cd` and `msg1` for details)
 
 ## Rate Limiting
 
 Be aware of KIS API rate limits:
 - Implement proper throttling for production use
-- Cache frequently accessed data
-- Use appropriate intervals for real-time data updates
+- Cache frequently accessed data where appropriate
+- Use appropriate intervals for data updates
+- Monitor API usage to avoid exceeding limits
+
+## Important Notes
+
+1. **Stock Codes**: Korean stock codes are 6-digit numbers (e.g., "005930" for Samsung Electronics)
+2. **Master Files**: Download master files for complete stock lists from [종목정보파일](https://apiportal.koreainvestment.com/apiservice-category)
+3. **Real-time Data**: For true real-time streaming, use WebSocket API instead of REST API
+4. **Account Balance**: The balance API is comprehensive but slow. Use specific buy/sell inquiry APIs for faster order preparation
+5. **Continuation Queries**: Use `CTX_AREA_FK100` and `CTX_AREA_NK100` for paginated results when more than 50 (real) or 20 (mock) items exist
+6. **Price Adjustment**: Always consider whether to use adjusted prices (`FID_ORG_ADJ_PRC=1`) for historical analysis
 
 ## Testing
 
@@ -206,3 +316,7 @@ uv run pytest tests/test_korean_models.py -v
 - [KIS Developers Portal](https://apiportal.koreainvestment.com/intro)
 - [Official GitHub Samples](https://github.com/koreainvestment/open-trading-api)
 - [API Documentation](https://apiportal.koreainvestment.com/apiservice)
+- [Stock Master Files](https://apiportal.koreainvestment.com/apiservice-category)
+- [Current Stock Price API](https://apiportal.koreainvestment.com/apiservice-apiservice?/uapi/domestic-stock/v1/quotations/inquire-price)
+- [Historical Daily Price API](https://apiportal.koreainvestment.com/apiservice-apiservice?/uapi/domestic-stock/v1/quotations/inquire-daily-price)
+- [Account Balance API](https://apiportal.koreainvestment.com/apiservice-apiservice?/uapi/domestic-stock/v1/trading/inquire-balance)
