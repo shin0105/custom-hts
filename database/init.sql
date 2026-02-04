@@ -86,3 +86,12 @@ COMMENT ON TABLE us_financials IS 'Financial statements for US companies from Ya
 
 COMMENT ON COLUMN korean_financials.symbol IS 'Korean stock code (e.g., 005930 for Samsung)';
 COMMENT ON COLUMN us_financials.symbol IS 'US stock ticker symbol (e.g., AAPL for Apple)';
+
+-- ========================================================================
+-- DETAILED FINANCIAL STATEMENT TABLES
+-- ========================================================================
+-- For comprehensive financial data, see financial_statements.sql
+-- This includes separate tables for:
+-- - Balance Sheet (korean_balance_sheet, us_balance_sheet)
+-- - Income Statement (korean_income_statement, us_income_statement)  
+-- - Cash Flow Statement (korean_cashflow_statement, us_cashflow_statement)

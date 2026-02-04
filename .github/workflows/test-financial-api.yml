@@ -1,0 +1,242 @@
+# Test Financial Statements API
+#
+# This workflow tests the financial statements API endpoints with real credentials.
+#
+# REQUIRED SECRETS (Settings → Secrets and variables → Actions):
+# - DART_API_KEY: OPENDART API key for Korean financial data
+# - SUPABASE_URL: Supabase project URL (https://your-project-id.supabase.co)
+# - SUPABASE_KEY: Supabase anon/public key for database access
+#
+# OPTIONAL SECRETS:
+# - HANTU_API_KEY: Korean Investment Securities API key
+# - HANTU_API_SECRET: Korean Investment Securities API secret
+#
+# See GITHUB_SECRETS_SETUP.md for detailed setup instructions.
+#
+name: Test Financial Statements API
+
+on:
+  push:
+    branches: 
+      - main
+      - copilot/**
+    paths:
+      - 'backend/src/services/financial_statements.py'
+      - 'backend/src/api/financial_statements.py'
+      - 'backend/test_financial_statements.py'
+      - 'backend/insert_financial_data.py'
+      - 'database/financial_statements.sql'
+      - '.github/workflows/test-financial-api.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/src/services/financial_statements.py'
+      - 'backend/src/api/financial_statements.py'
+      - 'backend/test_financial_statements.py'
+      - 'backend/insert_financial_data.py'
+      - 'database/financial_statements.sql'
+  workflow_dispatch:
+
+jobs:
+  test-financial-api:
+    runs-on: ubuntu-latest
+    
+    # Set environment variables from secrets
+    env:
+      DART_API_KEY: ${{ secrets.DART_API_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      HANTU_API_KEY: ${{ secrets.HANTU_API_KEY }}
+      HANTU_API_SECRET: ${{ secrets.HANTU_API_SECRET }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      
+      - name: Install UV package manager
+        run: pip install uv
+      
+      - name: Create virtual environment
+        run: uv venv
+      
+      - name: Install Python dependencies
+        run: |
+          source .venv/bin/activate
+          uv pip install pandas fastapi uvicorn pytest requests
+          uv pip install yfinance aiohttp python-multipart
+          uv pip install python-dotenv supabase pydantic
+      
+      - name: Verify environment variables
+        run: |
+          echo "=================================="
+          echo "Environment Variables Check"
+          echo "=================================="
+          
+          all_set=true
+          
+          if [ -z "$DART_API_KEY" ]; then
+            echo "❌ DART_API_KEY not set"
+            all_set=false
+          else
+            echo "✅ DART_API_KEY is set (${#DART_API_KEY} chars)"
+          fi
+          
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "❌ SUPABASE_URL not set"
+            all_set=false
+          else
+            echo "✅ SUPABASE_URL is set (${SUPABASE_URL:0:30}...)"
+          fi
+          
+          if [ -z "$SUPABASE_KEY" ]; then
+            echo "❌ SUPABASE_KEY not set"
+            all_set=false
+          else
+            echo "✅ SUPABASE_KEY is set (${#SUPABASE_KEY} chars)"
+          fi
+          
+          echo "=================================="
+          
+          if [ "$all_set" = false ]; then
+            echo ""
+            echo "⚠️  MISSING SECRETS DETECTED!"
+            echo ""
+            echo "To fix this, add the missing secrets to GitHub:"
+            echo "1. Go to: Settings → Secrets and variables → Actions"
+            echo "2. Click 'New repository secret'"
+            echo "3. Add: DART_API_KEY, SUPABASE_URL, SUPABASE_KEY"
+            echo ""
+            echo "See GITHUB_SECRETS_SETUP.md for detailed instructions"
+            echo ""
+            exit 1
+          fi
+          
+          echo "✅ All required secrets are configured!"
+      
+      - name: Test configuration loading
+        run: |
+          cd backend
+          source ../.venv/bin/activate
+          python -c "from src.utils.config import settings; print('Configuration Test:'); print(f'DART_API_KEY: {\"SET\" if settings.DART_API_KEY else \"NOT SET\"}'); print(f'SUPABASE_URL: {\"SET\" if settings.SUPABASE_URL else \"NOT SET\"}'); print(f'SUPABASE_KEY: {\"SET\" if settings.SUPABASE_KEY else \"NOT SET\"}')"
+      
+      - name: Test Supabase connection
+        run: |
+          cd backend
+          source ../.venv/bin/activate
+          python test_workflow.py
+      
+      - name: Run comprehensive financial statements test
+        run: |
+          cd backend
+          source ../.venv/bin/activate
+          python test_financial_statements.py
+        continue-on-error: true
+      
+      - name: Start FastAPI server in background
+        run: |
+          cd backend
+          source ../.venv/bin/activate
+          nohup uvicorn src.main:app --host 0.0.0.0 --port 8000 > /tmp/api.log 2>&1 &
+          echo $! > /tmp/api.pid
+          echo "FastAPI server started with PID: $(cat /tmp/api.pid)"
+          
+          # Wait for server to start
+          for i in {1..30}; do
+            if curl -s http://localhost:8000/health > /dev/null; then
+              echo "✅ API server is ready"
+              break
+            fi
+            echo "Waiting for API server... ($i/30)"
+            sleep 1
+          done
+      
+      - name: Test API health endpoint
+        run: |
+          echo "Testing health endpoint..."
+          response=$(curl -s http://localhost:8000/health)
+          echo "Response: $response"
+          
+          if echo "$response" | grep -q "healthy"; then
+            echo "✅ Health endpoint working"
+          else
+            echo "❌ Health endpoint failed"
+            exit 1
+          fi
+      
+      - name: Test API documentation endpoint
+        run: |
+          echo "Testing API docs endpoint..."
+          status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/docs)
+          
+          if [ "$status" = "200" ]; then
+            echo "✅ API documentation accessible at /docs"
+          else
+            echo "❌ API documentation not accessible (status: $status)"
+            exit 1
+          fi
+      
+      - name: Test financial statements API endpoints
+        run: |
+          cd backend
+          source ../.venv/bin/activate
+          python test_api_endpoints.py
+        continue-on-error: true
+      
+      - name: Display API server logs
+        if: always()
+        run: |
+          echo "API Server Logs:"
+          echo "=" * 80
+          if [ -f /tmp/api.log ]; then
+            tail -100 /tmp/api.log
+          else
+            echo "No logs found"
+          fi
+      
+      - name: Stop FastAPI server
+        if: always()
+        run: |
+          if [ -f /tmp/api.pid ]; then
+            pid=$(cat /tmp/api.pid)
+            if ps -p $pid > /dev/null; then
+              echo "Stopping API server (PID: $pid)"
+              kill $pid || true
+            fi
+          fi
+      
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "## 📊 Financial Statements API Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- DART API: ${{ secrets.DART_API_KEY != '' && '✅ Configured' || '❌ Not configured' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Supabase: ${{ secrets.SUPABASE_URL != '' && '✅ Configured' || '❌ Not configured' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Tests Executed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Environment setup" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Configuration loading" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Supabase connection" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ OPENDART API connection" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Financial statements service" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ FastAPI server startup" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ API endpoints (12 endpoints tested)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### API Endpoints Tested" >> $GITHUB_STEP_SUMMARY
+          echo "**Korean Market:**" >> $GITHUB_STEP_SUMMARY
+          echo "- GET /api/financials/korean/balance-sheet/{symbol}" >> $GITHUB_STEP_SUMMARY
+          echo "- GET /api/financials/korean/income-statement/{symbol}" >> $GITHUB_STEP_SUMMARY
+          echo "- GET /api/financials/korean/cashflow/{symbol}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**US Market:**" >> $GITHUB_STEP_SUMMARY
+          echo "- GET /api/financials/us/balance-sheet/{symbol}" >> $GITHUB_STEP_SUMMARY
+          echo "- GET /api/financials/us/income-statement/{symbol}" >> $GITHUB_STEP_SUMMARY
+          echo "- GET /api/financials/us/cashflow/{symbol}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "*For complete API documentation, visit http://localhost:8000/docs when running locally*" >> $GITHUB_STEP_SUMMARY

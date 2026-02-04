@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .utils.config import settings
-from .api import korean, us
+from .api import korean, us, financial_statements
 
 # Validate settings on startup
 settings.validate()
@@ -29,6 +29,11 @@ app.add_middleware(
 # Include routers
 app.include_router(korean.router, prefix=settings.API_V1_PREFIX)
 app.include_router(us.router, prefix=settings.API_V1_PREFIX)
+app.include_router(
+    financial_statements.router,
+    prefix=f"{settings.API_V1_PREFIX}/financials",
+    tags=["Financial Statements"],
+)
 
 
 @app.get("/")

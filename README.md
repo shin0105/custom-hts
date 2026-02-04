@@ -85,11 +85,20 @@ cp .env.example .env
 ```
 
 Required API keys:
+- **DART_API_KEY**: OPENDART API key from [OpenDart](https://opendart.fss.or.kr/)
+- **SUPABASE_URL**: Your Supabase project URL (e.g., `https://xxx.supabase.co`)
+- **SUPABASE_KEY**: Your Supabase anon/public key
 - **HANTU_API_KEY**: Korean Investment Securities API key from [KDevelopers](https://apiportal.koreainvestment.com/)
 - **HANTU_API_SECRET**: Korean Investment Securities API secret
-- **DART_API_KEY**: OPENDART API key from [OpenDart](https://opendart.fss.or.kr/)
-- **SUPABASE_URL**: Your Supabase project URL
-- **SUPABASE_KEY**: Your Supabase anon key
+
+**For GitHub Actions**: Add these same secrets to your repository:
+- Go to: Settings → Secrets and variables → Actions
+- Add each secret with the exact same names
+- See [GITHUB_SECRETS_SETUP.md](./GITHUB_SECRETS_SETUP.md) for detailed instructions
+
+**For GitHub Codespaces**: Secrets are configured separately:
+- Go to: Your Profile → Settings → Codespaces → Secrets
+- Add the same secrets for use in Codespaces development environment
 
 ### 2. Backend Setup
 
