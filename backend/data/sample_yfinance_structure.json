@@ -1,0 +1,102 @@
+{
+  "description": "Sample structure of yfinance data for US stocks",
+  "reference": "Based on yfinance library standard output",
+  "ticker": "AAPL",
+  "financials_structure": {
+    "index_examples": [
+      "Total Revenue",
+      "Cost Of Revenue",
+      "Gross Profit",
+      "Operating Revenue",
+      "Operating Expense",
+      "Operating Income",
+      "Net Income From Continuing Operations",
+      "Net Income",
+      "Interest Expense",
+      "Interest Income",
+      "Tax Provision"
+    ],
+    "columns": ["2023-09-30", "2022-09-24", "2021-09-25", "2020-09-26"],
+    "data_type": "Annual financials in USD"
+  },
+  "balance_sheet_structure": {
+    "index_examples": [
+      "Total Assets",
+      "Current Assets",
+      "Cash And Cash Equivalents",
+      "Inventory",
+      "Receivables",
+      "Total Liabilities Net Minority Interest",
+      "Current Liabilities",
+      "Long Term Debt",
+      "Accounts Payable",
+      "Stockholders Equity",
+      "Common Stock",
+      "Retained Earnings"
+    ],
+    "columns": ["2023-09-30", "2022-09-24", "2021-09-25", "2020-09-26"],
+    "data_type": "Balance sheet in USD"
+  },
+  "cashflow_structure": {
+    "index_examples": [
+      "Operating Cash Flow",
+      "Investing Cash Flow",
+      "Financing Cash Flow",
+      "Free Cash Flow",
+      "Capital Expenditure",
+      "Change In Working Capital",
+      "Depreciation And Amortization",
+      "Stock Based Compensation"
+    ],
+    "columns": ["2023-09-30", "2022-09-24", "2021-09-25", "2020-09-26"],
+    "data_type": "Cash flow in USD"
+  },
+  "quarterly_structure": {
+    "note": "Similar structure but with quarterly dates",
+    "columns_example": ["2023-09-30", "2023-07-01", "2023-04-01", "2023-01-01"]
+  },
+  "sample_data": {
+    "financials": {
+      "Total Revenue": {
+        "2023-09-30": 383285000000,
+        "2022-09-24": 394328000000
+      },
+      "Operating Income": {
+        "2023-09-30": 114301000000,
+        "2022-09-24": 119437000000
+      },
+      "Net Income": {
+        "2023-09-30": 96995000000,
+        "2022-09-24": 99803000000
+      }
+    },
+    "balance_sheet": {
+      "Total Assets": {
+        "2023-09-30": 352755000000,
+        "2022-09-24": 352583000000
+      },
+      "Total Liabilities Net Minority Interest": {
+        "2023-09-30": 290437000000,
+        "2022-09-24": 302083000000
+      },
+      "Stockholders Equity": {
+        "2023-09-30": 62318000000,
+        "2022-09-24": 50500000000
+      }
+    },
+    "cashflow": {
+      "Operating Cash Flow": {
+        "2023-09-30": 110543000000,
+        "2022-09-24": 122151000000
+      },
+      "Investing Cash Flow": {
+        "2023-09-30": 3705000000,
+        "2022-09-24": -22354000000
+      },
+      "Financing Cash Flow": {
+        "2023-09-30": -108488000000,
+        "2022-09-24": -110749000000
+      }
+    }
+  }
+}

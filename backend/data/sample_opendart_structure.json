@@ -1,0 +1,107 @@
+{
+  "description": "Sample structure of OPENDART fnlttSinglAcntAll API response",
+  "reference": "Based on src/integrations/opendart.py implementation",
+  "response": {
+    "status": "000",
+    "message": "정상",
+    "list": [
+      {
+        "rcept_no": "20241114000123",
+        "reprt_code": "11011",
+        "bsns_year": "2024",
+        "corp_code": "00126380",
+        "stock_code": "005930",
+        "corp_name": "삼성전자",
+        "sj_div": "BS",
+        "sj_nm": "재무상태표",
+        "account_id": "ifrs-full_Assets",
+        "account_nm": "자산총계",
+        "account_detail": "",
+        "thstrm_nm": "제53기",
+        "thstrm_amount": "426450000000000",
+        "thstrm_add_amount": "",
+        "frmtrm_nm": "제52기",
+        "frmtrm_amount": "399773000000000",
+        "frmtrm_q_nm": "",
+        "frmtrm_q_amount": "",
+        "frmtrm_add_amount": "",
+        "bfefrmtrm_nm": "제51기",
+        "bfefrmtrm_amount": "378900000000000",
+        "ord": "1"
+      },
+      {
+        "rcept_no": "20241114000123",
+        "reprt_code": "11011",
+        "bsns_year": "2024",
+        "corp_code": "00126380",
+        "stock_code": "005930",
+        "corp_name": "삼성전자",
+        "sj_div": "BS",
+        "sj_nm": "재무상태표",
+        "account_id": "ifrs-full_CurrentAssets",
+        "account_nm": "유동자산",
+        "account_detail": "",
+        "thstrm_nm": "제53기",
+        "thstrm_amount": "229780000000000",
+        "frmtrm_amount": "214360000000000",
+        "bfefrmtrm_amount": "205470000000000",
+        "ord": "2"
+      },
+      {
+        "sj_div": "BS",
+        "sj_nm": "재무상태표",
+        "account_nm": "부채총계",
+        "thstrm_amount": "112456000000000"
+      },
+      {
+        "sj_div": "BS",
+        "sj_nm": "재무상태표",
+        "account_nm": "자본총계",
+        "thstrm_amount": "313994000000000"
+      },
+      {
+        "sj_div": "IS",
+        "sj_nm": "손익계산서",
+        "account_nm": "매출액",
+        "thstrm_amount": "258940000000000"
+      },
+      {
+        "sj_div": "IS",
+        "sj_nm": "손익계산서",
+        "account_nm": "영업이익",
+        "thstrm_amount": "35671000000000"
+      },
+      {
+        "sj_div": "IS",
+        "sj_nm": "손익계산서",
+        "account_nm": "당기순이익",
+        "thstrm_amount": "29887000000000"
+      },
+      {
+        "sj_div": "CF",
+        "sj_nm": "현금흐름표",
+        "account_nm": "영업활동현금흐름",
+        "thstrm_amount": "54123000000000"
+      },
+      {
+        "sj_div": "CF",
+        "sj_nm": "현금흐름표",
+        "account_nm": "투자활동현금흐름",
+        "thstrm_amount": "-32145000000000"
+      },
+      {
+        "sj_div": "CF",
+        "sj_nm": "현금흐름표",
+        "account_nm": "재무활동현금흐름",
+        "thstrm_amount": "-18234000000000"
+      }
+    ]
+  },
+  "key_fields": {
+    "sj_div": "Statement division - BS (Balance Sheet), IS (Income Statement), CF (Cash Flow)",
+    "account_nm": "Account name in Korean",
+    "thstrm_amount": "Current period amount (string, may contain commas)",
+    "frmtrm_amount": "Previous period amount",
+    "bfefrmtrm_amount": "Two periods ago amount"
+  }
+}
