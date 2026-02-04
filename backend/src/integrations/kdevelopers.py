@@ -63,7 +63,9 @@ class APIResponse:
         fld = {}
         for x in self._resp.headers.keys():
             if x.islower():
-                fld[x] = self._resp.headers.get(x)
+                # Replace hyphens with underscores for valid Python identifiers
+                field_name = x.replace('-', '_')
+                fld[field_name] = self._resp.headers.get(x)
         if not fld:
             return namedtuple("header", ["tr_cont"])("")
         _th_ = namedtuple("header", fld.keys())
@@ -137,11 +139,11 @@ class KDevelopersClient:
         self._last_auth_time = datetime.now()
         
         # Rate limiting (0.05s for real trading, 0.5s for paper trading)
-        self._smart_sleep = 0.05
+        self._smart_sleep_time = 0.05
 
     def _smart_sleep(self):
         """Rate limiting sleep to avoid API throttling."""
-        time.sleep(self._smart_sleep)
+        time.sleep(self._smart_sleep_time)
 
     def _get_base_headers(self) -> Dict[str, str]:
         """Get base headers for API requests."""
@@ -289,25 +291,39 @@ class KDevelopersClient:
             res = self._url_fetch(api_url, tr_id, "", params)
 
             if res.is_ok():
-                output = res.get_body().output
+                # Access output as attribute or dict key
+                body = res.get_body()
+                output = getattr(body, 'output', None)
+                if output is None:
+                    logger.error(f"No output in response for {symbol}")
+                    return None
+                
+                # Convert namedtuple to dict for easier access
+                if hasattr(output, '_asdict'):
+                    output_dict = output._asdict()
+                elif isinstance(output, dict):
+                    output_dict = output
+                else:
+                    logger.error(f"Unexpected output type: {type(output)}")
+                    return None
                 
                 # Parse the response
-                current_price = safe_float(output.get("stck_prpr"))
-                previous_close = safe_float(output.get("stck_sdpr"))
-                change = safe_float(output.get("prdy_vrss"))
-                change_percent = safe_float(output.get("prdy_ctrt"))
+                current_price = safe_float(output_dict.get("stck_prpr"))
+                previous_close = safe_float(output_dict.get("stck_sdpr"))
+                change = safe_float(output_dict.get("prdy_vrss"))
+                change_percent = safe_float(output_dict.get("prdy_ctrt"))
 
                 return KoreanStockQuote(
                     symbol=symbol,
-                    name=output.get("hts_kor_isnm", symbol),
+                    name=output_dict.get("hts_kor_isnm", symbol),
                     current_price=current_price,
                     change=change,
                     change_percent=change_percent,
-                    volume=safe_int(output.get("acml_vol")),
+                    volume=safe_int(output_dict.get("acml_vol")),
                     timestamp=datetime.now(),
-                    high=safe_float(output.get("stck_hgpr")),
-                    low=safe_float(output.get("stck_lwpr")),
-                    open=safe_float(output.get("stck_oprc")),
+                    high=safe_float(output_dict.get("stck_hgpr")),
+                    low=safe_float(output_dict.get("stck_lwpr")),
+                    open=safe_float(output_dict.get("stck_oprc")),
                     previous_close=previous_close,
                 )
             else:
