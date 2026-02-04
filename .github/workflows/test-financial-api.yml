@@ -1,3 +1,18 @@
+# Test Financial Statements API
+#
+# This workflow tests the financial statements API endpoints with real credentials.
+#
+# REQUIRED SECRETS (Settings → Secrets and variables → Actions):
+# - DART_API_KEY: OPENDART API key for Korean financial data
+# - SUPABASE_URL: Supabase project URL (https://your-project-id.supabase.co)
+# - SUPABASE_KEY: Supabase anon/public key for database access
+#
+# OPTIONAL SECRETS:
+# - HANTU_API_KEY: Korean Investment Securities API key
+# - HANTU_API_SECRET: Korean Investment Securities API secret
+#
+# See GITHUB_SECRETS_SETUP.md for detailed setup instructions.
+#
 name: Test Financial Statements API
 
 on:
@@ -58,24 +73,50 @@ jobs:
       
       - name: Verify environment variables
         run: |
-          echo "Checking environment variables..."
+          echo "=================================="
+          echo "Environment Variables Check"
+          echo "=================================="
+          
+          all_set=true
+          
           if [ -z "$DART_API_KEY" ]; then
-            echo "⚠️  DART_API_KEY not set"
+            echo "❌ DART_API_KEY not set"
+            all_set=false
           else
-            echo "✅ DART_API_KEY is set"
+            echo "✅ DART_API_KEY is set (${#DART_API_KEY} chars)"
           fi
           
           if [ -z "$SUPABASE_URL" ]; then
-            echo "⚠️  SUPABASE_URL not set"
+            echo "❌ SUPABASE_URL not set"
+            all_set=false
           else
-            echo "✅ SUPABASE_URL is set"
+            echo "✅ SUPABASE_URL is set (${SUPABASE_URL:0:30}...)"
           fi
           
           if [ -z "$SUPABASE_KEY" ]; then
-            echo "⚠️  SUPABASE_KEY not set"
+            echo "❌ SUPABASE_KEY not set"
+            all_set=false
           else
-            echo "✅ SUPABASE_KEY is set"
+            echo "✅ SUPABASE_KEY is set (${#SUPABASE_KEY} chars)"
           fi
+          
+          echo "=================================="
+          
+          if [ "$all_set" = false ]; then
+            echo ""
+            echo "⚠️  MISSING SECRETS DETECTED!"
+            echo ""
+            echo "To fix this, add the missing secrets to GitHub:"
+            echo "1. Go to: Settings → Secrets and variables → Actions"
+            echo "2. Click 'New repository secret'"
+            echo "3. Add: DART_API_KEY, SUPABASE_URL, SUPABASE_KEY"
+            echo ""
+            echo "See GITHUB_SECRETS_SETUP.md for detailed instructions"
+            echo ""
+            exit 1
+          fi
+          
+          echo "✅ All required secrets are configured!"
       
       - name: Test configuration loading
         run: |
