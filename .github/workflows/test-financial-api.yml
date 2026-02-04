@@ -47,13 +47,10 @@ jobs:
         run: pip install uv
       
       - name: Create virtual environment
-        run: |
-          cd /home/runner/work/custom-hts/custom-hts
-          uv venv
+        run: uv venv
       
       - name: Install Python dependencies
         run: |
-          cd /home/runner/work/custom-hts/custom-hts
           source .venv/bin/activate
           uv pip install pandas fastapi uvicorn pytest requests
           uv pip install yfinance aiohttp python-multipart
@@ -82,109 +79,26 @@ jobs:
       
       - name: Test configuration loading
         run: |
-          cd /home/runner/work/custom-hts/custom-hts/backend
+          cd backend
           source ../.venv/bin/activate
-          python -c "
-          from src.utils.config import settings
-          print('Configuration Test:')
-          print(f'DART_API_KEY: {\"SET\" if settings.DART_API_KEY else \"NOT SET\"}')
-          print(f'SUPABASE_URL: {\"SET\" if settings.SUPABASE_URL else \"NOT SET\"}')
-          print(f'SUPABASE_KEY: {\"SET\" if settings.SUPABASE_KEY else \"NOT SET\"}')
-          "
+          python -c "from src.utils.config import settings; print('Configuration Test:'); print(f'DART_API_KEY: {\"SET\" if settings.DART_API_KEY else \"NOT SET\"}'); print(f'SUPABASE_URL: {\"SET\" if settings.SUPABASE_URL else \"NOT SET\"}'); print(f'SUPABASE_KEY: {\"SET\" if settings.SUPABASE_KEY else \"NOT SET\"}')"
       
       - name: Test Supabase connection
         run: |
-          cd /home/runner/work/custom-hts/custom-hts/backend
+          cd backend
           source ../.venv/bin/activate
-          python -c "
-          from src.integrations.supabase_client import supabase_client
-          
-          if supabase_client.client:
-              print('✅ Supabase client initialized successfully')
-              try:
-                  # Test connection by listing tables
-                  response = supabase_client.client.table('korean_financials').select('*', count='exact').limit(1).execute()
-                  print(f'✅ Successfully connected to Supabase database')
-                  print(f'   korean_financials table accessible')
-              except Exception as e:
-                  print(f'⚠️  Connection test failed: {e}')
-          else:
-              print('❌ Supabase client not initialized')
-              exit(1)
-          "
-      
-      - name: Test OPENDART API connection
-        run: |
-          cd /home/runner/work/custom-hts/custom-hts/backend
-          source ../.venv/bin/activate
-          python -c "
-          from src.integrations.opendart import opendart_client
-          
-          if opendart_client.api_key:
-              print('✅ DART API key configured')
-              print(f'   Corp code cache loaded: {len(opendart_client._corp_code_cache)} entries')
-              
-              # Test with Samsung (005930)
-              corp_code = opendart_client.get_corp_code('005930')
-              if corp_code:
-                  print(f'✅ Successfully retrieved corp code for 005930: {corp_code}')
-              else:
-                  print('⚠️  Corp code not found for 005930')
-          else:
-              print('⚠️  DART API key not configured - Korean data tests will be skipped')
-          "
+          python test_workflow.py
       
       - name: Run comprehensive financial statements test
         run: |
-          cd /home/runner/work/custom-hts/custom-hts/backend
+          cd backend
           source ../.venv/bin/activate
           python test_financial_statements.py
         continue-on-error: true
       
-      - name: Test financial data insertion (dry run)
-        run: |
-          cd /home/runner/work/custom-hts/custom-hts/backend
-          source ../.venv/bin/activate
-          python -c "
-          import sys
-          from pathlib import Path
-          
-          backend_dir = Path.cwd()
-          sys.path.insert(0, str(backend_dir / 'src'))
-          
-          from src.services.financial_statements import financial_statement_service
-          from src.integrations.supabase_client import supabase_client
-          from src.integrations.opendart import opendart_client
-          
-          print('Testing Financial Statement Service...')
-          print('=' * 80)
-          
-          # Check prerequisites
-          has_supabase = bool(supabase_client.client)
-          has_dart = bool(opendart_client.api_key)
-          
-          print(f'Supabase: {\"✅\" if has_supabase else \"❌\"}')
-          print(f'DART API: {\"✅\" if has_dart else \"⚠️ \"}')
-          
-          if not has_supabase:
-              print('\\n❌ Cannot test without Supabase connection')
-              exit(1)
-          
-          # Test service methods exist
-          print('\\nVerifying service methods:')
-          print(f'  insert_korean_balance_sheet: {\"✅\" if hasattr(financial_statement_service, \"insert_korean_balance_sheet\") else \"❌\"}')
-          print(f'  insert_korean_income_statement: {\"✅\" if hasattr(financial_statement_service, \"insert_korean_income_statement\") else \"❌\"}')
-          print(f'  insert_korean_cashflow_statement: {\"✅\" if hasattr(financial_statement_service, \"insert_korean_cashflow_statement\") else \"❌\"}')
-          print(f'  insert_us_balance_sheet: {\"✅\" if hasattr(financial_statement_service, \"insert_us_balance_sheet\") else \"❌\"}')
-          print(f'  insert_us_income_statement: {\"✅\" if hasattr(financial_statement_service, \"insert_us_income_statement\") else \"❌\"}')
-          print(f'  insert_us_cashflow_statement: {\"✅\" if hasattr(financial_statement_service, \"insert_us_cashflow_statement\") else \"❌\"}')
-          
-          print('\\n✅ All service methods available')
-          "
-      
       - name: Start FastAPI server in background
         run: |
-          cd /home/runner/work/custom-hts/custom-hts/backend
+          cd backend
           source ../.venv/bin/activate
           nohup uvicorn src.main:app --host 0.0.0.0 --port 8000 > /tmp/api.log 2>&1 &
           echo $! > /tmp/api.pid
@@ -227,91 +141,10 @@ jobs:
       
       - name: Test financial statements API endpoints
         run: |
-          cd /home/runner/work/custom-hts/custom-hts/backend
+          cd backend
           source ../.venv/bin/activate
-          
-          echo "Testing Financial Statements API Endpoints..."
-          echo "=" * 80
-          
-          python -c "
-          import requests
-          import json
-          
-          base_url = 'http://localhost:8000/api/financials'
-          
-          # Test Korean balance sheet endpoint (GET)
-          print('\\n1. Testing GET /api/financials/korean/balance-sheet/005930')
-          try:
-              response = requests.get(f'{base_url}/korean/balance-sheet/005930', timeout=10)
-              print(f'   Status: {response.status_code}')
-              if response.status_code == 200:
-                  data = response.json()
-                  print(f'   ✅ Success - Retrieved {data.get(\"count\", 0)} records')
-              else:
-                  print(f'   Response: {response.text[:200]}')
-          except Exception as e:
-              print(f'   ⚠️  Error: {e}')
-          
-          # Test US balance sheet endpoint (GET)
-          print('\\n2. Testing GET /api/financials/us/balance-sheet/AAPL')
-          try:
-              response = requests.get(f'{base_url}/us/balance-sheet/AAPL', timeout=10)
-              print(f'   Status: {response.status_code}')
-              if response.status_code == 200:
-                  data = response.json()
-                  print(f'   ✅ Success - Retrieved {data.get(\"count\", 0)} records')
-              else:
-                  print(f'   Response: {response.text[:200]}')
-          except Exception as e:
-              print(f'   ⚠️  Error: {e}')
-          
-          # Test Korean income statement endpoint (GET)
-          print('\\n3. Testing GET /api/financials/korean/income-statement/005930')
-          try:
-              response = requests.get(f'{base_url}/korean/income-statement/005930', timeout=10)
-              print(f'   Status: {response.status_code}')
-              if response.status_code == 200:
-                  data = response.json()
-                  print(f'   ✅ Success - Retrieved {data.get(\"count\", 0)} records')
-          except Exception as e:
-              print(f'   ⚠️  Error: {e}')
-          
-          # Test US income statement endpoint (GET)
-          print('\\n4. Testing GET /api/financials/us/income-statement/AAPL')
-          try:
-              response = requests.get(f'{base_url}/us/income-statement/AAPL', timeout=10)
-              print(f'   Status: {response.status_code}')
-              if response.status_code == 200:
-                  data = response.json()
-                  print(f'   ✅ Success - Retrieved {data.get(\"count\", 0)} records')
-          except Exception as e:
-              print(f'   ⚠️  Error: {e}')
-          
-          # Test Korean cash flow endpoint (GET)
-          print('\\n5. Testing GET /api/financials/korean/cashflow/005930')
-          try:
-              response = requests.get(f'{base_url}/korean/cashflow/005930', timeout=10)
-              print(f'   Status: {response.status_code}')
-              if response.status_code == 200:
-                  data = response.json()
-                  print(f'   ✅ Success - Retrieved {data.get(\"count\", 0)} records')
-          except Exception as e:
-              print(f'   ⚠️  Error: {e}')
-          
-          # Test US cash flow endpoint (GET)
-          print('\\n6. Testing GET /api/financials/us/cashflow/AAPL')
-          try:
-              response = requests.get(f'{base_url}/us/cashflow/AAPL', timeout=10)
-              print(f'   Status: {response.status_code}')
-              if response.status_code == 200:
-                  data = response.json()
-                  print(f'   ✅ Success - Retrieved {data.get(\"count\", 0)} records')
-          except Exception as e:
-              print(f'   ⚠️  Error: {e}')
-          
-          print('\\n' + '=' * 80)
-          print('✅ API endpoint tests completed')
-          "
+          python test_api_endpoints.py
+        continue-on-error: true
       
       - name: Display API server logs
         if: always()
