@@ -31,7 +31,7 @@ Collected comprehensive financial data:
 - **Korean Stocks**: Samsung (005930), SK Hynix (000660) (2024 Q1-Q4)
 - **Total Data Points**: 400+ fields across 3 statement types
 
-**Results Location**: `backend/test_results/2024_complete_data/`
+**Results Location**: `docs/reports/test-results/2024_complete_data/`
 - `us_stocks/yfinance_AAPL_2024_complete.json`
 - `us_stocks/yfinance_IONQ_2024_complete.json`
 - `korean_stocks/opendart_005930_2024_complete.json`
@@ -66,7 +66,7 @@ OPENDART (Korean):
 
 ### ✅ Phase 3: Schema Improvements (COMPLETED)
 
-**New Schema**: `database/financial_statements_v2.sql`
+**New Schema**: `database/financial_statements.sql (v2.0)`
 
 **Improvements Made**:
 
@@ -116,14 +116,14 @@ OPENDART (Korean):
    - `backend/tests/test_schema_verification.py` - Schema verification
 
 2. **Database Schema**:
-   - `database/financial_statements_v2.sql` - Improved schema with comments
+   - `database/financial_statements.sql (v2.0)` - Improved schema with comments
 
 3. **Documentation**:
    - `docs/implementations/IMPL_1_DATABASE_SCHEMA_IMPROVEMENTS.md` - Implementation guide
    - `docs/reports/TEST_1_FINANCIAL_DATA_STRUCTURE_ANALYSIS.md` - Analysis report
    - `docs/reports/TEST_1_SCHEMA_VERIFICATION.md` - Verification report
 
-4. **Test Data** (in `backend/test_results/2024_complete_data/`):
+4. **Test Data** (in `docs/reports/test-results/2024_complete_data/`):
    - Complete 2024 financial data for 4 stocks
    - Field analysis in `complete_analysis.json`
    - Summary in `00_summary_report.json`
@@ -180,7 +180,7 @@ pg_dump -h [host] -U [user] -d [database] --schema-only > backup_schema.sql
 
 ```bash
 # Apply new schema comments (safe - no data changes)
-psql -h [host] -U [user] -d [database] -f database/financial_statements_v2.sql
+psql -h [host] -U [user] -d [database] -f database/financial_statements.sql (v2.0)
 ```
 
 ### Step 3: Verify
@@ -268,7 +268,7 @@ Add display formatting functions (examples in implementation guide).
 ## Recommendations
 
 ### Immediate (This Week)
-1. ✅ Deploy `financial_statements_v2.sql` to production
+1. ✅ Deploy `financial_statements.sql (v2.0)` to production
 2. ⏳ Update developer documentation
 3. ⏳ Train team on currency unit handling
 
@@ -318,7 +318,7 @@ Successfully completed comprehensive financial data analysis and schema improvem
 ## References
 
 ### Test Data
-- Location: `backend/test_results/2024_complete_data/`
+- Location: `docs/reports/test-results/2024_complete_data/`
 - Stocks: AAPL, IONQ, 005930 (Samsung), 000660 (SK Hynix)
 - Period: 2024 Q1-Q4
 - Size: ~10MB JSON data
@@ -330,7 +330,7 @@ Successfully completed comprehensive financial data analysis and schema improvem
 
 ### Schema Files
 - Original: `database/financial_statements.sql`
-- Improved: `database/financial_statements_v2.sql` (with 100+ comments)
+- Improved: `database/financial_statements.sql (v2.0)` (with 100+ comments)
 
 ### Test Scripts
 - Data Collection: `backend/tests/test_complete_2024_data.py`

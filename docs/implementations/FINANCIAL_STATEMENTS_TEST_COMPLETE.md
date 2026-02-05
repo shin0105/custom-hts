@@ -48,12 +48,12 @@ Successfully implemented comprehensive API testing and financial data retrieval 
    - Integration points reference
 
 5. **`.gitignore`** (updated)
-   - Added exclusion for `backend/test_results/` directory
+   - Added exclusion for `docs/reports/test-results/` directory
    - Prevents generated test results from being committed
 
 ### Generated Test Results (git-ignored)
 
-The test script generates 9 JSON files in `backend/test_results/`:
+The test script generates 9 JSON files in `docs/reports/test-results/`:
 - `00_summary_report.json` - Overall test summary
 - `01_environment_variables.json` - Environment configuration validation
 - `02_supabase_connection.json` - Database connection test results
@@ -236,4 +236,4 @@ All documentation is in the `backend/` directory:
 
 **For Questions**: See documentation in `backend/` directory  
 **To Run Tests**: Follow instructions in `backend/RUNNING_TESTS_LOCALLY.md`  
-**To Review Results**: Check `backend/test_results/` after execution
+**To Review Results**: Check `docs/reports/test-results/` after execution
