@@ -86,11 +86,15 @@ Maintain comprehensive, clear, and up-to-date documentation for all aspects of t
 ## Documentation Organization
 
 ### File Structure
-- Organize documentation by feature and audience
-- Use consistent naming conventions
-- Create index files for navigation
-- Separate user and developer documentation
-- Maintain separate docs for Korean and US markets
+- **Main documentation**: Place in `docs/` directory
+- **Implementation guides**: Place in `docs/implementations/` for completed implementation documentation
+- **Test reports**: Place in `docs/reports/` for test reports and analysis
+- **Test results**: Place in `docs/reports/test-results/` for test result JSON files and data
+- **API-specific docs**: Use clear names like `KDEVELOPERS_API.md`, `OPENDART_API.md`
+- **Component docs**: Keep `backend/README.md` and `frontend/README.md` for component-specific info
+- Use consistent naming conventions across all documentation
+- Create README.md files for each documentation subdirectory
+- Separate user and developer documentation clearly
 
 ### Cross-References
 - Link related documentation sections
@@ -98,6 +102,7 @@ Maintain comprehensive, clear, and up-to-date documentation for all aspects of t
 - Include links to code repositories
 - Cross-reference between user and developer docs
 - Maintain consistent link formatting
+- Use relative paths for internal documentation links
 
 ## Maintenance Guidelines
 

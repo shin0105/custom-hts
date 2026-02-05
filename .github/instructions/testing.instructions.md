@@ -148,10 +148,13 @@ Apply comprehensive testing practices to ensure reliability of financial data pr
 ## Test Organization
 
 ### File Structure
-- Mirror source code structure in test directories
-- Use `.test.ts` for unit tests
-- Use `.integration.test.ts` for integration tests
-- Create shared test utilities and helpers
+- **Backend tests**: Place all Python tests in `backend/tests/` directory
+- **Frontend tests**: Place all TypeScript/React tests in `frontend/src/` alongside source files
+- **Test results**: Store test result files and reports in `docs/reports/test-results/`
+- Use `.test.ts` for frontend unit tests
+- Use `.integration.test.ts` for frontend integration tests
+- Use `test_*.py` for Python backend tests
+- Create shared test utilities and helpers in the tests directory
 - Organize mock data in dedicated directories
 
 ### Test Naming
@@ -160,6 +163,8 @@ Apply comprehensive testing practices to ensure reliability of financial data pr
 - Group related tests in describe blocks
 - Use consistent naming patterns across tests
 - Include market-specific context in test names
+- Python tests: `test_<feature>.py` or `test_<component>.py`
+- Frontend tests: `<Component>.test.tsx` or `<feature>.test.ts`
 
 ## Continuous Testing
 
