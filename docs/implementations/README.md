@@ -17,7 +17,6 @@ implementations/
 ## Available Implementation Guides
 
 ### Core Implementation
-- **IMPLEMENTATION_SUMMARY.md** - Overall project implementation status and summary
 - **IMPLEMENTATION_COMPLETE.md** - Final implementation completion report
 
 ### Database and Schema
@@ -25,6 +24,7 @@ implementations/
 - **IMPL_1_DATABASE_SCHEMA_IMPROVEMENTS.md** - Database schema improvements for issue #1
 
 ### API Integrations
+- **OPENDART_IMPLEMENTATION_SUMMARY.md** - OPENDART API integration summary
 - **KDEVELOPERS_IMPLEMENTATION.md** - Korean Investment Securities API integration
 - **OPENDART_TESTING.md** - OPENDART API testing and integration
 - **IMPL_1_YFINANCE_IMPLEMENTATION.md** - Yahoo Finance API implementation
