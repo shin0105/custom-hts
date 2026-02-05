@@ -89,7 +89,9 @@ class FinancialStatementService:
         """
         try:
             # Get raw income statement data from OPENDART
-            raw_data = self.opendart.get_income_statement(symbol, year, quarter)
+            raw_data = self.opendart.get_income_statement(
+                symbol, year, quarter
+            )
 
             if not raw_data:
                 logger.warning(
@@ -186,7 +188,9 @@ class FinancialStatementService:
             Dictionary with results for each statement type
         """
         results = {
-            "balance_sheet": self.insert_korean_balance_sheet(symbol, year, quarter),
+            "balance_sheet": self.insert_korean_balance_sheet(
+                symbol, year, quarter
+            ),
             "income_statement": self.insert_korean_income_statement(
                 symbol, year, quarter
             ),
@@ -301,7 +305,9 @@ class FinancialStatementService:
                 return False
 
             # Find the column matching the year
-            target_col = self._find_matching_date_column(financials_df, year, quarter)
+            target_col = self._find_matching_date_column(
+                financials_df, year, quarter
+            )
             if target_col is None:
                 logger.warning(
                     f"No data found for {symbol} year {year} quarter {quarter}"
@@ -363,7 +369,9 @@ class FinancialStatementService:
                 return False
 
             # Find the column matching the year
-            target_col = self._find_matching_date_column(cashflow_df, year, quarter)
+            target_col = self._find_matching_date_column(
+                cashflow_df, year, quarter
+            )
             if target_col is None:
                 logger.warning(
                     f"No data found for {symbol} year {year} quarter {quarter}"
@@ -410,8 +418,12 @@ class FinancialStatementService:
             Dictionary with results for each statement type
         """
         results = {
-            "balance_sheet": self.insert_us_balance_sheet(symbol, year, quarter),
-            "income_statement": self.insert_us_income_statement(symbol, year, quarter),
+            "balance_sheet": self.insert_us_balance_sheet(
+                symbol, year, quarter
+            ),
+            "income_statement": self.insert_us_income_statement(
+                symbol, year, quarter
+            ),
             "cashflow_statement": self.insert_us_cashflow_statement(
                 symbol, year, quarter
             ),
@@ -429,7 +441,11 @@ class FinancialStatementService:
     # =========================================================================
 
     def _parse_korean_balance_sheet(
-        self, symbol: str, year: int, quarter: Optional[int], raw_data: Dict[str, Any]
+        self,
+        symbol: str,
+        year: int,
+        quarter: Optional[int],
+        raw_data: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Parse OPENDART balance sheet data into database format."""
         # Korean account name mapping
@@ -457,7 +473,9 @@ class FinancialStatementService:
 
         # Get company name from OPENDART
         corp_code = self.opendart.get_corp_code(symbol)
-        company_info = self.opendart.get_company_info(symbol) if corp_code else None
+        company_info = (
+            self.opendart.get_company_info(symbol) if corp_code else None
+        )
         company_name = (
             company_info.get("corp_name", symbol) if company_info else symbol
         )
@@ -481,7 +499,11 @@ class FinancialStatementService:
         return data
 
     def _parse_korean_income_statement(
-        self, symbol: str, year: int, quarter: Optional[int], raw_data: Dict[str, Any]
+        self,
+        symbol: str,
+        year: int,
+        quarter: Optional[int],
+        raw_data: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Parse OPENDART income statement data into database format."""
         mapping = {
@@ -497,7 +519,9 @@ class FinancialStatementService:
         }
 
         corp_code = self.opendart.get_corp_code(symbol)
-        company_info = self.opendart.get_company_info(symbol) if corp_code else None
+        company_info = (
+            self.opendart.get_company_info(symbol) if corp_code else None
+        )
         company_name = (
             company_info.get("corp_name", symbol) if company_info else symbol
         )
@@ -519,7 +543,11 @@ class FinancialStatementService:
         return data
 
     def _parse_korean_cashflow_statement(
-        self, symbol: str, year: int, quarter: Optional[int], raw_data: Dict[str, Any]
+        self,
+        symbol: str,
+        year: int,
+        quarter: Optional[int],
+        raw_data: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Parse OPENDART cash flow data into database format."""
         mapping = {
@@ -533,7 +561,9 @@ class FinancialStatementService:
         }
 
         corp_code = self.opendart.get_corp_code(symbol)
-        company_info = self.opendart.get_company_info(symbol) if corp_code else None
+        company_info = (
+            self.opendart.get_company_info(symbol) if corp_code else None
+        )
         company_name = (
             company_info.get("corp_name", symbol) if company_info else symbol
         )
@@ -558,7 +588,9 @@ class FinancialStatementService:
     # Helper Methods - US Data Parsing
     # =========================================================================
 
-    def _find_matching_date_column(self, df, year: int, quarter: Optional[int]):
+    def _find_matching_date_column(
+        self, df, year: int, quarter: Optional[int]
+    ):
         """Find the column in DataFrame matching the specified year/quarter."""
         for col in df.columns:
             if col.year == year:
@@ -600,8 +632,12 @@ class FinancialStatementService:
             "company_name": company_name,
             "year": year,
             "quarter": quarter,
-            "total_assets": self._safe_get_value(df, "Total Assets", target_col),
-            "current_assets": self._safe_get_value(df, "Current Assets", target_col),
+            "total_assets": self._safe_get_value(
+                df, "Total Assets", target_col
+            ),
+            "current_assets": self._safe_get_value(
+                df, "Current Assets", target_col
+            ),
             "cash_and_cash_equivalents": self._safe_get_value(
                 df, "Cash And Cash Equivalents", target_col
             ),
@@ -623,21 +659,31 @@ class FinancialStatementService:
             "accounts_payable": self._safe_get_value(
                 df, "Accounts Payable", target_col
             ),
-            "long_term_debt": self._safe_get_value(df, "Long Term Debt", target_col),
+            "long_term_debt": self._safe_get_value(
+                df, "Long Term Debt", target_col
+            ),
             "stockholders_equity": self._safe_get_value(
                 df, "Stockholders Equity", target_col
             ),
-            "common_stock": self._safe_get_value(df, "Common Stock", target_col),
+            "common_stock": self._safe_get_value(
+                df, "Common Stock", target_col
+            ),
             "retained_earnings": self._safe_get_value(
                 df, "Retained Earnings", target_col
             ),
-            "raw_data": df[target_col].to_dict(),
+            "raw_data": self._convert_series_to_json(df[target_col]),
         }
 
         return data
 
     def _parse_us_income_statement(
-        self, symbol: str, year: int, quarter: Optional[int], df, target_col, info: Dict
+        self,
+        symbol: str,
+        year: int,
+        quarter: Optional[int],
+        df,
+        target_col,
+        info: Dict,
     ) -> Dict[str, Any]:
         """Parse yfinance income statement data into database format."""
         company_name = info.get("longName", symbol)
@@ -647,9 +693,15 @@ class FinancialStatementService:
             "company_name": company_name,
             "year": year,
             "quarter": quarter,
-            "total_revenue": self._safe_get_value(df, "Total Revenue", target_col),
-            "cost_of_revenue": self._safe_get_value(df, "Cost Of Revenue", target_col),
-            "gross_profit": self._safe_get_value(df, "Gross Profit", target_col),
+            "total_revenue": self._safe_get_value(
+                df, "Total Revenue", target_col
+            ),
+            "cost_of_revenue": self._safe_get_value(
+                df, "Cost Of Revenue", target_col
+            ),
+            "gross_profit": self._safe_get_value(
+                df, "Gross Profit", target_col
+            ),
             "operating_expense": self._safe_get_value(
                 df, "Operating Expense", target_col
             ),
@@ -662,14 +714,20 @@ class FinancialStatementService:
             "operating_income": self._safe_get_value(
                 df, "Operating Income", target_col
             ),
-            "interest_income": self._safe_get_value(df, "Interest Income", target_col),
+            "interest_income": self._safe_get_value(
+                df, "Interest Income", target_col
+            ),
             "interest_expense": self._safe_get_value(
                 df, "Interest Expense", target_col
             ),
-            "pretax_income": self._safe_get_value(df, "Pretax Income", target_col),
-            "tax_provision": self._safe_get_value(df, "Tax Provision", target_col),
+            "pretax_income": self._safe_get_value(
+                df, "Pretax Income", target_col
+            ),
+            "tax_provision": self._safe_get_value(
+                df, "Tax Provision", target_col
+            ),
             "net_income": self._safe_get_value(df, "Net Income", target_col),
-            "raw_data": df[target_col].to_dict(),
+            "raw_data": self._convert_series_to_json(df[target_col]),
         }
 
         return data
@@ -715,11 +773,30 @@ class FinancialStatementService:
             "repurchase_capital_stock": self._safe_get_value(
                 df, "Repurchase Of Capital Stock", target_col
             ),
-            "free_cash_flow": self._safe_get_value(df, "Free Cash Flow", target_col),
-            "raw_data": df[target_col].to_dict(),
+            "free_cash_flow": self._safe_get_value(
+                df, "Free Cash Flow", target_col
+            ),
+            "raw_data": self._convert_series_to_json(df[target_col]),
         }
 
         return data
+
+    def _convert_series_to_json(self, series) -> Dict[str, Any]:
+        """Convert pandas Series to JSON-serializable dict, handling Timestamp indexes."""
+        result = {}
+        for key, value in series.items():
+            # Convert key to string if it's a Timestamp or other non-serializable type
+            str_key = str(key)
+            # Handle NaN values
+            if value is not None and not (
+                isinstance(value, float) and value != value
+            ):
+                result[str_key] = (
+                    float(value) if isinstance(value, (int, float)) else value
+                )
+            else:
+                result[str_key] = None
+        return result
 
 
 # Global service instance

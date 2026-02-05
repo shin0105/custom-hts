@@ -49,6 +49,14 @@ This repository contains a Home Trading System (HTS) web application built with 
 - Include integration tests for API endpoints
 - Test data processing pipelines thoroughly
 - Mock external API calls in tests
+- test codes for backend must be placed in the `tests/` directory within the `backend/` folder
+- database related sql and setup to be placed in the `database/` directory
+- frontend test codes to be placed in `tests/` directory within the `frontend/` folder
+
+### Reports
+- all test reports to be stored in the `docs/reports` directory. 
+- all code implementation to be documented in the `docs/implementation` directory. 
+- must include #1 in name at the front. (IMPL_1_~.md or REP_1_~.md, TEST_1_~.md)
 
 ## File Organization
 
