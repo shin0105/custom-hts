@@ -100,18 +100,6 @@ custom-hts/
 │   │   ├── testing.instructions.md
 │   │   ├── documentation.instructions.md
 │   │   └── code-review.instructions.md
-│   ├── agents/                # Custom agent definitions
-│   │   ├── architect.agent.md
-│   │   ├── debugger.agent.md
-│   │   └── reviewer.agent.md
-│   └── prompts/               # Reusable prompts
-│       ├── code-review.prompt.md
-│       ├── debug-issue.prompt.md
-│       ├── generate-docs.prompt.md
-│       ├── refactor-code.prompt.md
-│       ├── setup-component.prompt.md
-│       └── write-tests.prompt.md
-│
 └── tests/                     # Integration tests
 ```
 
