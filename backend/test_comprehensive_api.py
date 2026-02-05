@@ -27,6 +27,10 @@ from src.integrations.yfinance_client import yfinance_client
 from src.services.financial_statements import financial_statement_service
 from src.utils.config import settings
 
+# Constants for target financial statement period
+TARGET_YEAR = 2025
+TARGET_QUARTER = 3
+
 # Create results directory
 results_dir = backend_dir / "test_results"
 results_dir.mkdir(exist_ok=True)
@@ -47,7 +51,16 @@ def print_section(title: str) -> None:
 
 
 def save_json(data, filename):
-    """Save data to JSON file."""
+    """
+    Save data to JSON file in the test results directory.
+    
+    Args:
+        data: Data to serialize to JSON (dict, list, or any JSON-serializable object)
+        filename: Name of the output file (e.g., "results.json")
+    
+    Returns:
+        Path: Full filepath of the saved file
+    """
     filepath = results_dir / filename
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False, default=str)
@@ -291,8 +304,8 @@ def retrieve_korean_financial_data_202509():
     print_section("6. Retrieving Korean Financial Data - 005930 (Q3 2025)")
     
     symbol = "005930"
-    year = 2025
-    quarter = 3
+    year = TARGET_YEAR
+    quarter = TARGET_QUARTER
     
     results = {
         "timestamp": datetime.now().isoformat(),
@@ -387,8 +400,8 @@ def retrieve_us_financial_data_202509():
     print_section("7. Retrieving US Financial Data - AAPL (Q3 2025)")
     
     symbol = "AAPL"
-    year = 2025
-    quarter = 3
+    year = TARGET_YEAR
+    quarter = TARGET_QUARTER
     
     results = {
         "timestamp": datetime.now().isoformat(),
