@@ -46,8 +46,7 @@ custom-hts/
 ├── frontend/              # React TypeScript application
 │   ├── src/
 │   │   ├── components/   # Reusable UI components
-│   │   ├── pages/        # Page components (Korean/US)
-│   │   ├── hooks/        # Custom React hooks
+│   │   ├── pages/        # Page components (Korean/US/Home)
 │   │   ├── services/     # API service layers
 │   │   ├── types/        # TypeScript type definitions
 │   │   └── utils/        # Utility functions
@@ -61,9 +60,17 @@ custom-hts/
 │   │   ├── models/      # Data models
 │   │   ├── integrations/# External API integrations
 │   │   └── utils/       # Utility functions
+│   ├── tests/           # Backend test suite
 │   └── pyproject.toml
 │
-└── docs/                # Documentation
+├── docs/                # Documentation
+│   ├── implementations/ # Implementation guides
+│   └── reports/        # Test reports and analysis
+│       └── test-results/# Test result data
+│
+├── database/            # Database schema
+└── .github/            # GitHub configuration
+    └── instructions/   # Coding guidelines
 
 ```
 
@@ -147,11 +154,13 @@ The application will be available at http://localhost:5173
 
 ### Running Tests
 
-Backend tests:
+Backend tests (from backend directory):
 ```bash
 cd backend
 uv run pytest
 ```
+
+All backend tests are located in `backend/tests/` directory.
 
 Frontend tests:
 ```bash
@@ -213,10 +222,13 @@ For issues and questions, please open an issue on GitHub.
 ## Documentation
 
 - [Setup Guide](docs/SETUP.md) - Detailed setup instructions
+- [GitHub Setup](docs/GITHUB_SETUP.md) - GitHub Actions and Codespaces configuration
 - [API Documentation](docs/API.md) - Complete API reference
 - [Database Schema](database/schema.md) - Database design and tables
 - [Backend README](backend/README.md) - Backend specific documentation
 - [Frontend README](frontend/README.md) - Frontend specific documentation
+- [Implementation Guides](docs/implementations/README.md) - Feature implementation documentation
+- [Test Reports](docs/reports/README.md) - Test execution reports and analysis
 
 ## Project Status
 

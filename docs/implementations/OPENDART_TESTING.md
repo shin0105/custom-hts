@@ -37,7 +37,7 @@ cp ../.env.example ../.env
 # Edit .env and add your DART_API_KEY
 
 # Then run the demo
-PYTHONPATH=$(pwd)/src python test_opendart_demo.py
+PYTHONPATH=$(pwd)/src python tests/test_opendart_demo.py
 ```
 
 ## What Has Been Implemented

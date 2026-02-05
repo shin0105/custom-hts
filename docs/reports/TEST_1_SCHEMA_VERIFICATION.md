@@ -76,7 +76,7 @@ COMMENT ON COLUMN korean_balance_sheet.total_assets IS
 ## Recommendations
 
 ### Immediate Actions
-1. ✅ Apply financial_statements_v2.sql to production
+1. ✅ Apply financial_statements.sql (v2.0) to production
 2. ⏳ Update application code with unit-aware formatting
 3. ⏳ Add integration tests for data insertion
 4. ⏳ Update API documentation with field mappings
@@ -104,6 +104,6 @@ The improved schema (v2) successfully:
 
 ---
 
-**Test Data**: `backend/test_results/2024_complete_data/`
-**Schema File**: `database/financial_statements_v2.sql`
+**Test Data**: `docs/reports/test-results/2024_complete_data/`
+**Schema File**: `database/financial_statements.sql (v2.0)`
 **Implementation Guide**: `docs/implementations/IMPL_1_DATABASE_SCHEMA_IMPROVEMENTS.md`

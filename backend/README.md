@@ -37,10 +37,12 @@ backend/
 ├── src/
 │   ├── api/              # FastAPI route handlers
 │   │   ├── korean.py     # Korean market endpoints
-│   │   └── us.py         # US market endpoints
+│   │   ├── us.py         # US market endpoints
+│   │   └── financial_statements.py # Financial statements endpoints
 │   ├── services/         # Business logic
 │   │   ├── korean_market.py
-│   │   └── us_market.py
+│   │   ├── us_market.py
+│   │   └── financial_statements.py
 │   ├── models/           # Data models and schemas
 │   │   ├── korean.py
 │   │   └── us.py
@@ -48,12 +50,15 @@ backend/
 │   │   ├── kdevelopers.py
 │   │   ├── opendart.py
 │   │   ├── yfinance_client.py
-│   │   └── supabase_client.py
+│   │   ├── supabase_client.py
+│   │   └── stock_master.py
 │   ├── utils/            # Utility functions
 │   │   ├── config.py
 │   │   └── helpers.py
 │   └── main.py           # FastAPI application entry point
-└── tests/                # Test files
+├── tests/                # Test files (20+ test suites)
+├── examples/             # Usage examples
+└── pyproject.toml        # Dependencies and configuration
 ```
 
 ## API Endpoints
@@ -85,7 +90,7 @@ SUPABASE_KEY=your_supabase_key
 
 ## Testing
 
-Run tests:
+Run all tests:
 ```bash
 uv run pytest
 ```
@@ -94,6 +99,13 @@ Run tests with coverage:
 ```bash
 uv run pytest --cov=src --cov-report=html
 ```
+
+Run specific test file:
+```bash
+uv run pytest tests/test_financial_statements.py
+```
+
+All test files are in the `tests/` directory. Test results and reports are stored in `../docs/reports/test-results/`.
 
 ## Examples
 

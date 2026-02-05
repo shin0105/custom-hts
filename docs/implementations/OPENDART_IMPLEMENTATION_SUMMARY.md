@@ -171,7 +171,7 @@ The implementation correctly handles different report periods according to DART 
 Run:
 ```bash
 cd backend
-PYTHONPATH=$(pwd)/src python test_opendart_structure.py
+PYTHONPATH=$(pwd)/src python tests/test_opendart_structure.py
 ```
 
 #### Full Demo (`test_opendart_demo.py`)
@@ -183,7 +183,7 @@ PYTHONPATH=$(pwd)/src python test_opendart_structure.py
 Run:
 ```bash
 cd backend
-PYTHONPATH=$(pwd)/src python test_opendart_demo.py
+PYTHONPATH=$(pwd)/src python tests/test_opendart_demo.py
 ```
 
 ### 5. Documentation

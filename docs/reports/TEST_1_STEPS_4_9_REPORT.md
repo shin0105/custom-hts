@@ -393,7 +393,7 @@ df.columns = df.columns.astype(str)
 - **Package Manager**: UV
 - **Operating System**: macOS
 - **Test Location**: `<repo-root>/backend`
-- **Results Directory**: `backend/test_results/`
+- **Results Directory**: `docs/reports/test-results/`
 
 ---
 
