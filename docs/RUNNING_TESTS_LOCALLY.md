@@ -73,7 +73,7 @@ python test_comprehensive_api.py
 8. Stores data in Supabase
 9. Verifies data storage
 
-**Results**: Check `backend/test_results/` directory for JSON files with detailed results.
+**Results**: Check `docs/reports/test-results/` directory for JSON files with detailed results.
 
 ### Individual Test Scripts
 
@@ -134,7 +134,7 @@ When run with proper network access, you should see:
 
 ### Test Results Files
 
-After running, check `backend/test_results/` for:
+After running, check `docs/reports/test-results/` for:
 
 - `00_summary_report.json` - Overall test summary
 - `01_environment_variables.json` - Environment configuration
@@ -237,7 +237,7 @@ If testing before Q3 2025 data is available, the script will use the most recent
 
 After successfully running tests locally:
 
-1. Review the test results in `backend/test_results/`
+1. Review the test results in `docs/reports/test-results/`
 2. Check raw API responses to understand data structure
 3. Verify data quality in Supabase dashboard
 4. Use the stored data in your HTS application frontend
@@ -263,7 +263,7 @@ After successfully running tests locally:
 ## Support
 
 For issues or questions:
-- Check `backend/API_TEST_REPORT.md` for detailed test information
+- Check test reports in `docs/reports/` for detailed test information
 - Review `backend/README.md` for backend documentation
 - Check GitHub Issues for known problems
 

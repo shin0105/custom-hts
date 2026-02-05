@@ -46,6 +46,9 @@ custom-hts/
 │       └── utils/         # Utility functions
 ├── database/              # Database schema and migrations
 ├── docs/                  # Documentation
+│   ├── implementations/   # Implementation guides
+│   └── reports/          # Test reports and analysis
+│       └── test-results/ # Test result data files
 └── .github/               # GitHub configuration and instructions
 ```
 
@@ -88,10 +91,10 @@ custom-hts/
 
 ## File Statistics
 
-- **Backend**: 19 Python source files
+- **Backend**: 21 Python source files
 - **Frontend**: 12 TypeScript/TSX files
-- **Total Documentation**: 8 markdown files
-- **Test Files**: 4 test suites
+- **Backend Tests**: 20 test files
+- **Documentation**: 40+ markdown files organized by category
 
 ## API Endpoints
 
@@ -119,13 +122,27 @@ Both tables include:
 
 ## Documentation
 
+### Main Documentation
 1. **README.md** - Project overview and quick start
 2. **docs/SETUP.md** - Detailed setup instructions
-3. **docs/API.md** - Complete API reference
-4. **docs/CONTRIBUTING.md** - Contribution guidelines
-5. **database/schema.md** - Database design
-6. **backend/README.md** - Backend documentation
-7. **frontend/README.md** - Frontend documentation
+3. **docs/GITHUB_SETUP.md** - GitHub Actions and Codespaces setup
+4. **docs/API.md** - Complete API reference
+5. **docs/CONTRIBUTING.md** - Contribution guidelines
+
+### API-Specific Documentation
+6. **docs/KDEVELOPERS_API.md** - Korean Investment Securities API guide
+7. **docs/OPENDART_API.md** - OPENDART API guide
+8. **docs/RUNNING_TESTS_LOCALLY.md** - Local testing guide
+
+### Technical Documentation
+9. **database/schema.md** - Database design
+10. **backend/README.md** - Backend documentation
+11. **frontend/README.md** - Frontend documentation
+
+### Implementation & Reports
+12. **docs/implementations/** - Feature implementation guides (12 files)
+13. **docs/reports/** - Test reports and analysis (9 files)
+14. **docs/reports/test-results/** - Test result data files
 
 ## Testing
 
