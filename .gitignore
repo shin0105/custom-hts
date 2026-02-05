@@ -106,7 +106,3 @@ backend/.venv/
 # package-lock.json
 # yarn.lock
 # pnpm-lock.yaml
-
-# Test results (generated dynamically)
-backend/test_results/
-test_results/
