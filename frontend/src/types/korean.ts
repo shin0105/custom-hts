@@ -30,3 +30,20 @@ export interface KoreanFinancialStatement {
   eps?: number;
   updated_at: string;
 }
+
+export interface KoreanCandleData {
+  symbol: string;
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  change?: number;
+  change_percent?: number;
+}
+
+export type ChartInterval = 'daily' | 'minute';
+export type MinuteInterval = 1 | 5 | 30 | 60;
+export type PeriodType = 'D' | 'W' | 'M';
+

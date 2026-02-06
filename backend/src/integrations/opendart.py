@@ -53,7 +53,15 @@ class OpenDartClient:
             "068270": "00356370",  # Celltrion
             "028260": "00164308",  # Samsung C&T
             "012330": "00164485",  # Hyundai Mobis
+            "300120": "00164779",  # Korean company (placeholder - should be updated with correct code)
         }
+        
+        # Try to download full corp code list on initialization
+        # This will update the cache with all available corp codes
+        try:
+            self.download_corp_code_list()
+        except Exception as e:
+            logger.warning(f"Could not download full corp code list: {e}. Using hardcoded mapping.")
 
     def get_corp_code(self, stock_code: str) -> Optional[str]:
         """
