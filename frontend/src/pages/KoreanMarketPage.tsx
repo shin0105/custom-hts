@@ -8,7 +8,6 @@ import { CandleChart } from '../components/CandleChart';
 import { koreanMarketService } from '../services/koreanMarket';
 import type {
   KoreanStockQuote,
-  KoreanFinancialStatement,
   KoreanCandleData,
   ChartInterval,
   MinuteInterval,
@@ -18,7 +17,7 @@ import type {
 export const KoreanMarketPage: React.FC = () => {
   const [symbol, setSymbol] = useState('005930'); // Samsung Electronics
   const [quote, setQuote] = useState<KoreanStockQuote | null>(null);
-  const [financials, setFinancials] = useState<KoreanFinancialStatement | null>(null);
+  const [comprehensiveFinancials, setComprehensiveFinancials] = useState<any>(null);
   const [candleData, setCandleData] = useState<KoreanCandleData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,8 +30,9 @@ export const KoreanMarketPage: React.FC = () => {
   const [candleLimit, setCandleLimit] = useState(100);
 
   // Financial statement controls
-  const [finYear, setFinYear] = useState<number>(new Date().getFullYear());
+  const [finYear, setFinYear] = useState<number>(new Date().getFullYear() - 1);
   const [finQuarter, setFinQuarter] = useState<number | undefined>(undefined);
+  const [fsDivision, setFsDivision] = useState<'CFS' | 'OFS'>('CFS');
 
   const handleSearch = async () => {
     setLoading(true);
@@ -45,25 +45,30 @@ export const KoreanMarketPage: React.FC = () => {
       // Get candles
       await loadCandleData();
 
-      // Try to get financials
-      try {
-        const finData = await koreanMarketService.getFinancials(
-          symbol,
-          finYear,
-          finQuarter
-        );
-        setFinancials(finData);
-      } catch (finError) {
-        console.error('Failed to load financials:', finError);
-        setFinancials(null);
-      }
+      // Try to get comprehensive financials from DART
+      await loadFinancials();
     } catch (err) {
       setError('Failed to load stock data. Please check the symbol and try again.');
       setQuote(null);
-      setFinancials(null);
+      setComprehensiveFinancials(null);
       setCandleData([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadFinancials = async () => {
+    try {
+      const finData = await koreanMarketService.getAllFinancials(
+        symbol,
+        finYear,
+        finQuarter,
+        fsDivision
+      );
+      setComprehensiveFinancials(finData);
+    } catch (finError) {
+      console.error('Failed to load financials:', finError);
+      setComprehensiveFinancials(null);
     }
   };
 
@@ -305,9 +310,9 @@ export const KoreanMarketPage: React.FC = () => {
         <div style={{ marginBottom: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h2 style={{ fontSize: '24px', fontWeight: 'bold', margin: 0 }}>
-              Financial Statements
+              Financial Statements (OpenDart)
             </h2>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
               <select
                 value={finYear}
                 onChange={(e) => setFinYear(Number(e.target.value))}
@@ -334,13 +339,16 @@ export const KoreanMarketPage: React.FC = () => {
                 <option value={3}>Q3</option>
                 <option value={4}>Q4</option>
               </select>
+              <select
+                value={fsDivision}
+                onChange={(e) => setFsDivision(e.target.value as 'CFS' | 'OFS')}
+                style={selectStyle}
+              >
+                <option value="CFS">Consolidated</option>
+                <option value="OFS">Separate</option>
+              </select>
               <button
-                onClick={() => {
-                  koreanMarketService
-                    .getFinancials(symbol, finYear, finQuarter)
-                    .then(setFinancials)
-                    .catch(() => setFinancials(null));
-                }}
+                onClick={loadFinancials}
                 style={{ ...buttonStyle, padding: '8px 16px', fontSize: '14px' }}
               >
                 Reload
@@ -348,77 +356,88 @@ export const KoreanMarketPage: React.FC = () => {
             </div>
           </div>
 
-          {financials ? (
+          {comprehensiveFinancials && comprehensiveFinancials.data ? (
             <div
               style={{
-                padding: '24px',
                 border: '1px solid #e5e7eb',
                 borderRadius: '8px',
                 backgroundColor: 'white',
+                overflow: 'hidden',
               }}
             >
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div>
-                  <p style={{ color: '#6b7280' }}>Company</p>
-                  <p style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                    {financials.company_name}
-                  </p>
-                </div>
-                <div>
-                  <p style={{ color: '#6b7280' }}>Period</p>
-                  <p style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                    {financials.year}
-                    {financials.quarter && ` Q${financials.quarter}`}
-                  </p>
-                </div>
-                {financials.revenue && (
-                  <div>
-                    <p style={{ color: '#6b7280' }}>Revenue</p>
-                    <p style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                      ₩{(financials.revenue / 1e8).toFixed(2)}억
-                    </p>
-                  </div>
-                )}
-                {financials.operating_income && (
-                  <div>
-                    <p style={{ color: '#6b7280' }}>Operating Income</p>
-                    <p style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                      ₩{(financials.operating_income / 1e8).toFixed(2)}억
-                    </p>
-                  </div>
-                )}
-                {financials.net_income && (
-                  <div>
-                    <p style={{ color: '#6b7280' }}>Net Income</p>
-                    <p style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                      ₩{(financials.net_income / 1e8).toFixed(2)}억
-                    </p>
-                  </div>
-                )}
-                {financials.total_assets && (
-                  <div>
-                    <p style={{ color: '#6b7280' }}>Total Assets</p>
-                    <p style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                      ₩{(financials.total_assets / 1e8).toFixed(2)}억
-                    </p>
-                  </div>
-                )}
-                {financials.total_liabilities && (
-                  <div>
-                    <p style={{ color: '#6b7280' }}>Total Liabilities</p>
-                    <p style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                      ₩{(financials.total_liabilities / 1e8).toFixed(2)}억
-                    </p>
-                  </div>
-                )}
-                {financials.total_equity && (
-                  <div>
-                    <p style={{ color: '#6b7280' }}>Total Equity</p>
-                    <p style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                      ₩{(financials.total_equity / 1e8).toFixed(2)}억
-                    </p>
-                  </div>
-                )}
+              <div style={{ padding: '16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>
+                  <strong>Symbol:</strong> {comprehensiveFinancials.symbol} | 
+                  <strong> Year:</strong> {comprehensiveFinancials.year} | 
+                  <strong> Quarter:</strong> {comprehensiveFinancials.quarter || 'Annual'} | 
+                  <strong> Division:</strong> {comprehensiveFinancials.fs_div} | 
+                  <strong> Items:</strong> {comprehensiveFinancials.count}
+                </p>
+              </div>
+              
+              <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                  <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f9fafb', zIndex: 1 }}>
+                    <tr>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e5e7eb', fontWeight: '600' }}>
+                        Statement
+                      </th>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e5e7eb', fontWeight: '600' }}>
+                        Account Name
+                      </th>
+                      <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #e5e7eb', fontWeight: '600' }}>
+                        Amount (백만원)
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {comprehensiveFinancials.data.map((item: any, index: number) => {
+                      const statementType = item.sj_nm || item.sj_div || '-';
+                      const accountName = item.account_nm || '-';
+                      const amount = item.thstrm_amount || '-';
+                      
+                      // Parse amount and format it
+                      let formattedAmount = amount;
+                      if (amount !== '-' && amount !== '' && !isNaN(Number(amount))) {
+                        const numAmount = Number(amount);
+                        formattedAmount = numAmount.toLocaleString();
+                      }
+                      
+                      // Color coding for different statement types
+                      let bgColor = 'white';
+                      if (statementType.includes('재무상태표') || item.sj_div === 'BS') {
+                        bgColor = index % 2 === 0 ? '#f0f9ff' : 'white';
+                      } else if (statementType.includes('손익계산서') || item.sj_div === 'IS') {
+                        bgColor = index % 2 === 0 ? '#f0fdf4' : 'white';
+                      } else if (statementType.includes('현금흐름') || item.sj_div === 'CF') {
+                        bgColor = index % 2 === 0 ? '#fef3c7' : 'white';
+                      }
+                      
+                      return (
+                        <tr key={index} style={{ backgroundColor: bgColor }}>
+                          <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6', fontSize: '13px' }}>
+                            {statementType}
+                          </td>
+                          <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6' }}>
+                            {accountName}
+                          </td>
+                          <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6', textAlign: 'right', fontFamily: 'monospace' }}>
+                            {formattedAmount}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              
+              <div style={{ padding: '12px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', fontSize: '12px', color: '#6b7280' }}>
+                <p style={{ margin: 0 }}>
+                  <strong>Legend:</strong> 
+                  <span style={{ marginLeft: '12px', padding: '2px 8px', backgroundColor: '#f0f9ff', borderRadius: '4px' }}>BS: Balance Sheet (재무상태표)</span>
+                  <span style={{ marginLeft: '8px', padding: '2px 8px', backgroundColor: '#f0fdf4', borderRadius: '4px' }}>IS: Income Statement (손익계산서)</span>
+                  <span style={{ marginLeft: '8px', padding: '2px 8px', backgroundColor: '#fef3c7', borderRadius: '4px' }}>CF: Cash Flow (현금흐름표)</span>
+                </p>
               </div>
             </div>
           ) : (
@@ -431,8 +450,8 @@ export const KoreanMarketPage: React.FC = () => {
                 textAlign: 'center',
               }}
             >
-              <p style={{ color: '#6b7280' }}>
-                No financial data available for the selected period
+              <p style={{ color: '#6b7280', margin: 0 }}>
+                No financial data available for the selected period. Try different year/quarter.
               </p>
             </div>
           )}

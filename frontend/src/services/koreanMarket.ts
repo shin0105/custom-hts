@@ -87,4 +87,25 @@ export const koreanMarketService = {
     );
     return response.data;
   },
+
+  /**
+   * Get comprehensive financial statements from DART API.
+   * Returns all financial line items including balance sheet, income statement, and cash flow.
+   */
+  async getAllFinancials(
+    symbol: string,
+    year?: number,
+    quarter?: number,
+    fsDivision: 'CFS' | 'OFS' = 'CFS'
+  ): Promise<any> {
+    const params = new URLSearchParams();
+    if (year) params.append('year', year.toString());
+    if (quarter) params.append('quarter', quarter.toString());
+    params.append('fs_div', fsDivision);
+
+    const response = await axios.get(
+      `${API_BASE_URL}/korean/financials/${symbol}/all?${params}`
+    );
+    return response.data;
+  },
 };

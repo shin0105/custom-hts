@@ -37,29 +37,15 @@ class KoreanMarketService:
             symbol: Stock code
             year: Fiscal year
             quarter: Optional quarter (1-4)
-            use_cache: Whether to use cached data
+            use_cache: Whether to use cached data (parameter kept for API compatibility but not used)
 
         Returns:
             KoreanFinancialStatement or None
         """
-        # Try to get from cache first if enabled
-        if use_cache:
-            cached = await supabase_client.get_financial_statement(
-                "korean_financials", symbol, year, quarter
-            )
-            if cached:
-                return KoreanFinancialStatement(**cached)
-
-        # Fetch from OPENDART
+        # Fetch directly from OPENDART without database caching
         statement = opendart_client.get_financial_statement(
             symbol, year, quarter
         )
-
-        # Cache the data if fetched successfully
-        if statement and supabase_client.client:
-            await supabase_client.save_financial_statement(
-                "korean_financials", statement.model_dump()
-            )
 
         return statement
 
