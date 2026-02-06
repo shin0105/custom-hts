@@ -70,9 +70,24 @@ export const USMarketPage: React.FC = () => {
   // Reload candles when chart settings change
   useEffect(() => {
     if (symbol && quote) {
-      loadCandleData();
+      const loadData = async () => {
+        try {
+          const candles = await usMarketService.getHistoricalData(
+            symbol,
+            period,
+            interval,
+            startDate || undefined,
+            endDate || undefined
+          );
+          setCandleData(candles);
+        } catch (err) {
+          console.error('Failed to load candle data:', err);
+          setCandleData([]);
+        }
+      };
+      loadData();
     }
-  }, [period, interval, startDate, endDate]);
+  }, [symbol, quote, period, interval, startDate, endDate]);
 
   const containerStyle: React.CSSProperties = {
     maxWidth: '1400px',
