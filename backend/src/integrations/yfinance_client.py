@@ -1,10 +1,10 @@
 """Yahoo Finance client for US market data."""
 
 import yfinance as yf
-from typing import Optional
-from datetime import datetime
+from typing import Optional, List
+from datetime import datetime, timedelta
 import pandas as pd
-from ..models.us import USStockQuote, USFinancialStatement
+from ..models.us import USStockQuote, USFinancialStatement, USCandleData
 from ..utils.helpers import safe_float, safe_int, calculate_change_percent
 
 
@@ -142,6 +142,72 @@ class YFinanceClient:
             return statements
         except Exception as e:
             print(f"Failed to get financials for {symbol}: {e}")
+            return None
+
+    def get_historical_data(
+        self,
+        symbol: str,
+        period: str = "1mo",
+        interval: str = "1d",
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+    ) -> Optional[List[USCandleData]]:
+        """
+        Get historical OHLCV data for a US stock.
+
+        Args:
+            symbol: Stock ticker symbol
+            period: Valid periods: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max
+            interval: Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo
+            start: Start date in YYYY-MM-DD format (optional)
+            end: End date in YYYY-MM-DD format (optional)
+
+        Returns:
+            List of USCandleData objects or None if fetch fails
+        """
+        try:
+            ticker = yf.Ticker(symbol)
+            
+            # Download historical data
+            if start and end:
+                hist = ticker.history(start=start, end=end, interval=interval)
+            else:
+                hist = ticker.history(period=period, interval=interval)
+
+            if hist is None or hist.empty:
+                return None
+
+            candles = []
+            for index, row in hist.iterrows():
+                # Format date based on interval
+                if interval in ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"]:
+                    # For intraday, use datetime format
+                    date_str = index.strftime("%Y-%m-%d %H:%M:%S")
+                else:
+                    # For daily and above, use date format
+                    date_str = index.strftime("%Y-%m-%d")
+
+                open_price = safe_float(row.get("Open", 0))
+                close_price = safe_float(row.get("Close", 0))
+                change = close_price - open_price
+                change_percent = calculate_change_percent(close_price, open_price)
+
+                candle = USCandleData(
+                    symbol=symbol.upper(),
+                    date=date_str,
+                    open=open_price,
+                    high=safe_float(row.get("High", 0)),
+                    low=safe_float(row.get("Low", 0)),
+                    close=close_price,
+                    volume=safe_int(row.get("Volume", 0)),
+                    change=change,
+                    change_percent=change_percent or 0.0,
+                )
+                candles.append(candle)
+
+            return candles
+        except Exception as e:
+            print(f"Failed to get historical data for {symbol}: {e}")
             return None
 
 

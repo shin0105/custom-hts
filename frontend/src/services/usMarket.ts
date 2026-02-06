@@ -3,7 +3,7 @@
  */
 
 import axios from 'axios';
-import type { USStockQuote, USFinancialStatement } from '../types/us';
+import type { USStockQuote, USFinancialStatement, USCandleData, USPeriod, USInterval } from '../types/us';
 
 const API_BASE_URL = '/api';
 
@@ -30,6 +30,29 @@ export const usMarketService = {
 
     const response = await axios.get<USFinancialStatement[]>(
       `${API_BASE_URL}/us/financials/${symbol}?${params}`
+    );
+    return response.data;
+  },
+
+  /**
+   * Get historical candle data for a US stock.
+   */
+  async getHistoricalData(
+    symbol: string,
+    period: USPeriod = '1mo',
+    interval: USInterval = '1d',
+    start?: string,
+    end?: string
+  ): Promise<USCandleData[]> {
+    const params = new URLSearchParams({
+      period,
+      interval,
+    });
+    if (start) params.append('start', start);
+    if (end) params.append('end', end);
+
+    const response = await axios.get<USCandleData[]>(
+      `${API_BASE_URL}/us/candle/${symbol}?${params}`
     );
     return response.data;
   },
