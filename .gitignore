@@ -76,6 +76,7 @@ ENV/
 *.parquet
 *.pkl
 *.pickle
+*.mst
 
 # Logs
 *.log
