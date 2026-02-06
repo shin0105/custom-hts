@@ -31,14 +31,14 @@ from ..models.korean import (
 from ..utils.helpers import safe_float, safe_int, calculate_change_percent
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
 class APIResponse:
     """
     Structured API response wrapper based on kis_auth.py APIResp class.
-    
+
     Provides structured access to API response headers and body with
     convenient error checking methods.
     """
@@ -50,8 +50,12 @@ class APIResponse:
         self._header = self._set_header()
         self._body = self._set_body()
         try:
-            self._err_code = self._body.msg_cd if hasattr(self._body, 'msg_cd') else None
-            self._err_message = self._body.msg1 if hasattr(self._body, 'msg1') else None
+            self._err_code = (
+                self._body.msg_cd if hasattr(self._body, "msg_cd") else None
+            )
+            self._err_message = (
+                self._body.msg1 if hasattr(self._body, "msg1") else None
+            )
         except:
             self._err_code = None
             self._err_message = None
@@ -66,7 +70,7 @@ class APIResponse:
         for x in self._resp.headers.keys():
             if x.islower():
                 # Replace hyphens with underscores for valid Python identifiers
-                field_name = x.replace('-', '_')
+                field_name = x.replace("-", "_")
                 fld[field_name] = self._resp.headers.get(x)
         if not fld:
             return namedtuple("header", ["tr_cont"])("")
@@ -124,10 +128,10 @@ class APIResponse:
 class KDevelopersClient:
     """
     Client for Korean Investment Securities OpenAPI.
-    
+
     Based on reference implementation from:
     https://github.com/koreainvestment/open-trading-api
-    
+
     API Documentation: https://apiportal.koreainvestment.com/
     """
 
@@ -139,7 +143,7 @@ class KDevelopersClient:
         self.access_token: Optional[str] = None
         self.token_expiry: Optional[datetime] = None
         self._last_auth_time = datetime.now()
-        
+
         # Rate limiting (0.05s for real trading, 0.5s for paper trading)
         self._smart_sleep_time = 0.05
 
@@ -158,7 +162,7 @@ class KDevelopersClient:
     def _get_access_token(self) -> Optional[str]:
         """
         Get or refresh access token for API authentication.
-        
+
         Token is valid for 24 hours. This method checks token validity
         and requests a new one if expired.
 
@@ -231,7 +235,9 @@ class KDevelopersClient:
                 "appsecret": self.api_secret,
             }
 
-            response = requests.post(url, headers=headers, json=body, timeout=10)
+            response = requests.post(
+                url, headers=headers, json=body, timeout=10
+            )
             response.raise_for_status()
 
             data = response.json()
@@ -244,9 +250,11 @@ class KDevelopersClient:
                 ).replace(tzinfo=timezone.utc)
             else:
                 self.token_expiry = datetime.now(timezone.utc)
-            
+
             self._last_auth_time = datetime.now()
-            logger.info(f"[{self._last_auth_time}] => Token acquired successfully")
+            logger.info(
+                f"[{self._last_auth_time}] => Token acquired successfully"
+            )
 
             if api_key_hash and supabase_client.client and self.access_token:
                 supabase_client.save_kdevelopers_token(
@@ -299,7 +307,9 @@ class KDevelopersClient:
                 "appsecret": self.api_secret,
                 "token": access_token,
             }
-            response = requests.post(url, headers=headers, json=body, timeout=10)
+            response = requests.post(
+                url, headers=headers, json=body, timeout=10
+            )
             if response.status_code == 200:
                 logger.info("Access token revoked successfully")
                 self.access_token = None
@@ -328,14 +338,14 @@ class KDevelopersClient:
     ) -> APIResponse:
         """
         Common API request wrapper based on kis_auth._url_fetch.
-        
+
         Args:
             api_url: API endpoint path
             tr_id: Transaction ID
             tr_cont: Transaction continuation flag
             params: Request parameters
             post_flag: Whether to use POST instead of GET
-            
+
         Returns:
             APIResponse object with structured response data
         """
@@ -345,7 +355,7 @@ class KDevelopersClient:
 
         url = f"{self.base_url}{api_url}"
         headers = self._get_base_headers()
-        
+
         # Add authorization headers
         headers["authorization"] = f"Bearer {token}"
         headers["appkey"] = self.api_key
@@ -363,16 +373,18 @@ class KDevelopersClient:
                 response = requests.get(
                     url, headers=headers, params=params, timeout=10
                 )
-            
+
             # Apply rate limiting
             self._smart_sleep()
-            
+
             if response.status_code == 200:
                 return APIResponse(response)
             else:
-                logger.error(f"API Error: {response.status_code} - {response.text}")
+                logger.error(
+                    f"API Error: {response.status_code} - {response.text}"
+                )
                 return APIResponse(response)
-                
+
         except Exception as e:
             logger.error(f"Request failed for {url}: {e}")
             raise
@@ -380,7 +392,7 @@ class KDevelopersClient:
     def get_quote(self, symbol: str) -> Optional[KoreanStockQuote]:
         """
         Get real-time quote for a Korean stock.
-        
+
         Based on examples_llm/domestic_stock/inquire_price/inquire_price.py
         API: [국내주식] 기본시세 > 주식현재가 시세[v1_국내주식-008]
 
@@ -404,20 +416,20 @@ class KDevelopersClient:
             if res.is_ok():
                 # Access output as attribute or dict key
                 body = res.get_body()
-                output = getattr(body, 'output', None)
+                output = getattr(body, "output", None)
                 if output is None:
                     logger.error(f"No output in response for {symbol}")
                     return None
-                
+
                 # Convert namedtuple to dict for easier access
-                if hasattr(output, '_asdict'):
+                if hasattr(output, "_asdict"):
                     output_dict = output._asdict()
                 elif isinstance(output, dict):
                     output_dict = output
                 else:
                     logger.error(f"Unexpected output type: {type(output)}")
                     return None
-                
+
                 # Parse the response
                 current_price = safe_float(output_dict.get("stck_prpr"))
                 previous_close = safe_float(output_dict.get("stck_sdpr"))
@@ -441,7 +453,7 @@ class KDevelopersClient:
                 res.print_error(api_url)
                 logger.error(f"Failed to get quote for {symbol}")
                 return None
-                
+
         except Exception as e:
             logger.error(f"Exception in get_quote for {symbol}: {e}")
             return None
@@ -455,7 +467,7 @@ class KDevelopersClient:
     ) -> Optional[List[KoreanCandleData]]:
         """
         Get daily/period candle chart data for a Korean stock.
-        
+
         API: [국내주식] 기본시세 > 국내주식기간별시세(일/주/월/년)[v1_국내주식-016]
 
         Args:
@@ -482,7 +494,7 @@ class KDevelopersClient:
 
             if res.is_ok():
                 output_list = res.get_body().output
-                
+
                 # Parse the response
                 candles = []
                 for i, item in enumerate(output_list):
@@ -512,7 +524,7 @@ class KDevelopersClient:
                 res.print_error(api_url)
                 logger.error(f"Failed to get candle data for {symbol}")
                 return None
-                
+
         except Exception as e:
             logger.error(f"Exception in get_daily_candle for {symbol}: {e}")
             return None
@@ -528,7 +540,7 @@ class KDevelopersClient:
     ) -> Optional[List[KoreanCandleData]]:
         """
         Get minute candle chart data for a Korean stock on a specific date.
-        
+
         API: [국내주식] 기본시세 > 주식일별분봉조회[국내주식-213]
 
         Args:
@@ -578,7 +590,9 @@ class KDevelopersClient:
 
                 if not res.is_ok():
                     res.print_error(api_url)
-                    logger.error(f"Failed to get minute candle data for {symbol}")
+                    logger.error(
+                        f"Failed to get minute candle data for {symbol}"
+                    )
                     return None
 
                 output_list = res.get_body().output2
@@ -669,6 +683,11 @@ class KDevelopersClient:
                     change_percent = calculate_change_percent(
                         row["close"], prev_close
                     )
+                    change_percent = (
+                        round(change_percent, 2)
+                        if change_percent is not None
+                        else None
+                    )
                 prev_close = row["close"]
 
                 candles.append(
@@ -687,7 +706,7 @@ class KDevelopersClient:
 
             candles.reverse()
             return candles[:limit]
-                
+
         except Exception as e:
             logger.error(f"Exception in get_minute_candle for {symbol}: {e}")
             return None
@@ -697,7 +716,7 @@ class KDevelopersClient:
     ) -> Optional[Dict[str, Any]]:
         """
         Get account balance and positions.
-        
+
         API: [국내주식] 계좌/잔고 > 주식잔고조회[v1_국내주식-006]
 
         Args:
@@ -729,13 +748,15 @@ class KDevelopersClient:
 
             if res.is_ok():
                 output1 = res.get_body().output1  # Stock positions
-                
+
                 # Safely access output2 with proper handling for empty lists
                 raw_output2 = res.get_body().output2
                 if isinstance(raw_output2, list) and raw_output2:
                     output2 = raw_output2[0]  # Account summary
                 else:
-                    output2 = {}  # Fallback when account summary is missing or empty
+                    output2 = (
+                        {}
+                    )  # Fallback when account summary is missing or empty
 
                 # Parse account balance
                 total_evaluation = safe_float(output2.get("tot_evlu_amt"))
@@ -783,9 +804,11 @@ class KDevelopersClient:
                 }
             else:
                 res.print_error(api_url)
-                logger.error(f"Failed to get account balance for {account_number}")
+                logger.error(
+                    f"Failed to get account balance for {account_number}"
+                )
                 return None
-                
+
         except Exception as e:
             logger.error(f"Exception in get_account_balance: {e}")
             return None
@@ -950,8 +973,8 @@ class KDevelopersClient:
             }
             scty_cd = item.get("scty_grp_id_cd", "")
             if scty_cd:
-                filtered["security_group_name_kr"] = (
-                    scty_grp_id_cd_map.get(scty_cd, "")
+                filtered["security_group_name_kr"] = scty_grp_id_cd_map.get(
+                    scty_cd, ""
                 )
             stck_cd = item.get("stck_kind_cd", "")
             if stck_cd:
