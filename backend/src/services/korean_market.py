@@ -120,5 +120,20 @@ class KoreanMarketService:
             account_number, account_product_code
         )
 
+    async def get_stock_info(
+        self, prdt_type_cd: str, pdno: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Get stock basic information from KDevelopers.
+
+        Args:
+            prdt_type_cd: Product type code
+            pdno: Product number (stock code)
+
+        Returns:
+            Raw output list from search-stock-info API
+        """
+        return kdevelopers_client.search_stock_info(prdt_type_cd, pdno)
+
 
 korean_market_service = KoreanMarketService()

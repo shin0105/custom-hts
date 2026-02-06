@@ -243,9 +243,9 @@ def test_get_minute_candle():
 
 
 def test_get_account_balance():
-    """Test 4: Account Balance API (주식잔고조회)."""
+    """Test 5: Account Balance API (주식잔고조회)."""
     logger.info("\n" + "=" * 70)
-    logger.info("TEST 4: get_account_balance() - Account Balance")
+    logger.info("TEST 5: get_account_balance() - Account Balance")
     logger.info("API: [국내주식] 계좌/잔고 > 주식잔고조회[v1_국내주식-006]")
     logger.info("=" * 70)
 
@@ -255,7 +255,7 @@ def test_get_account_balance():
         logger.warning("⚠ HANTU_ACCOUNT_NUMBER not set in environment")
         logger.info("  Skipping account balance test")
         save_json_response(
-            "04_get_account_balance.json",
+            "05_get_account_balance.json",
             {
                 "success": False,
                 "error": "Account number not configured",
@@ -323,17 +323,50 @@ def test_get_account_balance():
             logger.error("  ✗ Failed to fetch account balance")
 
         save_json_response(
-            "04_get_account_balance.json",
+            "05_get_account_balance.json",
             response_data,
             "Account balance and stock positions",
         )
     except Exception as e:
         logger.error(f"  ✗ Exception: {e}")
         save_json_response(
-            "04_get_account_balance.json",
+            "05_get_account_balance.json",
             {"success": False, "error": str(e)},
             "Account balance test failed with exception",
         )
+
+
+def test_search_stock_info():
+    """Test 4: Stock Basic Info API (주식기본조회)."""
+    logger.info("\n" + "=" * 70)
+    logger.info("TEST 4: search_stock_info() - Stock Basic Info")
+    logger.info("API: [국내주식] 종목정보 > 주식기본조회[v1_국내주식-067]")
+    logger.info("=" * 70)
+
+    prdt_type_cd = "300"
+    pdno = "005930"
+
+    try:
+        results = kdevelopers_client.search_stock_info(prdt_type_cd, pdno)
+        success = bool(results)
+        payload = {
+            "success": success,
+            "count": len(results),
+            "data": results,
+        }
+        if success:
+            logger.info(f"  ✓ Success: Retrieved {len(results)} records")
+        else:
+            logger.error("  ✗ No data returned")
+    except Exception as e:
+        payload = {"success": False, "error": str(e)}
+        logger.error(f"  ✗ Exception: {e}")
+
+    save_json_response(
+        "04_search_stock_info.json",
+        payload,
+        f"Stock basic info for {pdno}",
+    )
 
 
 def generate_summary_report():
@@ -371,11 +404,20 @@ def generate_summary_report():
             "returns": "List[KoreanCandleData]",
         },
         {
+            "name": "search_stock_info()",
+            "description": "주식기본조회 - Stock Basic Info",
+            "api_path": "/uapi/domestic-stock/v1/quotations/search-stock-info",
+            "tr_id": "CTPF1002R",
+            "file": "04_search_stock_info.json",
+            "parameters": ["prdt_type_cd", "pdno"],
+            "returns": "List[Dict[str, Any]]",
+        },
+        {
             "name": "get_account_balance()",
             "description": "주식잔고조회 - Account Balance and Positions",
             "api_path": "/uapi/domestic-stock/v1/trading/inquire-balance",
             "tr_id": "TTTC8434R / VTTC8434R",
-            "file": "04_get_account_balance.json",
+            "file": "05_get_account_balance.json",
             "parameters": ["account_number", "account_product_code"],
             "returns": "Dict with balance and positions",
         },
@@ -430,6 +472,7 @@ def main():
     test_get_quote()
     test_get_daily_candle()
     test_get_minute_candle()
+    test_search_stock_info()
     test_get_account_balance()
 
     logger.info("\n" + "=" * 70)
@@ -441,7 +484,8 @@ def main():
     logger.info("  - 01_get_quote.json (Real-time quotes)")
     logger.info("  - 02_get_daily_candle.json (Daily/weekly/monthly candles)")
     logger.info("  - 03_get_minute_candle.json (Minute candles)")
-    logger.info("  - 04_get_account_balance.json (Account balance)")
+    logger.info("  - 04_search_stock_info.json (Stock basic info)")
+    logger.info("  - 05_get_account_balance.json (Account balance)")
 
 
 if __name__ == "__main__":

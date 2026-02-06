@@ -208,6 +208,35 @@ async def get_korean_account_balance(
     return result
 
 
+@router.get("/stock-info/{pdno}", response_model=List[Dict[str, Any]])
+async def get_korean_stock_info(
+    pdno: str,
+    prdt_type_cd: str = Query(
+        "300",
+        description="300: 주식/ETF/ETN/ELW, 301: 선물옵션, 302: 채권, 306: ELS",
+    ),
+) -> List[Dict[str, Any]]:
+    """
+    Get stock basic information (주식기본조회).
+
+    Args:
+        pdno: 종목번호 (6자리) ETN의 경우 Q로 시작 (EX. Q500001)
+        prdt_type_cd: 상품유형코드
+
+    Returns:
+        Raw output list from KDevelopers search-stock-info API
+    """
+    result = await korean_market_service.get_stock_info(
+        prdt_type_cd, pdno
+    )
+    if not result:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Stock info not found for pdno {pdno}",
+        )
+    return result
+
+
 @router.get("/financials/{symbol}/balance-sheet")
 async def get_balance_sheet(
     symbol: str,

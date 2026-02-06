@@ -569,6 +569,93 @@ class KDevelopersClient:
             logger.error(f"Exception in get_account_balance: {e}")
             return None
 
+    def search_stock_info(
+        self,
+        prdt_type_cd: str,
+        pdno: str,
+        tr_cont: str = "",
+        max_depth: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """
+        [국내주식] 종목정보 > 주식기본조회[v1_국내주식-067]
+        주식기본조회 API를 호출하여 raw output list로 반환합니다.
+
+        Args:
+            prdt_type_cd: 상품유형코드 (300: 주식/ETF/ETN/ELW, 301: 선물옵션, 302: 채권, 306: ELS)
+            pdno: 종목번호 (6자리) ETN의 경우 Q로 시작 (EX. Q500001)
+            tr_cont: 연속 거래 여부
+            max_depth: 최대 재귀 깊이 (기본값: 10)
+
+        Returns:
+            List[Dict[str, Any]]: 주식기본조회 raw output list
+        """
+        if not prdt_type_cd:
+            logger.error("prdt_type_cd is required. (e.g. '300')")
+            raise ValueError("prdt_type_cd is required. (e.g. '300')")
+
+        if not pdno:
+            logger.error("pdno is required. (e.g. '000660')")
+            raise ValueError("pdno is required. (e.g. '000660')")
+
+        api_url = "/uapi/domestic-stock/v1/quotations/search-stock-info"
+        tr_id = "CTPF1002R"
+
+        params = {
+            "PRDT_TYPE_CD": prdt_type_cd,
+            "PDNO": pdno,
+        }
+
+        results: List[Dict[str, Any]] = []
+        depth = 0
+        current_tr_cont = tr_cont
+
+        while depth < max_depth:
+            res = self._url_fetch(api_url, tr_id, current_tr_cont, params)
+
+            if not res.is_ok():
+                res.print_error(api_url)
+                logger.error(
+                    "API call failed: %s - %s",
+                    res.get_error_code(),
+                    res.get_error_message(),
+                )
+                return []
+
+            body = res.get_body()
+            output = getattr(body, "output", None)
+
+            if output is None:
+                current_batch: List[Dict[str, Any]] = []
+            elif isinstance(output, list):
+                current_batch = output
+            elif hasattr(output, "_asdict"):
+                current_batch = [output._asdict()]
+            elif isinstance(output, dict):
+                current_batch = [output]
+            else:
+                current_batch = []
+
+            results.extend(current_batch)
+
+            next_tr_cont = res.get_header().tr_cont
+            if next_tr_cont == "M":
+                logger.info("Calling next page for search_stock_info...")
+                self._smart_sleep()
+                current_tr_cont = "N"
+                depth += 1
+                continue
+
+            logger.info("search_stock_info fetch complete.")
+            break
+
+        if depth >= max_depth:
+            logger.warning(
+                "Maximum recursion depth (%d) reached. Stopping further requests.",
+                max_depth,
+            )
+
+        return results
+
 
 # Global instance
 kdevelopers_client = KDevelopersClient()
