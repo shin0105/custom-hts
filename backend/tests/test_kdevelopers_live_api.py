@@ -38,7 +38,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Output directory for JSON responses
-OUTPUT_DIR = Path(__file__).parent.parent / "data" / "kdevelopers_responses"
+OUTPUT_DIR = Path(__file__).parent / "test-results" / "kdevelopers_responses"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 

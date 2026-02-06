@@ -13,13 +13,15 @@ Key features:
 
 import requests
 import json
+import hashlib
 import os
 import time
 import logging
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import namedtuple
 from ..utils.config import settings
+from ..integrations.supabase_client import supabase_client
 from ..models.korean import (
     KoreanStockQuote,
     KoreanCandleData,
@@ -167,13 +169,57 @@ class KDevelopersClient:
             logger.error("API credentials not configured")
             return None
 
-        # Check if token is still valid (24 hour expiry)
+        api_key_hash = (
+            hashlib.sha256(self.api_key.encode("utf-8")).hexdigest()
+            if self.api_key
+            else ""
+        )
+
+        # Check in-memory token first
         if (
             self.access_token
             and self.token_expiry
-            and (datetime.now() - self._last_auth_time).total_seconds() < 86400
+            and datetime.now(timezone.utc) < self.token_expiry
         ):
             return self.access_token
+
+        # Check cached token in Supabase
+        if api_key_hash and supabase_client.client:
+            cached = (
+                supabase_client.get_kdevelopers_token(api_key_hash)
+                if hasattr(supabase_client, "get_kdevelopers_token")
+                else None
+            )
+
+            if cached:
+                cached_token = cached.get("access_token")
+                expires_at = cached.get("expires_at")
+                cached_expiry = None
+                if expires_at:
+                    try:
+                        cached_expiry = datetime.fromisoformat(expires_at)
+                        if cached_expiry.tzinfo is None:
+                            cached_expiry = cached_expiry.replace(
+                                tzinfo=timezone.utc
+                            )
+                    except Exception:
+                        cached_expiry = None
+
+                if (
+                    cached_token
+                    and cached_expiry
+                    and datetime.now(timezone.utc) < cached_expiry
+                ):
+                    self.access_token = cached_token
+                    self.token_expiry = cached_expiry
+                    return self.access_token
+
+                if (
+                    cached_expiry
+                    and datetime.now(timezone.utc) >= cached_expiry
+                ):
+                    if hasattr(supabase_client, "delete_kdevelopers_token"):
+                        supabase_client.delete_kdevelopers_token(api_key_hash)
 
         # Request new token
         try:
@@ -195,17 +241,82 @@ class KDevelopersClient:
             if token_expired:
                 self.token_expiry = datetime.strptime(
                     token_expired, "%Y-%m-%d %H:%M:%S"
-                )
+                ).replace(tzinfo=timezone.utc)
             else:
-                self.token_expiry = datetime.now()
+                self.token_expiry = datetime.now(timezone.utc)
             
             self._last_auth_time = datetime.now()
             logger.info(f"[{self._last_auth_time}] => Token acquired successfully")
 
+            if api_key_hash and supabase_client.client and self.access_token:
+                supabase_client.save_kdevelopers_token(
+                    api_key_hash, self.access_token, self.token_expiry
+                )
+
             return self.access_token
         except Exception as e:
+            if api_key_hash and supabase_client.client:
+                supabase_client.delete_kdevelopers_token(api_key_hash)
             logger.error(f"Failed to get access token: {e}")
             return None
+
+    def revoke_access_token(self, token: Optional[str] = None) -> bool:
+        """
+        Revoke an access token via /oauth2/revokeP and clear cached token.
+
+        Args:
+            token: Access token to revoke. If None, uses in-memory or cached token.
+
+        Returns:
+            True if revoke succeeded, False otherwise.
+        """
+        if not self.api_key or not self.api_secret:
+            logger.error("API credentials not configured")
+            return False
+
+        api_key_hash = (
+            hashlib.sha256(self.api_key.encode("utf-8")).hexdigest()
+            if self.api_key
+            else ""
+        )
+
+        access_token = token or self.access_token
+
+        if not access_token and api_key_hash and supabase_client.client:
+            cached = supabase_client.get_kdevelopers_token(api_key_hash)
+            if cached:
+                access_token = cached.get("access_token")
+
+        if not access_token:
+            logger.error("No access token available to revoke")
+            return False
+
+        try:
+            url = f"{self.base_url}/oauth2/revokeP"
+            headers = self._get_base_headers()
+            body = {
+                "appkey": self.api_key,
+                "appsecret": self.api_secret,
+                "token": access_token,
+            }
+            response = requests.post(url, headers=headers, json=body, timeout=10)
+            if response.status_code == 200:
+                logger.info("Access token revoked successfully")
+                self.access_token = None
+                self.token_expiry = None
+                if api_key_hash and supabase_client.client:
+                    supabase_client.delete_kdevelopers_token(api_key_hash)
+                return True
+
+            logger.error(
+                "Failed to revoke token: %s - %s",
+                response.status_code,
+                response.text,
+            )
+            return False
+        except Exception as e:
+            logger.error(f"Exception in revoke_access_token: {e}")
+            return False
 
     def _url_fetch(
         self,
@@ -654,7 +765,92 @@ class KDevelopersClient:
                 max_depth,
             )
 
-        return results
+        scty_grp_id_cd_map = {
+            "BC": "수익증권",
+            "DR": "주식예탁증서",
+            "EF": "ETF",
+            "EN": "ETN",
+            "EW": "ELW",
+            "FE": "해외ETF",
+            "FO": "선물옵션",
+            "FS": "외국주권",
+            "FU": "선물",
+            "FX": "플렉스 선물",
+            "GD": "금현물",
+            "IC": "투자계약증권",
+            "IF": "사회간접자본투융자회사",
+            "KN": "코넥스주권",
+            "MF": "투자회사",
+            "OP": "옵션",
+            "RT": "부동산투자회사",
+            "SC": "선박투자회사",
+            "SR": "신주인수권증서",
+            "ST": "주권",
+            "SW": "신주인수권증권",
+            "TC": "신탁수익증권",
+        }
+        stck_kind_cd_map = {
+            "000": "해당사항없음",
+            "101": "보통주",
+            "201": "우선주",
+            "202": "2우선주",
+            "203": "3우선주",
+            "204": "4우선주",
+            "205": "5우선주",
+            "206": "6우선주",
+            "207": "7우선주",
+            "208": "8우선주",
+            "209": "9우선주",
+            "210": "10우선주",
+            "211": "11우선주",
+            "212": "12우선주",
+            "213": "13우선주",
+            "214": "14우선주",
+            "215": "15우선주",
+            "216": "16우선주",
+            "217": "17우선주",
+            "218": "18우선주",
+            "219": "19우선주",
+            "220": "20우선주",
+            "301": "후배주",
+            "401": "혼합주",
+        }
+        field_map = {
+            "scty_grp_id_cd": "security_group_code",
+            "setl_mmdd": "settlement_month_day",
+            "lstg_stqt": "listed_shares",
+            "cpta": "capital_amount",
+            "papr": "par_value",
+            "kospi200_item_yn": "is_kospi200",
+            "scts_mket_lstg_dt": "securities_market_listed_date",
+            "scts_mket_lstg_abol_dt": "securities_market_delisted_date",
+            "kosdaq_mket_lstg_dt": "kosdaq_listed_date",
+            "kosdaq_mket_lstg_abol_dt": "kosdaq_delisted_date",
+            "lstg_abol_dt": "delisted_date",
+            "stck_kind_cd": "stock_kind_code",
+            "prdt_name": "product_full_name",
+            "prdt_abrv_name": "product_short_name",
+        }
+
+        filtered_results: List[Dict[str, Any]] = []
+        for item in results:
+            filtered = {
+                out_key: item.get(in_key, "")
+                for in_key, out_key in field_map.items()
+            }
+            scty_cd = item.get("scty_grp_id_cd", "")
+            if scty_cd:
+                filtered["security_group_name_kr"] = (
+                    scty_grp_id_cd_map.get(scty_cd, "")
+                )
+            stck_cd = item.get("stck_kind_cd", "")
+            if stck_cd:
+                filtered["stock_kind_name_kr"] = stck_kind_cd_map.get(
+                    stck_cd, ""
+                )
+            filtered_results.append(filtered)
+
+        return filtered_results
 
 
 # Global instance

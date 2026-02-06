@@ -1,6 +1,7 @@
 """Supabase client for database operations."""
 
 from typing import Optional, Any
+from datetime import datetime, timezone
 from supabase import create_client, Client
 from ..utils.config import settings
 
@@ -94,6 +95,73 @@ class SupabaseClient:
         except Exception as e:
             print(f"Failed to get financial statement: {e}")
             return None
+
+    def get_kdevelopers_token(
+        self, api_key_hash: str
+    ) -> Optional[dict[str, Any]]:
+        """
+        Retrieve cached KDevelopers access token by API key hash.
+        """
+        if not self._client:
+            return None
+
+        try:
+            response = (
+                self._client.table("kdevelopers_tokens")
+                .select("*")
+                .eq("api_key_hash", api_key_hash)
+                .limit(1)
+                .execute()
+            )
+            if response.data and len(response.data) > 0:
+                return response.data[0]
+            return None
+        except Exception as e:
+            print(f"Failed to get KDevelopers token: {e}")
+            return None
+
+    def save_kdevelopers_token(
+        self,
+        api_key_hash: str,
+        access_token: str,
+        expires_at: Optional[datetime],
+    ) -> bool:
+        """
+        Upsert KDevelopers access token by API key hash.
+        """
+        if not self._client:
+            print("Supabase client not initialized")
+            return False
+
+        try:
+            payload = {
+                "api_key_hash": api_key_hash,
+                "access_token": access_token,
+                "expires_at": expires_at.isoformat() if expires_at else None,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            self._client.table("kdevelopers_tokens").upsert(payload).execute()
+            return True
+        except Exception as e:
+            print(f"Failed to save KDevelopers token: {e}")
+            return False
+
+    def delete_kdevelopers_token(self, api_key_hash: str) -> bool:
+        """
+        Delete cached KDevelopers access token by API key hash.
+        """
+        if not self._client:
+            print("Supabase client not initialized")
+            return False
+
+        try:
+            self._client.table("kdevelopers_tokens").delete().eq(
+                "api_key_hash", api_key_hash
+            ).execute()
+            return True
+        except Exception as e:
+            print(f"Failed to delete KDevelopers token: {e}")
+            return False
 
 
 # Global instance
