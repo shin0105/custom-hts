@@ -152,6 +152,31 @@ The application will be available at http://localhost:5173
 
 ## Development
 
+### Run Frontend + Backend Together
+
+From the repo root:
+```bash
+bash run-dev.sh
+```
+
+Stop both:
+```bash
+bash stop-dev.sh
+```
+
+### Make Scripts Executable
+
+If you want to run them directly (without `bash`), make them executable:
+```bash
+chmod +x run-dev.sh stop-dev.sh
+```
+
+Then:
+```bash
+./run-dev.sh
+./stop-dev.sh
+```
+
 ### Running Tests
 
 Backend tests (from backend directory):
