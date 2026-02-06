@@ -54,3 +54,21 @@ class USSearchResult(BaseModel):
     symbol: str = Field(..., description="Stock ticker symbol")
     name: str = Field(..., description="Company name")
     exchange: str = Field(..., description="Exchange (NYSE, NASDAQ, etc.)")
+
+
+class USCandleData(BaseModel):
+    """US stock candle/OHLCV data."""
+
+    symbol: str = Field(..., description="Stock ticker symbol")
+    date: str = Field(
+        ..., description="Candle date in YYYY-MM-DD or YYYY-MM-DD HH:MM:SS format"
+    )
+    open: float = Field(..., description="Opening price in USD")
+    high: float = Field(..., description="High price in USD")
+    low: float = Field(..., description="Low price in USD")
+    close: float = Field(..., description="Closing price in USD")
+    volume: int = Field(..., description="Trading volume")
+    change: Optional[float] = Field(None, description="Price change in USD")
+    change_percent: Optional[float] = Field(
+        None, description="Price change percentage"
+    )

@@ -1,8 +1,8 @@
 """API routes for US market endpoints."""
 
 from fastapi import APIRouter, HTTPException, Query
-from typing import List
-from ..models.us import USStockQuote, USFinancialStatement
+from typing import List, Optional
+from ..models.us import USStockQuote, USFinancialStatement, USCandleData
 from ..services.us_market import us_market_service
 
 router = APIRouter(prefix="/us", tags=["US Market"])
@@ -51,6 +51,43 @@ async def get_us_financials(
             detail=f"Financials not found for symbol {symbol}",
         )
     return financials
+
+
+@router.get("/candle/{symbol}", response_model=List[USCandleData])
+async def get_us_candle(
+    symbol: str,
+    period: str = Query(
+        "1mo",
+        description="Time period: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max",
+    ),
+    interval: str = Query(
+        "1d", description="Interval: 1m,5m,15m,30m,60m,1d,1wk,1mo"
+    ),
+    start: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+) -> List[USCandleData]:
+    """
+    Get historical candle data for a US stock.
+
+    Args:
+        symbol: Stock ticker symbol (e.g., AAPL)
+        period: Time period for data
+        interval: Data interval
+        start: Optional start date
+        end: Optional end date
+
+    Returns:
+        List of candle data (OHLCV)
+    """
+    candles = await us_market_service.get_historical_data(
+        symbol.upper(), period, interval, start, end
+    )
+    if not candles:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Candle data not found for symbol {symbol}",
+        )
+    return candles
 
 
 @router.get("/health")

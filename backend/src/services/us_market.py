@@ -2,7 +2,7 @@
 
 from typing import Optional, List
 from datetime import datetime
-from ..models.us import USStockQuote, USFinancialStatement
+from ..models.us import USStockQuote, USFinancialStatement, USCandleData
 from ..integrations.yfinance_client import yfinance_client
 from ..integrations.supabase_client import supabase_client
 
@@ -55,6 +55,31 @@ class USMarketService:
                 )
 
         return statements
+
+    async def get_historical_data(
+        self,
+        symbol: str,
+        period: str = "1mo",
+        interval: str = "1d",
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+    ) -> Optional[List[USCandleData]]:
+        """
+        Get historical OHLCV data for a US stock.
+
+        Args:
+            symbol: Stock ticker symbol
+            period: Time period (1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max)
+            interval: Data interval (1m, 5m, 15m, 30m, 60m, 1d, 1wk, 1mo)
+            start: Start date in YYYY-MM-DD format (optional)
+            end: End date in YYYY-MM-DD format (optional)
+
+        Returns:
+            List of USCandleData or None
+        """
+        return yfinance_client.get_historical_data(
+            symbol, period, interval, start, end
+        )
 
 
 us_market_service = USMarketService()

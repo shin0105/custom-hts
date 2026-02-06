@@ -115,8 +115,8 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   const maxPrice = Math.max(...allPrices);
   const padding = (maxPrice - minPrice) * 0.1;
 
-  // Calculate max volume for secondary Y-axis
-  const maxVolume = Math.max(...data.map((d) => d.volume));
+  // Calculate max volume for secondary Y-axis (unused but kept for potential future use)
+  // const maxVolume = Math.max(...data.map((d) => d.volume));
 
   // Format date for display
   const formatDate = (dateStr: string) => {

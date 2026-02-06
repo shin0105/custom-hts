@@ -32,3 +32,18 @@ export interface USFinancialStatement {
   pe_ratio?: number;
   updated_at: string;
 }
+
+export interface USCandleData {
+  symbol: string;
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  change?: number;
+  change_percent?: number;
+}
+
+export type USPeriod = '1d' | '5d' | '1mo' | '3mo' | '6mo' | '1y' | '2y' | '5y' | '10y' | 'ytd' | 'max';
+export type USInterval = '1m' | '5m' | '15m' | '30m' | '60m' | '1d' | '1wk' | '1mo';
