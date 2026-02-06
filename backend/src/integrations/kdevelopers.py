@@ -18,7 +18,7 @@ import os
 import time
 import logging
 from typing import Optional, Dict, Any, List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from collections import namedtuple
 from ..utils.config import settings
 from ..integrations.supabase_client import supabase_client
@@ -518,65 +518,175 @@ class KDevelopersClient:
             return None
 
     def get_minute_candle(
-        self, symbol: str, interval: int = 1, limit: int = 100
+        self,
+        symbol: str,
+        interval: int = 1,
+        limit: int = 100,
+        date: Optional[str] = None,
+        time_str: str = "",
+        include_previous: bool = False,
     ) -> Optional[List[KoreanCandleData]]:
         """
-        Get minute candle chart data for a Korean stock.
+        Get minute candle chart data for a Korean stock on a specific date.
         
-        API: [국내주식] 기본시세 > 국내주식분봉조회[v1_국내주식-024]
+        API: [국내주식] 기본시세 > 주식일별분봉조회[국내주식-213]
 
         Args:
             symbol: Stock code (e.g., "005930" for Samsung Electronics)
             interval: Minute interval (1, 5, 10, 30, 60)
             limit: Number of candles to retrieve (default: 100)
+            date: Trading date (YYYYMMDD). Defaults to today in KST if not provided.
+            time_str: Time filter (HHMMSS). Empty string returns all.
+            include_previous: Whether to include previous data (FID_PW_DATA_INCU_YN)
 
         Returns:
             List of KoreanCandleData objects or None if fetch fails
         """
         try:
-            api_url = "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
-            tr_id = "FHKST03010200"  # Transaction ID for minute price
+            if interval not in {1, 5, 10, 30, 60}:
+                raise ValueError("interval must be one of 1, 5, 10, 30, 60")
+
+            date_provided = date is not None
+            if date is None:
+                kst_now = datetime.now(timezone.utc).astimezone(
+                    timezone(timedelta(hours=9))
+                )
+                date = kst_now.strftime("%Y%m%d")
+
+            if len(date) != 8 or not date.isdigit():
+                raise ValueError("date must be in YYYYMMDD format")
+
+            if time_str and (len(time_str) != 6 or not time_str.isdigit()):
+                raise ValueError("time_str must be in HHMMSS format or empty")
+
+            api_url = "/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice"
+            tr_id = "FHKST03010230"
 
             params = {
-                "FID_COND_MRKT_DIV_CODE": "J",  # Market division
-                "FID_INPUT_ISCD": symbol,  # Stock code
-                "FID_INPUT_HOUR_1": "",  # Time filter (empty for all)
-                "FID_PW_DATA_INCU_YN": "Y",  # Include previous data
-                "FID_TICK_RANGE": str(interval),  # Minute interval
+                "FID_COND_MRKT_DIV_CODE": "J",
+                "FID_INPUT_ISCD": symbol,
+                "FID_INPUT_HOUR_1": time_str,
+                "FID_INPUT_DATE_1": date,
+                "FID_PW_DATA_INCU_YN": "Y" if include_previous else "N",
+                "FID_FAKE_TICK_INCU_YN": "",
             }
 
-            res = self._url_fetch(api_url, tr_id, "", params)
+            output_list = []
+            for attempt in range(1 if date_provided else 7):
+                params["FID_INPUT_DATE_1"] = date
+                res = self._url_fetch(api_url, tr_id, "", params)
 
-            if res.is_ok():
+                if not res.is_ok():
+                    res.print_error(api_url)
+                    logger.error(f"Failed to get minute candle data for {symbol}")
+                    return None
+
                 output_list = res.get_body().output2
-                
-                # Parse the response
-                candles = []
-                for i, item in enumerate(output_list):
-                    if i >= limit:
-                        break
+                if output_list:
+                    break
 
-                    close_price = safe_float(item.get("stck_prpr"))
-                    open_price = safe_float(item.get("stck_oprc"))
+                if date_provided:
+                    break
 
-                    candle = KoreanCandleData(
-                        symbol=symbol,
-                        date=item.get("stck_cntg_hour", ""),  # Time in HHMMSS
-                        open=open_price,
-                        high=safe_float(item.get("stck_hgpr")),
-                        low=safe_float(item.get("stck_lwpr")),
-                        close=close_price,
-                        volume=safe_int(item.get("cntg_vol")),
-                        change=safe_float(item.get("prdy_vrss")),
-                        change_percent=safe_float(item.get("prdy_ctrt")),
-                    )
-                    candles.append(candle)
+                try:
+                    date_dt = datetime.strptime(date, "%Y%m%d")
+                    date = (date_dt - timedelta(days=1)).strftime("%Y%m%d")
+                except ValueError:
+                    break
 
-                return candles
-            else:
-                res.print_error(api_url)
-                logger.error(f"Failed to get minute candle data for {symbol}")
+            if not output_list:
                 return None
+
+            # Normalize and sort ascending for aggregation.
+            minute_rows = []
+            for item in output_list:
+                bsop_date = item.get("stck_bsop_date", "")
+                cntg_hour = item.get("stck_cntg_hour", "")
+                if not bsop_date or not cntg_hour:
+                    continue
+
+                dt_key = f"{bsop_date}{cntg_hour}"
+                minute_rows.append(
+                    {
+                        "dt_key": dt_key,
+                        "open": safe_float(item.get("stck_oprc")),
+                        "high": safe_float(item.get("stck_hgpr")),
+                        "low": safe_float(item.get("stck_lwpr")),
+                        "close": safe_float(item.get("stck_prpr")),
+                        "volume": safe_int(item.get("cntg_vol")),
+                    }
+                )
+
+            if not minute_rows:
+                return None
+
+            minute_rows.sort(key=lambda x: x["dt_key"])
+
+            def to_datetime(dt_key: str) -> datetime:
+                return datetime.strptime(dt_key, "%Y%m%d%H%M%S")
+
+            # Aggregate to interval if needed.
+            aggregated = []
+            if interval == 1:
+                aggregated = minute_rows
+            else:
+                bucket = None
+                bucket_start = None
+                for row in minute_rows:
+                    dt = to_datetime(row["dt_key"])
+                    bucket_minute = (dt.minute // interval) * interval
+                    bucket_dt = dt.replace(minute=bucket_minute, second=0)
+
+                    if bucket is None or bucket_start != bucket_dt:
+                        if bucket:
+                            aggregated.append(bucket)
+                        bucket_start = bucket_dt
+                        bucket = {
+                            "dt_key": bucket_dt.strftime("%Y%m%d%H%M%S"),
+                            "open": row["open"],
+                            "high": row["high"],
+                            "low": row["low"],
+                            "close": row["close"],
+                            "volume": row["volume"],
+                        }
+                    else:
+                        bucket["high"] = max(bucket["high"], row["high"])
+                        bucket["low"] = min(bucket["low"], row["low"])
+                        bucket["close"] = row["close"]
+                        bucket["volume"] += row["volume"]
+
+                if bucket:
+                    aggregated.append(bucket)
+
+            # Compute change vs previous close across aggregated list
+            prev_close = None
+            candles = []
+            for row in aggregated:
+                change = None
+                change_percent = None
+                if prev_close is not None:
+                    change = row["close"] - prev_close
+                    change_percent = calculate_change_percent(
+                        row["close"], prev_close
+                    )
+                prev_close = row["close"]
+
+                candles.append(
+                    KoreanCandleData(
+                        symbol=symbol,
+                        date=row["dt_key"],
+                        open=row["open"],
+                        high=row["high"],
+                        low=row["low"],
+                        close=row["close"],
+                        volume=row["volume"],
+                        change=change,
+                        change_percent=change_percent,
+                    )
+                )
+
+            candles.reverse()
+            return candles[:limit]
                 
         except Exception as e:
             logger.error(f"Exception in get_minute_candle for {symbol}: {e}")

@@ -20,6 +20,7 @@ Usage:
 
 import sys
 import os
+from datetime import datetime
 
 # Add parent directory to path to import from src
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -107,12 +108,14 @@ def example_get_minute_candles():
     symbol = "005930"
     interval = 1  # 1-minute candles
     limit = 5
+    minute_date = datetime.now().strftime("%Y%m%d")
     
     logger.info(f"Fetching last {limit} {interval}-minute candles for {symbol}...")
     candles = kdevelopers_client.get_minute_candle(
         symbol=symbol,
         interval=interval,
-        limit=limit
+        limit=limit,
+        date=minute_date,
     )
     
     if candles:

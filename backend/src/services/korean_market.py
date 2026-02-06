@@ -88,7 +88,12 @@ class KoreanMarketService:
         )
 
     async def get_minute_candle(
-        self, symbol: str, interval: int = 1, limit: int = 100
+        self,
+        symbol: str,
+        interval: int = 1,
+        limit: int = 100,
+        date: Optional[str] = None,
+        time_str: str = "",
     ) -> Optional[List[KoreanCandleData]]:
         """
         Get minute candle chart data for a Korean stock.
@@ -101,7 +106,9 @@ class KoreanMarketService:
         Returns:
             List of KoreanCandleData or None
         """
-        return kdevelopers_client.get_minute_candle(symbol, interval, limit)
+        return kdevelopers_client.get_minute_candle(
+            symbol, interval, limit, date=date, time_str=time_str
+        )
 
     async def get_account_balance(
         self, account_number: str, account_product_code: str = "01"

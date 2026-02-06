@@ -133,13 +133,15 @@ def test_get_minute_candle():
     symbol = "005930"
     interval = 1
     limit = 5
+    minute_date = os.getenv("HANTU_MINUTE_CANDLE_DATE")
     
     try:
         logger.info(f"Requesting last {limit} {interval}-minute candles for {symbol}...")
         candles = kdevelopers_client.get_minute_candle(
             symbol=symbol,
             interval=interval,
-            limit=limit
+            limit=limit,
+            date=minute_date,
         )
         
         if candles and len(candles) > 0:

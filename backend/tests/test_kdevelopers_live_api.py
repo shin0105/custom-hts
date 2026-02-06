@@ -185,18 +185,19 @@ def test_get_minute_candle():
     """Test 3: Minute Candle Data API (국내주식분봉조회)."""
     logger.info("\n" + "=" * 70)
     logger.info("TEST 3: get_minute_candle() - Minute Candle Data")
-    logger.info("API: [국내주식] 기본시세 > 국내주식분봉조회[v1_국내주식-024]")
+    logger.info("API: [국내주식] 기본시세 > 주식일별분봉조회[국내주식-213]")
     logger.info("=" * 70)
 
     symbol = "005930"
     test_intervals = [1, 5, 10, 30]
+    minute_date = os.getenv("HANTU_MINUTE_CANDLE_DATE")
 
     results = {}
     for interval in test_intervals:
         logger.info(f"\nTesting: {interval}-minute candles")
         try:
             candles = kdevelopers_client.get_minute_candle(
-                symbol=symbol, interval=interval, limit=5
+                symbol=symbol, interval=interval, limit=5, date=minute_date
             )
 
             if candles:
@@ -396,11 +397,11 @@ def generate_summary_report():
         },
         {
             "name": "get_minute_candle()",
-            "description": "국내주식분봉조회 - Minute Candle Data",
-            "api_path": "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice",
-            "tr_id": "FHKST03010200",
+            "description": "주식일별분봉조회 - Minute Candle Data",
+            "api_path": "/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice",
+            "tr_id": "FHKST03010230",
             "file": "03_get_minute_candle.json",
-            "parameters": ["symbol", "interval", "limit"],
+            "parameters": ["symbol", "interval", "limit", "date", "time_str"],
             "returns": "List[KoreanCandleData]",
         },
         {

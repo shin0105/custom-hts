@@ -6,6 +6,7 @@ to fetch stock quotes, candle charts, and account balance.
 """
 
 import asyncio
+from datetime import datetime
 from src.services.korean_market import korean_market_service
 
 
@@ -51,10 +52,12 @@ async def main():
     
     # 3. Get minute candle data
     print(f"\n3. Getting minute candle data for {symbol}...")
+    minute_date = datetime.now().strftime("%Y%m%d")
     minute_candles = await korean_market_service.get_minute_candle(
         symbol=symbol,
         interval=5,  # 5-minute intervals
-        limit=5  # Last 5 candles
+        limit=5,  # Last 5 candles
+        date=minute_date,
     )
     if minute_candles:
         print(f"   Retrieved {len(minute_candles)} minute candles:")

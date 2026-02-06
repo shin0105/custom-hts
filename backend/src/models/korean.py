@@ -62,7 +62,7 @@ class KoreanCandleData(BaseModel):
         ...,
         description=(
             "Candle date/time (YYYYMMDD for daily/period candles, "
-            "HHMMSS for minute candles)"
+            "YYYYMMDDHHMMSS for minute candles)"
         ),
     )
     open: float = Field(..., description="Opening price in KRW")

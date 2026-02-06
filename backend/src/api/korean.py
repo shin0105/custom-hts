@@ -152,6 +152,12 @@ async def get_korean_minute_candle(
         MinuteInterval.ONE, description="Minute interval (1, 5, 10, 30, 60)"
     ),
     limit: int = Query(100, ge=1, le=500, description="Number of candles"),
+    date: Optional[str] = Query(
+        None, description="Trading date in YYYYMMDD (defaults to today in KST)"
+    ),
+    time_str: str = Query(
+        "", description="Time filter in HHMMSS (empty returns all)"
+    ),
 ) -> List[KoreanCandleData]:
     """
     Get minute candle chart data for a Korean stock.
@@ -165,7 +171,7 @@ async def get_korean_minute_candle(
         List of minute candle data (OHLCV)
     """
     candles = await korean_market_service.get_minute_candle(
-        symbol, interval.value, limit
+        symbol, interval.value, limit, date=date, time_str=time_str
     )
     if not candles:
         raise HTTPException(
