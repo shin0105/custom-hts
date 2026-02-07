@@ -24,6 +24,32 @@ export const USMarketPage: React.FC = () => {
   const [endDate, setEndDate] = useState<string>('');
   const [startTime, setStartTime] = useState<string>('09:30');
 
+  const intradayIntervals: USInterval[] = ['1m', '5m', '15m', '30m', '60m'];
+  const isIntradayInterval = (value: USInterval) =>
+    intradayIntervals.includes(value);
+
+  const applyStartTimeFilter = (candles: USCandleData[]) => {
+    if (!startTime || !isIntradayInterval(interval)) return candles;
+    const [startH, startM] = startTime.split(':').map(Number);
+    const startMinutes = startH * 60 + startM;
+    const tz = 'America/New_York';
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+
+    return candles.filter((c) => {
+      const parsed = new Date(c.date.replace(' ', 'T'));
+      if (Number.isNaN(parsed.getTime())) return true;
+      const parts = formatter.formatToParts(parsed);
+      const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
+      const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
+      return hour * 60 + minute >= startMinutes;
+    });
+  };
+
   const handleSearch = async () => {
     setLoading(true);
     setError(null);
@@ -61,27 +87,7 @@ export const USMarketPage: React.FC = () => {
         startDate || undefined,
         endDate || undefined
       );
-      if (startTime) {
-        const [startH, startM] = startTime.split(':').map(Number);
-        const startMinutes = startH * 60 + startM;
-        const tz = 'America/New_York';
-        const formatter = new Intl.DateTimeFormat('en-US', {
-          timeZone: tz,
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-        });
-
-        candles = candles.filter((c) => {
-          const parsed = new Date(c.date.replace(' ', 'T'));
-          if (Number.isNaN(parsed.getTime())) return true;
-          const parts = formatter.formatToParts(parsed);
-          const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
-          const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
-          return hour * 60 + minute >= startMinutes;
-        });
-      }
-      setCandleData(candles);
+      setCandleData(applyStartTimeFilter(candles));
     } catch (err) {
       console.error('Failed to load candle data:', err);
       setCandleData([]);
@@ -100,27 +106,7 @@ export const USMarketPage: React.FC = () => {
             startDate || undefined,
             endDate || undefined
           );
-          if (startTime) {
-            const [startH, startM] = startTime.split(':').map(Number);
-            const startMinutes = startH * 60 + startM;
-            const tz = 'America/New_York';
-            const formatter = new Intl.DateTimeFormat('en-US', {
-              timeZone: tz,
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: false,
-            });
-
-            candles = candles.filter((c) => {
-              const parsed = new Date(c.date.replace(' ', 'T'));
-              if (Number.isNaN(parsed.getTime())) return true;
-              const parts = formatter.formatToParts(parsed);
-              const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
-              const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
-              return hour * 60 + minute >= startMinutes;
-            });
-          }
-          setCandleData(candles);
+          setCandleData(applyStartTimeFilter(candles));
         } catch (err) {
           console.error('Failed to load candle data:', err);
           setCandleData([]);

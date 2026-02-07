@@ -8,7 +8,6 @@ Reference: https://github.com/koreainvestment/open-trading-api/tree/main/stocks_
 """
 
 import urllib.request
-import ssl
 import zipfile
 import os
 import logging
@@ -87,9 +86,6 @@ class StockMasterFileManager:
             return True
 
         try:
-            # Disable SSL verification for download
-            ssl._create_default_https_context = ssl._create_unverified_context
-
             url = f"{self.BASE_URL}/{zip_filename}"
             logger.info(f"Downloading {market} master file from {url}...")
 

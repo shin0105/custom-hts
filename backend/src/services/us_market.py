@@ -1,6 +1,7 @@
 """Service layer for US market operations."""
 
 from typing import Optional, List
+from starlette.concurrency import run_in_threadpool
 from datetime import datetime
 from ..models.us import USStockQuote, USFinancialStatement, USCandleData
 from ..integrations.yfinance_client import yfinance_client
@@ -37,8 +38,11 @@ class USMarketService:
         """
         # Try to get from cache first if enabled
         if use_cache:
-            cached = await supabase_client.get_financial_statement(
-                "us_financials", symbol, datetime.now().year
+            cached = await run_in_threadpool(
+                supabase_client.get_financial_statement,
+                "us_financials",
+                symbol,
+                datetime.now().year,
             )
             if cached:
                 # Return cached data as list
@@ -50,8 +54,10 @@ class USMarketService:
         # Cache the data if fetched successfully
         if statements and supabase_client.client:
             for statement in statements:
-                await supabase_client.save_financial_statement(
-                    "us_financials", statement.model_dump()
+                await run_in_threadpool(
+                    supabase_client.save_financial_statement,
+                    "us_financials",
+                    statement.model_dump(),
                 )
 
         return statements

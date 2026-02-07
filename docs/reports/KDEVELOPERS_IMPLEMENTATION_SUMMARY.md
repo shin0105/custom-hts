@@ -41,7 +41,7 @@ Successfully implemented comprehensive integration with Korean Investment Securi
   - Profit/loss (amount and percentage)
   - List of stock positions
 - **Transaction ID**: TTTC8434R (real) / VTTC8434R (mock)
-- **Endpoint**: `GET /api/korean/account/{account_number}`
+- **Endpoint**: `GET /api/korean/account`
 
 ## Technical Implementation
 
@@ -190,7 +190,7 @@ curl "http://localhost:8000/api/korean/candle/005930?period=D&limit=100"
 curl "http://localhost:8000/api/korean/candle-minute/005930?interval=5"
 
 # Account balance
-curl http://localhost:8000/api/korean/account/12345678
+curl "http://localhost:8000/api/korean/account?account_product_code=01"
 ```
 
 ## Security Considerations

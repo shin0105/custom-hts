@@ -1,12 +1,14 @@
 """OPENDART API client for Korean financial statements."""
 
 import requests
+import json
 import zipfile
 import io
 import xml.etree.ElementTree as ET
 import logging
+from pathlib import Path
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from ..utils.config import settings
 from ..models.korean import KoreanFinancialStatement
 from ..utils.helpers import safe_float, safe_int
@@ -32,7 +34,14 @@ class OpenDartClient:
         self.api_key = settings.DART_API_KEY
         self.base_url = settings.DART_BASE_URL
         self._corp_code_cache: Dict[str, str] = {}
+        self._corp_code_cache_path = (
+            Path(__file__).parent.parent / "data" / "opendart" / "corp_codes.json"
+        )
+        self._corp_code_cache_ttl = timedelta(hours=24)
+        self._corp_code_cache_loaded_at: Optional[datetime] = None
+        self._corp_code_cache_path.parent.mkdir(parents=True, exist_ok=True)
         self._load_common_corp_codes()
+        self._load_cached_corp_codes()
 
     def _load_common_corp_codes(self) -> None:
         """
@@ -56,12 +65,48 @@ class OpenDartClient:
             "300120": "00164779",  # Korean company (placeholder - should be updated with correct code)
         }
         
-        # Try to download full corp code list on initialization
-        # This will update the cache with all available corp codes
+        # Full corp code list is loaded lazily to avoid startup network calls.
+
+    def _load_cached_corp_codes(self) -> None:
+        if not self._corp_code_cache_path.exists():
+            return
+
         try:
-            self.download_corp_code_list()
+            with self._corp_code_cache_path.open("r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+            timestamp = payload.get("timestamp")
+            codes = payload.get("codes")
+            if not timestamp or not isinstance(codes, dict):
+                return
+
+            loaded_at = datetime.fromisoformat(timestamp)
+            if loaded_at.tzinfo is None:
+                loaded_at = loaded_at.replace(tzinfo=timezone.utc)
+
+            if datetime.now(timezone.utc) - loaded_at > self._corp_code_cache_ttl:
+                logger.info("Cached corp code list expired; will refresh on demand.")
+                return
+
+            self._corp_code_cache.update(codes)
+            self._corp_code_cache_loaded_at = loaded_at
         except Exception as e:
-            logger.warning(f"Could not download full corp code list: {e}. Using hardcoded mapping.")
+            logger.warning(f"Failed to load cached corp code list: {e}")
+
+    def _should_refresh_corp_code_cache(self) -> bool:
+        if self._corp_code_cache_loaded_at is None:
+            return True
+        return (
+            datetime.now(timezone.utc) - self._corp_code_cache_loaded_at
+            > self._corp_code_cache_ttl
+        )
+
+    def _persist_corp_code_cache(self) -> None:
+        payload = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "codes": self._corp_code_cache,
+        }
+        with self._corp_code_cache_path.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
 
     def get_corp_code(self, stock_code: str) -> Optional[str]:
         """
@@ -81,6 +126,10 @@ class OpenDartClient:
         
         # Check cache first
         corp_code = self._corp_code_cache.get(stock_code)
+
+        if not corp_code and self._should_refresh_corp_code_cache():
+            if self.download_corp_code_list():
+                corp_code = self._corp_code_cache.get(stock_code)
         
         if not corp_code:
             logger.warning(
@@ -127,6 +176,8 @@ class OpenDartClient:
                     # Only add entries with valid stock codes
                     self._corp_code_cache[stock_code.strip()] = corp_code.strip()
             
+            self._corp_code_cache_loaded_at = datetime.now(timezone.utc)
+            self._persist_corp_code_cache()
             logger.info(f"Successfully loaded {len(self._corp_code_cache)} corp codes")
             return True
             
@@ -502,6 +553,10 @@ class OpenDartClient:
         # First try as stock code
         stock_code = corp_name_or_stock_code.strip().zfill(6)
         corp_code = self._corp_code_cache.get(stock_code)
+
+        if not corp_code and self._should_refresh_corp_code_cache():
+            if self.download_corp_code_list():
+                corp_code = self._corp_code_cache.get(stock_code)
         
         if corp_code:
             return corp_code

@@ -39,6 +39,14 @@ class FinancialDataResponse(BaseModel):
     message: Optional[str] = None
 
 
+class BatchInsertRequest(BaseModel):
+    """Request model for batch insertion endpoints."""
+
+    symbols: List[str]
+    year: int
+    quarters: Optional[List[int]] = None
+
+
 # ============================================================================
 # Korean Financial Statement Endpoints
 # ============================================================================
@@ -392,9 +400,7 @@ async def get_us_cashflow(
 
 @router.post("/korean/statements/batch-insert")
 async def batch_insert_korean_statements(
-    symbols: List[str],
-    year: int,
-    quarters: Optional[List[int]] = None,
+    request: BatchInsertRequest,
 ) -> Dict[str, Any]:
     """
     Insert financial statements for multiple Korean companies.
@@ -408,17 +414,19 @@ async def batch_insert_korean_statements(
         Summary of insertions
     """
     try:
-        if quarters is None:
+        if request.quarters is None:
             quarters = [None]  # Annual only
+        else:
+            quarters = request.quarters
 
         results = {}
-        for symbol in symbols:
+        for symbol in request.symbols:
             symbol_results = {}
             for quarter in quarters:
-                period_key = f"{year}Q{quarter}" if quarter else str(year)
+                period_key = f"{request.year}Q{quarter}" if quarter else str(request.year)
                 symbol_results[period_key] = (
                     financial_statement_service.insert_all_korean_statements(
-                        symbol, year, quarter
+                        symbol, request.year, quarter
                     )
                 )
             results[symbol] = symbol_results
@@ -431,9 +439,7 @@ async def batch_insert_korean_statements(
 
 @router.post("/us/statements/batch-insert")
 async def batch_insert_us_statements(
-    symbols: List[str],
-    year: int,
-    quarters: Optional[List[int]] = None,
+    request: BatchInsertRequest,
 ) -> Dict[str, Any]:
     """
     Insert financial statements for multiple US companies.
@@ -447,17 +453,19 @@ async def batch_insert_us_statements(
         Summary of insertions
     """
     try:
-        if quarters is None:
+        if request.quarters is None:
             quarters = [None]  # Annual only
+        else:
+            quarters = request.quarters
 
         results = {}
-        for symbol in symbols:
+        for symbol in request.symbols:
             symbol_results = {}
             for quarter in quarters:
-                period_key = f"{year}Q{quarter}" if quarter else str(year)
+                period_key = f"{request.year}Q{quarter}" if quarter else str(request.year)
                 symbol_results[period_key] = (
                     financial_statement_service.insert_all_us_statements(
-                        symbol, year, quarter
+                        symbol, request.year, quarter
                     )
                 )
             results[symbol] = symbol_results

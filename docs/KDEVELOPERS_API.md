@@ -64,7 +64,7 @@ Note: These master files (.mst) contain stock codes, names, and other metadata. 
 
 #### Get Account Balance
 - **KIS API Endpoint**: `/uapi/domestic-stock/v1/trading/inquire-balance`
-- **Backend Endpoint**: `GET /api/korean/account/{account_number}`
+- **Backend Endpoint**: `GET /api/korean/account`
 - **Method**: GET
 - **Transaction ID**:
   - Real: `TTTC8434R`
@@ -91,7 +91,7 @@ Note: These master files (.mst) contain stock codes, names, and other metadata. 
   - `PRCS_DVSN`: Process type
     - `00`: Include previous day trades
     - `01`: Exclude previous day trades
-- **Example**: `/api/korean/account/12345678-01`
+- **Example**: `curl "http://localhost:8000/api/korean/account?account_product_code=01"`
 - **Response**: Account balance information and list of stock positions
 
 

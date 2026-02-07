@@ -67,7 +67,7 @@ backend/
 - `GET /api/korean/quote/{symbol}` - Get real-time quote
 - `GET /api/korean/candle/{symbol}` - Get daily/weekly/monthly candle data
 - `GET /api/korean/candle-minute/{symbol}` - Get minute candle data
-- `GET /api/korean/account/{account_number}` - Get account balance and positions ⚠️ **Requires authentication (not yet implemented)**
+- `GET /api/korean/account` - Get account balance and positions
 - `GET /api/korean/financials/{symbol}` - Get financial statements
 - `GET /api/korean/search` - Search Korean stocks
 
@@ -86,6 +86,7 @@ HANTU_API_SECRET=your_korean_investment_api_secret
 DART_API_KEY=your_opendart_api_key
 SUPABASE_URL=your_supabase_url
 SUPABASE_KEY=your_supabase_key
+HANTU_ACCOUNT_NUMBER=your_8_digit_account_number
 ```
 
 ## Testing

@@ -34,7 +34,7 @@ class SupabaseClient:
         """Get the Supabase client instance."""
         return self._client
 
-    async def save_financial_statement(
+    def save_financial_statement(
         self, table: str, data: dict[str, Any]
     ) -> bool:
         """
@@ -65,7 +65,7 @@ class SupabaseClient:
             print(f"Failed to save financial statement: {e}")
             return False
 
-    async def get_financial_statement(
+    def get_financial_statement(
         self, table: str, symbol: str, year: int, quarter: Optional[int] = None
     ) -> Optional[dict[str, Any]]:
         """

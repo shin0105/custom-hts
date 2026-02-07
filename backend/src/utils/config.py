@@ -24,6 +24,9 @@ class Settings:
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
 
+    # Korean account number
+    HANTU_ACCOUNT_NUMBER: str = os.getenv("HANTU_ACCOUNT_NUMBER", "")
+
     # API Configuration
     API_V1_PREFIX: str = "/api"
     PROJECT_NAME: str = "Custom HTS Backend"
@@ -51,6 +54,8 @@ class Settings:
             missing.append("SUPABASE_URL")
         if not cls.SUPABASE_KEY:
             missing.append("SUPABASE_KEY")
+        if not cls.HANTU_ACCOUNT_NUMBER:
+            missing.append("HANTU_ACCOUNT_NUMBER")
 
         if missing:
             print(

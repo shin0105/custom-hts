@@ -10,6 +10,7 @@ from ..models.korean import (
     KoreanCandleData,
 )
 from ..services.korean_market import korean_market_service
+from ..utils.config import settings
 from ..integrations.opendart import opendart_client
 
 
@@ -175,9 +176,8 @@ async def get_korean_minute_candle(
     return candles
 
 
-@router.get("/account/{account_number}")
+@router.get("/account")
 async def get_korean_account_balance(
-    account_number: str,
     account_product_code: str = Query(
         "01", description="Account product code"
     ),
@@ -185,18 +185,18 @@ async def get_korean_account_balance(
     """
     Get account balance and stock positions.
 
-    WARNING: This endpoint currently lacks authentication and authorization.
-    In production, this should be protected with user authentication and
-    the account_number should be derived from the authenticated user context
-    rather than being a path parameter accessible by anyone.
-
     Args:
-        account_number: Account number (8 digits)
         account_product_code: Account product code (default: "01")
 
     Returns:
         Account balance and list of stock positions
     """
+    account_number = settings.HANTU_ACCOUNT_NUMBER.strip()
+    if not (account_number.isdigit() and len(account_number) == 8):
+        raise HTTPException(
+            status_code=500,
+            detail="HANTU_ACCOUNT_NUMBER is not configured correctly",
+        )
     result = await korean_market_service.get_account_balance(
         account_number, account_product_code
     )
