@@ -43,6 +43,32 @@ export interface KoreanCandleData {
   change_percent?: number;
 }
 
+export interface KoreanAccountBalance {
+  account_number: string;
+  total_evaluation: number;
+  cash_balance: number;
+  investment_amount: number;
+  profit_loss: number;
+  profit_loss_percent: number;
+  timestamp: string;
+}
+
+export interface KoreanStockPosition {
+  symbol: string;
+  name: string;
+  quantity: number;
+  average_price: number;
+  current_price: number;
+  evaluation_amount: number;
+  profit_loss: number;
+  profit_loss_percent: number;
+}
+
+export interface KoreanAccountResponse {
+  balance: KoreanAccountBalance;
+  positions: KoreanStockPosition[];
+}
+
 export type ChartInterval = 'daily' | 'minute';
 export type MinuteInterval = 1 | 5 | 10 | 30 | 60;
 export type PeriodType = 'D' | 'W' | 'M';

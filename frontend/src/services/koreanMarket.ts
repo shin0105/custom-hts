@@ -9,6 +9,7 @@ import type {
   KoreanCandleData,
   PeriodType,
   MinuteInterval,
+  KoreanAccountResponse,
 } from '../types/korean';
 
 const API_BASE_URL = '/api';
@@ -121,6 +122,17 @@ export const koreanMarketService = {
 
     const response = await axios.get(
       `${API_BASE_URL}/korean/financials/${symbol}/all?${params}`
+    );
+    return response.data;
+  },
+
+  /**
+   * Get Korean account balance and positions.
+   */
+  async getAccountBalance(accountProductCode = '01'): Promise<KoreanAccountResponse> {
+    const params = new URLSearchParams({ account_product_code: accountProductCode });
+    const response = await axios.get<KoreanAccountResponse>(
+      `${API_BASE_URL}/korean/account?${params}`
     );
     return response.data;
   },

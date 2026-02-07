@@ -77,6 +77,26 @@ export const HomePage: React.FC = () => {
             Track NYSE & NASDAQ stocks with comprehensive data from Yahoo Finance
           </p>
         </Link>
+
+        <Link
+          to="/account-check"
+          style={cardStyle}
+          onMouseOver={(e) => {
+            e.currentTarget.style.transform = 'translateY(-4px)';
+            e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
+          <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '12px' }}>
+            🧾 Account Check
+          </h2>
+          <p style={{ color: '#6b7280' }}>
+            View Korean stock account balance API parameters and response fields
+          </p>
+        </Link>
       </div>
 
       <div

@@ -195,7 +195,7 @@ async def get_korean_account_balance(
     if not (account_number.isdigit() and len(account_number) == 8):
         raise HTTPException(
             status_code=500,
-            detail="HANTU_ACCOUNT_NUMBER is not configured correctly",
+            detail="HANTU_ACCOUNT_NUMBER (or HANTU_BANK_ACCOUNT) is not configured correctly",
         )
     result = await korean_market_service.get_account_balance(
         account_number, account_product_code

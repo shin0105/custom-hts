@@ -25,7 +25,12 @@ class Settings:
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
 
     # Korean account number
-    HANTU_ACCOUNT_NUMBER: str = os.getenv("HANTU_ACCOUNT_NUMBER", "")
+    HANTU_BANK_ACCOUNT: str = os.getenv(
+        "HANTU_BANK_ACCOUNT", os.getenv("hantu_bank_account", "")
+    )
+    HANTU_ACCOUNT_NUMBER: str = os.getenv(
+        "HANTU_ACCOUNT_NUMBER", ""
+    ) or HANTU_BANK_ACCOUNT
 
     # API Configuration
     API_V1_PREFIX: str = "/api"
@@ -55,7 +60,7 @@ class Settings:
         if not cls.SUPABASE_KEY:
             missing.append("SUPABASE_KEY")
         if not cls.HANTU_ACCOUNT_NUMBER:
-            missing.append("HANTU_ACCOUNT_NUMBER")
+            missing.append("HANTU_ACCOUNT_NUMBER or HANTU_BANK_ACCOUNT")
 
         if missing:
             print(

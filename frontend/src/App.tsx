@@ -8,6 +8,7 @@ import { Navigation } from './components/Navigation';
 import { HomePage } from './pages/HomePage';
 import { KoreanMarketPage } from './pages/KoreanMarketPage';
 import { USMarketPage } from './pages/USMarketPage';
+import { AccountCheckPage } from './pages/AccountCheckPage';
 
 export const App: React.FC = () => {
   return (
@@ -18,6 +19,7 @@ export const App: React.FC = () => {
           <Route path="/" element={<HomePage />} />
           <Route path="/korean" element={<KoreanMarketPage />} />
           <Route path="/us" element={<USMarketPage />} />
+          <Route path="/account-check" element={<AccountCheckPage />} />
         </Routes>
       </div>
     </Router>
