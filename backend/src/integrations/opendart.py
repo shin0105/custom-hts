@@ -1,6 +1,5 @@
 """OPENDART API client for Korean financial statements."""
 
-import requests
 import json
 import zipfile
 import io
@@ -9,9 +8,9 @@ import logging
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta, timezone
+import requests
 from ..utils.config import settings
 from ..models.korean import KoreanFinancialStatement
-from ..utils.helpers import safe_float, safe_int
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -20,9 +19,9 @@ logger = logging.getLogger(__name__)
 class OpenDartClient:
     """
     Client for OPENDART API.
-    
+
     API Documentation: https://opendart.fss.or.kr/
-    
+
     Key endpoints:
     - fnlttSinglAcntAll.json: Get all financial statements
     - company.json: Get company information
@@ -35,7 +34,10 @@ class OpenDartClient:
         self.base_url = settings.DART_BASE_URL
         self._corp_code_cache: Dict[str, str] = {}
         self._corp_code_cache_path = (
-            Path(__file__).parent.parent / "data" / "opendart" / "corp_codes.json"
+            Path(__file__).parent.parent
+            / "data"
+            / "opendart"
+            / "corp_codes.json"
         )
         self._corp_code_cache_ttl = timedelta(hours=24)
         self._corp_code_cache_loaded_at: Optional[datetime] = None
@@ -46,7 +48,7 @@ class OpenDartClient:
     def _load_common_corp_codes(self) -> None:
         """
         Load commonly used corp codes for major Korean companies.
-        
+
         In production, you should download the full corp code list from DART.
         This is a hardcoded mapping for demonstration purposes.
         """
@@ -64,7 +66,7 @@ class OpenDartClient:
             "012330": "00164485",  # Hyundai Mobis
             "300120": "00164779",  # Korean company (placeholder - should be updated with correct code)
         }
-        
+
         # Full corp code list is loaded lazily to avoid startup network calls.
 
     def _load_cached_corp_codes(self) -> None:
@@ -72,7 +74,9 @@ class OpenDartClient:
             return
 
         try:
-            with self._corp_code_cache_path.open("r", encoding="utf-8") as handle:
+            with self._corp_code_cache_path.open(
+                "r", encoding="utf-8"
+            ) as handle:
                 payload = json.load(handle)
             timestamp = payload.get("timestamp")
             codes = payload.get("codes")
@@ -83,8 +87,13 @@ class OpenDartClient:
             if loaded_at.tzinfo is None:
                 loaded_at = loaded_at.replace(tzinfo=timezone.utc)
 
-            if datetime.now(timezone.utc) - loaded_at > self._corp_code_cache_ttl:
-                logger.info("Cached corp code list expired; will refresh on demand.")
+            if (
+                datetime.now(timezone.utc) - loaded_at
+                > self._corp_code_cache_ttl
+            ):
+                logger.info(
+                    "Cached corp code list expired; will refresh on demand."
+                )
                 return
 
             self._corp_code_cache.update(codes)
@@ -111,7 +120,7 @@ class OpenDartClient:
     def get_corp_code(self, stock_code: str) -> Optional[str]:
         """
         Get DART corporation code from stock code.
-        
+
         DART uses 8-digit corporation codes which are different from
         6-digit stock codes. This method provides a cached mapping.
 
@@ -123,74 +132,78 @@ class OpenDartClient:
         """
         # Remove any spaces and pad with zeros if needed
         stock_code = stock_code.strip().zfill(6)
-        
+
         # Check cache first
         corp_code = self._corp_code_cache.get(stock_code)
 
         if not corp_code and self._should_refresh_corp_code_cache():
             if self.download_corp_code_list():
                 corp_code = self._corp_code_cache.get(stock_code)
-        
+
         if not corp_code:
             logger.warning(
                 f"Corp code not found for {stock_code}. "
                 "Add to mapping or download corp code list."
             )
-        
+
         return corp_code
-    
+
     def download_corp_code_list(self) -> bool:
         """
         Download and parse the complete corp code list from DART.
-        
+
         This downloads a ZIP file containing XML with all corp codes.
         Updates the internal cache with the mapping.
-        
+
         Returns:
             True if successful, False otherwise
         """
         if not self.api_key:
             print("DART API key not configured")
             return False
-            
+
         try:
             url = f"{self.base_url}/corpCode.xml"
             params = {"crtfc_key": self.api_key}
-            
+
             response = requests.get(url, params=params, timeout=30)
             response.raise_for_status()
-            
+
             # Extract ZIP file
             with zipfile.ZipFile(io.BytesIO(response.content)) as zip_file:
                 xml_content = zip_file.read("CORPCODE.xml")
-            
+
             # Parse XML
             root = ET.fromstring(xml_content)
-            
+
             # Extract mappings
             for corp in root.findall("list"):
                 corp_code = corp.findtext("corp_code", "")
                 stock_code = corp.findtext("stock_code", "")
-                
+
                 if corp_code and stock_code and stock_code.strip():
                     # Only add entries with valid stock codes
-                    self._corp_code_cache[stock_code.strip()] = corp_code.strip()
-            
+                    self._corp_code_cache[stock_code.strip()] = (
+                        corp_code.strip()
+                    )
+
             self._corp_code_cache_loaded_at = datetime.now(timezone.utc)
             self._persist_corp_code_cache()
-            logger.info(f"Successfully loaded {len(self._corp_code_cache)} corp codes")
+            logger.info(
+                f"Successfully loaded {len(self._corp_code_cache)} corp codes"
+            )
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to download corp code list: {e}")
             return False
 
     def get_financial_statement(
-        self, 
-        symbol: str, 
-        year: int, 
+        self,
+        symbol: str,
+        year: int,
         quarter: Optional[int] = None,
-        fs_div: str = "CFS"
+        fs_div: str = "CFS",
     ) -> Optional[KoreanFinancialStatement]:
         """
         Get financial statement for a Korean company.
@@ -217,7 +230,12 @@ class OpenDartClient:
             # Determine report code based on quarter
             if quarter:
                 # Quarterly reports: 11013 (Q1), 11012 (Q2), 11014 (Q3), 11011 (Annual/Q4)
-                quarter_codes = {1: "11013", 2: "11012", 3: "11014", 4: "11011"}
+                quarter_codes = {
+                    1: "11013",
+                    2: "11012",
+                    3: "11014",
+                    4: "11011",
+                }
                 reprt_code = quarter_codes.get(quarter, "11011")
             else:
                 reprt_code = "11011"  # Annual report
@@ -236,7 +254,7 @@ class OpenDartClient:
                 f"Fetching financial data for {symbol} "
                 f"(corp_code: {corp_code}), year: {year}, quarter: {quarter}"
             )
-            
+
             response = requests.get(url, params=params, timeout=30)
             response.raise_for_status()
 
@@ -280,22 +298,26 @@ class OpenDartClient:
                 updated_at=datetime.now(),
             )
         except requests.exceptions.RequestException as e:
-            logger.error(f"Network error fetching financial statement for {symbol}: {e}")
+            logger.error(
+                f"Network error fetching financial statement for {symbol}: {e}"
+            )
             return None
         except Exception as e:
-            logger.error(f"Failed to get financial statement for {symbol}: {e}")
+            logger.error(
+                f"Failed to get financial statement for {symbol}: {e}"
+            )
             return None
-    
+
     def get_financial_statement_raw(
         self,
         symbol: str,
         year: int,
         quarter: Optional[int] = None,
-        fs_div: str = "CFS"
+        fs_div: str = "CFS",
     ) -> Optional[List[Dict[str, Any]]]:
         """
         Get raw financial statement data from DART API.
-        
+
         This returns the complete, unprocessed data which includes all
         line items from balance sheet, income statement, and cash flow.
 
@@ -319,7 +341,12 @@ class OpenDartClient:
         try:
             # Determine report code
             if quarter:
-                quarter_codes = {1: "11013", 2: "11012", 3: "11014", 4: "11011"}
+                quarter_codes = {
+                    1: "11013",
+                    2: "11012",
+                    3: "11014",
+                    4: "11011",
+                }
                 reprt_code = quarter_codes.get(quarter, "11011")
             else:
                 reprt_code = "11011"
@@ -350,7 +377,7 @@ class OpenDartClient:
                 return None
 
             return data.get("list", [])
-            
+
         except Exception as e:
             logger.error(f"Failed to get raw financial data for {symbol}: {e}")
             return None
@@ -403,41 +430,38 @@ class OpenDartClient:
                     break
 
         return result
-    
+
     def get_balance_sheet(
-        self,
-        symbol: str,
-        year: int,
-        quarter: Optional[int] = None
+        self, symbol: str, year: int, quarter: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Get balance sheet data for a Korean company.
-        
+
         Returns a dictionary with balance sheet line items including:
         - Assets (current, non-current, total)
         - Liabilities (current, non-current, total)
         - Equity
-        
+
         Args:
             symbol: Stock code
             year: Fiscal year
             quarter: Optional quarter (1-4)
-            
+
         Returns:
             Dictionary with balance sheet data
         """
         raw_data = self.get_financial_statement_raw(symbol, year, quarter)
         if not raw_data:
             return {}
-        
+
         balance_sheet = {}
-        
+
         # Filter for balance sheet items (sj_div == "BS")
         for item in raw_data:
             if item.get("sj_div") == "BS":
                 account_nm = item.get("account_nm", "")
                 amount = item.get("thstrm_amount", "0")
-                
+
                 # Convert amount to float
                 try:
                     amount_str = str(amount).replace(",", "")
@@ -445,44 +469,41 @@ class OpenDartClient:
                         balance_sheet[account_nm] = float(amount_str)
                 except (ValueError, AttributeError):
                     balance_sheet[account_nm] = None
-        
+
         return balance_sheet
-    
+
     def get_income_statement(
-        self,
-        symbol: str,
-        year: int,
-        quarter: Optional[int] = None
+        self, symbol: str, year: int, quarter: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Get income statement data for a Korean company.
-        
+
         Returns a dictionary with income statement line items including:
         - Revenue
         - Operating income
         - Net income
         - EPS
-        
+
         Args:
             symbol: Stock code
             year: Fiscal year
             quarter: Optional quarter (1-4)
-            
+
         Returns:
             Dictionary with income statement data
         """
         raw_data = self.get_financial_statement_raw(symbol, year, quarter)
         if not raw_data:
             return {}
-        
+
         income_statement = {}
-        
+
         # Filter for income statement items (sj_div == "IS")
         for item in raw_data:
             if item.get("sj_div") == "IS":
                 account_nm = item.get("account_nm", "")
                 amount = item.get("thstrm_amount", "0")
-                
+
                 # Convert amount to float
                 try:
                     amount_str = str(amount).replace(",", "")
@@ -490,43 +511,40 @@ class OpenDartClient:
                         income_statement[account_nm] = float(amount_str)
                 except (ValueError, AttributeError):
                     income_statement[account_nm] = None
-        
+
         return income_statement
-    
+
     def get_cash_flow(
-        self,
-        symbol: str,
-        year: int,
-        quarter: Optional[int] = None
+        self, symbol: str, year: int, quarter: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Get cash flow statement data for a Korean company.
-        
+
         Returns a dictionary with cash flow line items including:
         - Operating activities
         - Investing activities
         - Financing activities
-        
+
         Args:
             symbol: Stock code
             year: Fiscal year
             quarter: Optional quarter (1-4)
-            
+
         Returns:
             Dictionary with cash flow data
         """
         raw_data = self.get_financial_statement_raw(symbol, year, quarter)
         if not raw_data:
             return {}
-        
+
         cash_flow = {}
-        
+
         # Filter for cash flow items (sj_div == "CF")
         for item in raw_data:
             if item.get("sj_div") == "CF":
                 account_nm = item.get("account_nm", "")
                 amount = item.get("thstrm_amount", "0")
-                
+
                 # Convert amount to float
                 try:
                     amount_str = str(amount).replace(",", "")
@@ -534,19 +552,19 @@ class OpenDartClient:
                         cash_flow[account_nm] = float(amount_str)
                 except (ValueError, AttributeError):
                     cash_flow[account_nm] = None
-        
+
         return cash_flow
-    
+
     def find_corp_code(self, corp_name_or_stock_code: str) -> Optional[str]:
         """
         Find corp code by company name or stock code.
-        
+
         This method searches the local cache first. If the corp code is not found,
         it will attempt to search through the downloaded corp code list if available.
-        
+
         Args:
             corp_name_or_stock_code: Company name or stock code
-            
+
         Returns:
             Corp code if found, None otherwise
         """
@@ -557,15 +575,15 @@ class OpenDartClient:
         if not corp_code and self._should_refresh_corp_code_cache():
             if self.download_corp_code_list():
                 corp_code = self._corp_code_cache.get(stock_code)
-        
+
         if corp_code:
             return corp_code
-        
+
         # If not found and looks like a stock code, log warning
         if stock_code.isdigit() and len(stock_code) == 6:
             logger.warning(f"Corp code not found for stock code {stock_code}")
             return None
-        
+
         # For company names, would need to download full corp code list
         # For now, return None and suggest downloading the full list
         logger.warning(
@@ -573,67 +591,64 @@ class OpenDartClient:
             "Call download_corp_code_list() to search by company name."
         )
         return None
-    
+
     def get_company_info(self, symbol: str) -> Optional[Dict[str, Any]]:
         """
         Get detailed company information from OPENDART.
-        
+
         Returns comprehensive company profile including CEO, address, industry, etc.
         This uses the OPENDART company.json endpoint.
-        
+
         Args:
             symbol: Stock code (e.g., "005930")
-            
+
         Returns:
             Dictionary with company information or None if not available
         """
         if not self.api_key:
             logger.warning("DART API key not configured")
             return None
-        
+
         corp_code = self.get_corp_code(symbol)
         if not corp_code:
             logger.warning(f"Corp code not found for symbol {symbol}")
             return None
-        
+
         try:
             url = f"{self.base_url}/company.json"
-            params = {
-                "crtfc_key": self.api_key,
-                "corp_code": corp_code
-            }
-            
+            params = {"crtfc_key": self.api_key, "corp_code": corp_code}
+
             response = requests.get(url, params=params, timeout=30)
             response.raise_for_status()
-            
+
             data = response.json()
-            
+
             # Check API response status
             status = data.get("status", "")
             if status != "000":
                 error_msg = data.get("message", "Unknown error")
                 logger.error(f"DART API error (status: {status}): {error_msg}")
                 return None
-            
+
             return data
-            
+
         except Exception as e:
             logger.error(f"Failed to get company info for {symbol}: {e}")
             return None
-    
+
     def get_disclosure_list(
         self,
         corp: Optional[str] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
         kind: Optional[str] = None,
-        final: bool = True
+        final: bool = True,
     ) -> Optional[List[Dict[str, Any]]]:
         """
         Get list of corporate disclosures from OPENDART.
-        
+
         This uses the OPENDART list.json endpoint to retrieve disclosure listings.
-        
+
         Args:
             corp: Stock code or company name (optional)
             start: Start date (YYYY-MM-DD or YYYYMMDD)
@@ -650,77 +665,75 @@ class OpenDartClient:
                 - 'I': Exchange disclosure (거래소공시)
                 - 'J': Fair Trade Commission (공정위공시)
             final: If True, only return final reports (exclude corrections)
-            
+
         Returns:
             List of disclosure dictionaries or None if not available
         """
         if not self.api_key:
             logger.warning("DART API key not configured")
             return None
-        
+
         try:
             url = f"{self.base_url}/list.json"
-            params = {
-                "crtfc_key": self.api_key
-            }
-            
+            params = {"crtfc_key": self.api_key}
+
             # Add corp_code if company specified
             if corp:
                 corp_code = self.find_corp_code(corp)
                 if corp_code:
                     params["corp_code"] = corp_code
-            
+
             # Add date parameters (convert to YYYYMMDD format if needed)
             if start:
                 params["bgn_de"] = start.replace("-", "")
             if end:
                 params["end_de"] = end.replace("-", "")
-            
+
             # Add disclosure type
             if kind:
                 params["pblntf_ty"] = kind
-            
+
             # Add final flag (Y/N)
             params["last_reprt_at"] = "Y" if final else "N"
-            
+
             response = requests.get(url, params=params, timeout=30)
             response.raise_for_status()
-            
+
             data = response.json()
-            
+
             # Check API response status
             status = data.get("status", "")
             if status != "000":
                 error_msg = data.get("message", "Unknown error")
                 logger.error(f"DART API error (status: {status}): {error_msg}")
                 return None
-            
+
             return data.get("list", [])
-            
+
         except Exception as e:
             logger.error(f"Failed to get disclosure list: {e}")
             return None
-    
+
     def get_finstate_all(
         self,
         symbol: str,
         year: int,
         reprt_code: str = "11011",
-        fs_div: str = "CFS"
+        fs_div: str = "CFS",
     ) -> Optional[List[Dict[str, Any]]]:
         """
         Get all financial statement line items.
-        
+
         This is an alias for get_financial_statement_raw() that returns
         comprehensive financial data with all line items, similar to
         OpenDartReader's finstate_all() method.
-        
+
         Args:
             symbol: Stock code
             year: Fiscal year
             reprt_code: Report code (11011=annual, 11013=Q1, 11012=Q2, 11014=Q3)
             fs_div: Financial statement division (CFS/OFS)
-            
+
         Returns:
             List of all financial statement line items or None
         """
@@ -729,10 +742,10 @@ class OpenDartClient:
             "11013": 1,
             "11012": 2,
             "11014": 3,
-            "11011": None  # Annual
+            "11011": None,  # Annual
         }
         quarter = quarter_map.get(reprt_code)
-        
+
         return self.get_financial_statement_raw(symbol, year, quarter, fs_div)
 
 

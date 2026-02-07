@@ -11,15 +11,14 @@ Key features:
 - Rate limiting support
 """
 
-import requests
 import json
 import hashlib
-import os
 import time
 import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone, timedelta
 from collections import namedtuple
+import requests
 from ..utils.config import settings
 from ..integrations.supabase_client import supabase_client
 from ..models.korean import (
@@ -246,9 +245,11 @@ class KDevelopersClient:
             # Token typically expires in 24 hours
             token_expired = data.get("access_token_token_expired")
             if token_expired:
-                self.token_expiry = datetime.strptime(
-                    token_expired, "%Y-%m-%d %H:%M:%S"
-                ).replace(tzinfo=self._kst_tz).astimezone(timezone.utc)
+                self.token_expiry = (
+                    datetime.strptime(token_expired, "%Y-%m-%d %H:%M:%S")
+                    .replace(tzinfo=self._kst_tz)
+                    .astimezone(timezone.utc)
+                )
             else:
                 self.token_expiry = datetime.now(timezone.utc)
 
@@ -350,6 +351,7 @@ class KDevelopersClient:
         Returns:
             APIResponse object with structured response data
         """
+
         def _do_request(auth_token: str) -> APIResponse:
             url = f"{self.base_url}{api_url}"
             headers = self._get_base_headers()
@@ -401,7 +403,11 @@ class KDevelopersClient:
         err_message = res.get_error_message()
         if err_code == "EGW00123":
             return True
-        if err_message and "token" in err_message.lower() and "만료" in err_message:
+        if (
+            err_message
+            and "token" in err_message.lower()
+            and "만료" in err_message
+        ):
             return True
         return False
 
@@ -549,9 +555,15 @@ class KDevelopersClient:
                     candles.append(candle)
 
                 if start_date or end_date:
-                    if start_date and (len(start_date) != 8 or not start_date.isdigit()):
-                        raise ValueError("start_date must be in YYYYMMDD format")
-                    if end_date and (len(end_date) != 8 or not end_date.isdigit()):
+                    if start_date and (
+                        len(start_date) != 8 or not start_date.isdigit()
+                    ):
+                        raise ValueError(
+                            "start_date must be in YYYYMMDD format"
+                        )
+                    if end_date and (
+                        len(end_date) != 8 or not end_date.isdigit()
+                    ):
                         raise ValueError("end_date must be in YYYYMMDD format")
                     if start_date and end_date and start_date > end_date:
                         start_date, end_date = end_date, start_date
@@ -563,7 +575,9 @@ class KDevelopersClient:
                             return False
                         return True
 
-                    candles = [c for c in candles if c.date and in_range(c.date)]
+                    candles = [
+                        c for c in candles if c.date and in_range(c.date)
+                    ]
 
                 return candles
             else:
@@ -632,7 +646,9 @@ class KDevelopersClient:
                 "FID_FAKE_TICK_INCU_YN": "",
             }
 
-            def fetch_day(day_date: str, start_time: str) -> list[dict[str, Any]]:
+            def fetch_day(
+                day_date: str, start_time: str
+            ) -> list[dict[str, Any]]:
                 day_rows: list[dict[str, Any]] = []
                 cursor_time = start_time
                 max_pages = 20
@@ -688,7 +704,9 @@ class KDevelopersClient:
             if include_previous:
                 try:
                     date_dt = datetime.strptime(date, "%Y%m%d")
-                    prev_date = (date_dt - timedelta(days=1)).strftime("%Y%m%d")
+                    prev_date = (date_dt - timedelta(days=1)).strftime(
+                        "%Y%m%d"
+                    )
                 except ValueError:
                     prev_date = None
 

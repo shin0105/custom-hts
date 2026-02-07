@@ -9,12 +9,10 @@ Reference: https://github.com/koreainvestment/open-trading-api/tree/main/stocks_
 
 import urllib.request
 import zipfile
-import os
 import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
 import pandas as pd
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 

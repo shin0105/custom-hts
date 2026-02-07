@@ -1,9 +1,8 @@
 """Yahoo Finance client for US market data."""
 
-import yfinance as yf
 from typing import Optional, List
-from datetime import datetime, timedelta
-import pandas as pd
+from datetime import datetime
+import yfinance as yf
 from ..models.us import USStockQuote, USFinancialStatement, USCandleData
 from ..utils.helpers import safe_float, safe_int, calculate_change_percent
 
@@ -73,7 +72,7 @@ class YFinanceClient:
             # Get annual financials
             financials = ticker.financials
             balance_sheet = ticker.balance_sheet
-            
+
             if financials is None or financials.empty:
                 return None
 
@@ -111,7 +110,9 @@ class YFinanceClient:
                         else None
                     )
                     total_liabilities = safe_float(
-                        balance_sheet.loc["Total Liabilities Net Minority Interest", date]
+                        balance_sheet.loc[
+                            "Total Liabilities Net Minority Interest", date
+                        ]
                         if "Total Liabilities Net Minority Interest"
                         in balance_sheet.index
                         else None
@@ -167,7 +168,7 @@ class YFinanceClient:
         """
         try:
             ticker = yf.Ticker(symbol)
-            
+
             # Download historical data
             if start and end:
                 hist = ticker.history(start=start, end=end, interval=interval)
@@ -180,7 +181,16 @@ class YFinanceClient:
             candles = []
             for index, row in hist.iterrows():
                 # Format date based on interval
-                if interval in ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"]:
+                if interval in [
+                    "1m",
+                    "2m",
+                    "5m",
+                    "15m",
+                    "30m",
+                    "60m",
+                    "90m",
+                    "1h",
+                ]:
                     # For intraday, use datetime format
                     date_str = index.strftime("%Y-%m-%d %H:%M:%S")
                 else:
@@ -190,7 +200,9 @@ class YFinanceClient:
                 open_price = safe_float(row.get("Open", 0))
                 close_price = safe_float(row.get("Close", 0))
                 change = close_price - open_price
-                change_percent = calculate_change_percent(close_price, open_price)
+                change_percent = calculate_change_percent(
+                    close_price, open_price
+                )
 
                 candle = USCandleData(
                     symbol=symbol.upper(),

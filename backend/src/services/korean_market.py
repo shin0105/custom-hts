@@ -1,7 +1,6 @@
 """Service layer for Korean market operations."""
 
 from typing import Optional, List, Dict, Any
-from datetime import datetime
 from ..models.korean import (
     KoreanStockQuote,
     KoreanFinancialStatement,
@@ -28,7 +27,11 @@ class KoreanMarketService:
         return kdevelopers_client.get_quote(symbol)
 
     async def get_financials(
-        self, symbol: str, year: int, quarter: Optional[int] = None, use_cache: bool = True
+        self,
+        symbol: str,
+        year: int,
+        quarter: Optional[int] = None,
+        use_cache: bool = True,
     ) -> Optional[KoreanFinancialStatement]:
         """
         Get financial statement for a Korean company.
@@ -48,7 +51,6 @@ class KoreanMarketService:
         )
 
         return statement
-
 
     async def get_daily_candle(
         self,

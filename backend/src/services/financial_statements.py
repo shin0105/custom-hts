@@ -1,9 +1,7 @@
 """Service for managing financial statement data insertion to Supabase."""
 
 import logging
-from typing import Optional, Dict, Any, List
-from datetime import datetime
-
+from typing import Optional, Dict, Any
 from ..integrations.supabase_client import supabase_client
 from ..integrations.opendart import opendart_client
 from ..integrations.yfinance_client import yfinance_client

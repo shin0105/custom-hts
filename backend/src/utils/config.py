@@ -1,7 +1,6 @@
 """Configuration management for the HTS backend application."""
 
 import os
-from typing import Optional
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -28,9 +27,9 @@ class Settings:
     HANTU_BANK_ACCOUNT: str = os.getenv(
         "HANTU_BANK_ACCOUNT", os.getenv("hantu_bank_account", "")
     )
-    HANTU_ACCOUNT_NUMBER: str = os.getenv(
-        "HANTU_ACCOUNT_NUMBER", ""
-    ) or HANTU_BANK_ACCOUNT
+    HANTU_ACCOUNT_NUMBER: str = (
+        os.getenv("HANTU_ACCOUNT_NUMBER", "") or HANTU_BANK_ACCOUNT
+    )
 
     # API Configuration
     API_V1_PREFIX: str = "/api"
