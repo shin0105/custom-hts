@@ -143,6 +143,7 @@ class KDevelopersClient:
         self.access_token: Optional[str] = None
         self.token_expiry: Optional[datetime] = None
         self._last_auth_time = datetime.now()
+        self._kst_tz = timezone(timedelta(hours=9))
 
         # Rate limiting (0.05s for real trading, 0.5s for paper trading)
         self._smart_sleep_time = 0.05
@@ -247,7 +248,7 @@ class KDevelopersClient:
             if token_expired:
                 self.token_expiry = datetime.strptime(
                     token_expired, "%Y-%m-%d %H:%M:%S"
-                ).replace(tzinfo=timezone.utc)
+                ).replace(tzinfo=self._kst_tz).astimezone(timezone.utc)
             else:
                 self.token_expiry = datetime.now(timezone.utc)
 
@@ -349,22 +350,18 @@ class KDevelopersClient:
         Returns:
             APIResponse object with structured response data
         """
-        token = self._get_access_token()
-        if not token:
-            raise Exception("Failed to get access token")
+        def _do_request(auth_token: str) -> APIResponse:
+            url = f"{self.base_url}{api_url}"
+            headers = self._get_base_headers()
 
-        url = f"{self.base_url}{api_url}"
-        headers = self._get_base_headers()
+            # Add authorization headers
+            headers["authorization"] = f"Bearer {auth_token}"
+            headers["appkey"] = self.api_key
+            headers["appsecret"] = self.api_secret
+            headers["tr_id"] = tr_id
+            headers["custtype"] = "P"  # Personal customer
+            headers["tr_cont"] = tr_cont
 
-        # Add authorization headers
-        headers["authorization"] = f"Bearer {token}"
-        headers["appkey"] = self.api_key
-        headers["appsecret"] = self.api_secret
-        headers["tr_id"] = tr_id
-        headers["custtype"] = "P"  # Personal customer
-        headers["tr_cont"] = tr_cont
-
-        try:
             if post_flag:
                 response = requests.post(
                     url, headers=headers, data=json.dumps(params), timeout=10
@@ -376,18 +373,48 @@ class KDevelopersClient:
 
             # Apply rate limiting
             self._smart_sleep()
+            return APIResponse(response)
 
-            if response.status_code == 200:
-                return APIResponse(response)
-            else:
+        token = self._get_access_token()
+        if not token:
+            raise Exception("Failed to get access token")
+
+        try:
+            res = _do_request(token)
+            if not res.is_ok() and self._is_token_expired_response(res):
+                self._purge_cached_token()
+                refreshed = self._get_access_token()
+                if not refreshed:
+                    return res
+                res = _do_request(refreshed)
+            if res.get_res_code() != 200:
                 logger.error(
-                    f"API Error: {response.status_code} - {response.text}"
+                    f"API Error: {res.get_res_code()} - {res.get_response().text}"
                 )
-                return APIResponse(response)
-
+            return res
         except Exception as e:
-            logger.error(f"Request failed for {url}: {e}")
+            logger.error(f"Request failed for {api_url}: {e}")
             raise
+
+    def _is_token_expired_response(self, res: APIResponse) -> bool:
+        err_code = res.get_error_code()
+        err_message = res.get_error_message()
+        if err_code == "EGW00123":
+            return True
+        if err_message and "token" in err_message.lower() and "만료" in err_message:
+            return True
+        return False
+
+    def _purge_cached_token(self) -> None:
+        self.access_token = None
+        self.token_expiry = None
+        api_key_hash = (
+            hashlib.sha256(self.api_key.encode("utf-8")).hexdigest()
+            if self.api_key
+            else ""
+        )
+        if api_key_hash and supabase_client.client:
+            supabase_client.delete_kdevelopers_token(api_key_hash)
 
     def get_quote(self, symbol: str) -> Optional[KoreanStockQuote]:
         """
