@@ -27,7 +27,7 @@ export const KoreanMarketPage: React.FC = () => {
   const [period, setPeriod] = useState<PeriodType>('D');
   const [minuteInterval, setMinuteInterval] = useState<MinuteInterval>(1);
   const [selectedDate, setSelectedDate] = useState<string>('');
-  const [minuteTime, setMinuteTime] = useState<string>('09:00');
+  const [minuteTime, setMinuteTime] = useState<string>('15:30');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
 
@@ -342,7 +342,7 @@ export const KoreanMarketPage: React.FC = () => {
             )}
 
             <div style={{ fontSize: '12px', color: '#6b7280' }}>
-              Minute time defaults to 09:00 KST.
+              Minute time defaults to 15:30 KST.
             </div>
           </div>
 

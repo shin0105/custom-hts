@@ -31,27 +31,6 @@ class MinuteInterval(int, Enum):
     SIXTY = 60
 
 
-from ..integrations.opendart import opendart_client
-
-
-class PeriodType(str, Enum):
-    """Valid period types for candle data."""
-
-    DAILY = "D"
-    WEEKLY = "W"
-    MONTHLY = "M"
-
-
-class MinuteInterval(int, Enum):
-    """Valid minute intervals for candle data."""
-
-    ONE = 1
-    FIVE = 5
-    TEN = 10
-    THIRTY = 30
-    SIXTY = 60
-
-
 router = APIRouter(prefix="/korean", tags=["Korean Market"])
 
 
@@ -247,9 +226,7 @@ async def get_korean_stock_info(
     Returns:
         Raw output list from KDevelopers search-stock-info API
     """
-    result = await korean_market_service.get_stock_info(
-        prdt_type_cd, pdno
-    )
+    result = await korean_market_service.get_stock_info(prdt_type_cd, pdno)
     if not result:
         raise HTTPException(
             status_code=404,
@@ -438,15 +415,21 @@ async def get_company_info(symbol: str) -> Dict[str, Any]:
 
 @router.get("/disclosures")
 async def get_disclosures(
-    corp: Optional[str] = Query(None, description="Stock code or company name (optional)"),
+    corp: Optional[str] = Query(
+        None, description="Stock code or company name (optional)"
+    ),
     start: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     end: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     kind: Optional[str] = Query(
         None,
         description="Disclosure type (A=regular, B=major, C=issue, etc.)",
     ),
-    final: bool = Query(True, description="Only final reports (exclude corrections)"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of results"),
+    final: bool = Query(
+        True, description="Only final reports (exclude corrections)"
+    ),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of results"
+    ),
 ) -> Dict[str, Any]:
     """
     Get list of corporate disclosures.
@@ -498,7 +481,9 @@ async def get_all_financials(
         le=4,
         description="Quarter (1-4 for quarterly, None for annual)",
     ),
-    fs_div: str = Query("CFS", description="Financial statement division (CFS/OFS)"),
+    fs_div: str = Query(
+        "CFS", description="Financial statement division (CFS/OFS)"
+    ),
 ) -> Dict[str, Any]:
     """
     Get comprehensive financial statements with all line items.
@@ -527,7 +512,9 @@ async def get_all_financials(
         reprt_code = "11011"
 
     requested_year = year
-    financials = opendart_client.get_finstate_all(symbol, year, reprt_code, fs_div)
+    financials = opendart_client.get_finstate_all(
+        symbol, year, reprt_code, fs_div
+    )
 
     if financials is None:
         raise HTTPException(

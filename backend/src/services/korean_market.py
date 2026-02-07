@@ -100,7 +100,7 @@ class KoreanMarketService:
             List of KoreanCandleData or None
         """
         max_per_day = 390 // interval if interval else 390
-        include_previous = limit is None or limit > max_per_day or bool(time_str)
+        include_previous = limit is not None and limit > max_per_day
         return kdevelopers_client.get_minute_candle(
             symbol,
             interval,

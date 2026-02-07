@@ -218,6 +218,11 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     }))
     .sort((a, b) => a.timestamp - b.timestamp);
 
+  const minTimestamp = chartData[0]?.timestamp ?? Date.now();
+  const maxTimestamp = chartData[chartData.length - 1]?.timestamp ?? minTimestamp;
+  const timeRange = Math.max(1, maxTimestamp - minTimestamp);
+  const timePadding = Math.max(60_000, Math.round(timeRange * 0.02));
+
   const formatVolume = (value: number) => {
     if (value >= 1_000_000) {
       return `${(value / 1_000_000).toFixed(1)}M`;
@@ -310,7 +315,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
             dataKey="timestamp"
             type="number"
             scale="time"
-            domain={['dataMin', 'dataMax']}
+            domain={[minTimestamp - timePadding, maxTimestamp + timePadding]}
             tick={{ fontSize: 12 }}
             minTickGap={24}
             tickFormatter={(value: number) =>
@@ -359,7 +364,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
             dataKey="timestamp"
             type="number"
             scale="time"
-            domain={['dataMin', 'dataMax']}
+            domain={[minTimestamp - timePadding, maxTimestamp + timePadding]}
             tick={{ fontSize: 12 }}
             minTickGap={24}
             tickFormatter={(value: number) =>
@@ -372,7 +377,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
               dataKey="timestamp"
               type="number"
               scale="time"
-              domain={['dataMin', 'dataMax']}
+              domain={[minTimestamp - timePadding, maxTimestamp + timePadding]}
               tick={{ fontSize: 11, fill: '#6b7280' }}
               minTickGap={24}
               orientation="bottom"

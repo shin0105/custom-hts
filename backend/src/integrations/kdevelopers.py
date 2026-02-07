@@ -591,7 +591,7 @@ class KDevelopersClient:
                 raise ValueError("time_str must be in HHMMSS format or empty")
 
             if not time_str:
-                time_str = "090000"
+                time_str = "153000"
 
             api_url = "/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice"
             tr_id = "FHKST03010230"
@@ -605,35 +605,68 @@ class KDevelopersClient:
                 "FID_FAKE_TICK_INCU_YN": "",
             }
 
+            def fetch_day(day_date: str, start_time: str) -> list[dict[str, Any]]:
+                day_rows: list[dict[str, Any]] = []
+                cursor_time = start_time
+                max_pages = 20
+
+                for _ in range(max_pages):
+                    params["FID_INPUT_DATE_1"] = day_date
+                    params["FID_INPUT_HOUR_1"] = cursor_time
+                    res = self._url_fetch(api_url, tr_id, "", params)
+
+                    if not res.is_ok():
+                        res.print_error(api_url)
+                        logger.error(
+                            f"Failed to get minute candle data for {symbol}"
+                        )
+                        return []
+
+                    batch = res.get_body().output2 or []
+                    if not batch:
+                        break
+
+                    day_rows.extend(batch)
+
+                    # Stop if we received fewer than 120 rows (no more pages).
+                    if len(batch) < 120:
+                        break
+
+                    # Move cursor to one second before the oldest candle in batch.
+                    oldest = min(
+                        batch,
+                        key=lambda x: x.get("stck_cntg_hour", "000000"),
+                    )
+                    oldest_time = oldest.get("stck_cntg_hour", "")
+                    if not oldest_time or len(oldest_time) != 6:
+                        break
+
+                    try:
+                        cursor_dt = datetime.strptime(
+                            f"{day_date}{oldest_time}", "%Y%m%d%H%M%S"
+                        ) - timedelta(seconds=1)
+                        cursor_time = cursor_dt.strftime("%H%M%S")
+                    except ValueError:
+                        break
+
+                    if cursor_time < "090000":
+                        break
+
+                return day_rows
+
             output_list: list[dict[str, Any]] = []
-            requested_date = date
-            max_days = 7 if include_previous or not date_provided else 1
-            for day_index in range(max_days):
-                params["FID_INPUT_DATE_1"] = date
-                if time_str:
-                    params["FID_INPUT_HOUR_1"] = (
-                        time_str if day_index == 0 else "235959"
-                    )
-                else:
-                    params["FID_INPUT_HOUR_1"] = ""
-                res = self._url_fetch(api_url, tr_id, "", params)
+            output_list.extend(fetch_day(date, time_str))
 
-                if not res.is_ok():
-                    res.print_error(api_url)
-                    logger.error(
-                        f"Failed to get minute candle data for {symbol}"
-                    )
-                    return None
-
-                day_rows = res.get_body().output2
-                if day_rows:
-                    output_list.extend(day_rows)
-
+            # Optionally include previous days if explicitly requested.
+            if include_previous:
                 try:
                     date_dt = datetime.strptime(date, "%Y%m%d")
-                    date = (date_dt - timedelta(days=1)).strftime("%Y%m%d")
+                    prev_date = (date_dt - timedelta(days=1)).strftime("%Y%m%d")
                 except ValueError:
-                    break
+                    prev_date = None
+
+                if prev_date:
+                    output_list.extend(fetch_day(prev_date, "153000"))
 
             if not output_list:
                 return None
@@ -660,6 +693,15 @@ class KDevelopersClient:
 
             if not minute_rows:
                 return None
+
+            # Constrain to selected date and time window (09:00 -> selected time).
+            selected_time = time_str or "153000"
+            minute_rows = [
+                row
+                for row in minute_rows
+                if row["dt_key"][:8] == date
+                and "090000" <= row["dt_key"][8:] <= selected_time
+            ]
 
             minute_rows.sort(key=lambda x: x["dt_key"])
 
