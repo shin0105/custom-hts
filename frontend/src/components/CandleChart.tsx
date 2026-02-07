@@ -14,6 +14,7 @@ import {
   Legend,
   ResponsiveContainer,
   Cell,
+  Customized,
 } from 'recharts';
 
 export interface CandleData {
@@ -29,13 +30,88 @@ interface CandleChartProps {
   data: CandleData[];
   currency?: 'USD' | 'KRW';
   height?: number;
+  primaryTimeZone?: string;
+  secondaryTimeZone?: string;
 }
+
+const KST_TIMEZONE = 'Asia/Seoul';
+
+const isKoreanDate = (dateStr: string) => /^\d{8}(\d{6})?$/.test(dateStr);
+
+const parseTimestamp = (dateStr: string): number => {
+  if (isKoreanDate(dateStr)) {
+    const year = Number(dateStr.slice(0, 4));
+    const month = Number(dateStr.slice(4, 6)) - 1;
+    const day = Number(dateStr.slice(6, 8));
+    const hour = dateStr.length >= 10 ? Number(dateStr.slice(8, 10)) : 0;
+    const minute = dateStr.length >= 12 ? Number(dateStr.slice(10, 12)) : 0;
+    const second = dateStr.length >= 14 ? Number(dateStr.slice(12, 14)) : 0;
+    const utcMillis = Date.UTC(year, month, day, hour, minute, second);
+    return utcMillis - 9 * 60 * 60 * 1000;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day).getTime();
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(dateStr)) {
+    const normalized = dateStr.replace(' ', 'T');
+    const parsed = new Date(normalized);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.getTime();
+    }
+  }
+
+  return Date.now();
+};
+
+const formatDateLabel = (
+  timestamp: number,
+  withTime: boolean,
+  timeZone?: string
+) => {
+  const options: Intl.DateTimeFormatOptions = withTime
+    ? {
+        timeZone,
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }
+    : { timeZone, month: '2-digit', day: '2-digit' };
+  return new Intl.DateTimeFormat('en-US', options).format(
+    new Date(timestamp)
+  );
+};
+
+const formatTooltipLabel = (
+  timestamp: number,
+  withTime: boolean,
+  timeZone?: string
+) => {
+  const options: Intl.DateTimeFormatOptions = withTime
+    ? { timeZone, dateStyle: 'medium', timeStyle: 'short' }
+    : { timeZone, dateStyle: 'medium' };
+  return new Intl.DateTimeFormat('en-US', options).format(
+    new Date(timestamp)
+  );
+};
 
 // Custom tooltip
 const CustomTooltip: React.FC<any> = ({ active, payload, currency = 'USD' }) => {
   if (!active || !payload || !payload.length) return null;
 
   const data = payload[0].payload;
+  const hasTime = data.hasTime;
+  const dateLabel = formatTooltipLabel(
+    data.timestamp,
+    hasTime,
+    data.timeZone
+  );
+  const secondaryLabel = data.secondaryTimeZone
+    ? formatTooltipLabel(data.timestamp, hasTime, data.secondaryTimeZone)
+    : null;
   const isPositive = data.close >= data.open;
   const change = data.close - data.open;
   const changePercent = data.open !== 0 ? ((change / data.open) * 100).toFixed(2) : '0.00';
@@ -66,7 +142,12 @@ const CustomTooltip: React.FC<any> = ({ active, payload, currency = 'USD' }) => 
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
       }}
     >
-      <p style={{ margin: '0 0 8px 0', fontWeight: 'bold' }}>{data.date}</p>
+      <p style={{ margin: '0 0 4px 0', fontWeight: 'bold' }}>{dateLabel}</p>
+      {secondaryLabel && (
+        <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#6b7280' }}>
+          {secondaryLabel}
+        </p>
+      )}
       <p style={{ margin: '4px 0', fontSize: '14px' }}>Open: {formatPrice(data.open)}</p>
       <p style={{ margin: '4px 0', fontSize: '14px' }}>High: {formatPrice(data.high)}</p>
       <p style={{ margin: '4px 0', fontSize: '14px' }}>Low: {formatPrice(data.low)}</p>
@@ -90,6 +171,8 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   data,
   currency = 'USD',
   height = 500,
+  primaryTimeZone,
+  secondaryTimeZone,
 }) => {
   if (!data || data.length === 0) {
     return (
@@ -118,23 +201,22 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   // Calculate max volume for secondary Y-axis (unused but kept for potential future use)
   // const maxVolume = Math.max(...data.map((d) => d.volume));
 
-  // Format date for display
-  const formatDate = (dateStr: string) => {
-    if (dateStr.length === 8) {
-      // YYYYMMDD format
-      return `${dateStr.slice(4, 6)}/${dateStr.slice(6, 8)}`;
-    } else if (dateStr.length >= 12) {
-      // YYYYMMDDHHMMSS format
-      return `${dateStr.slice(8, 10)}:${dateStr.slice(10, 12)}`;
-    }
-    return dateStr;
-  };
+  const hasTime = data.some((d) => d.date.length > 8);
+  const useKst = data.some((d) => isKoreanDate(d.date));
+  const timeZone = primaryTimeZone ?? (useKst ? KST_TIMEZONE : undefined);
+  const secondaryZone =
+    secondaryTimeZone ?? (useKst ? undefined : KST_TIMEZONE);
 
-  // Prepare data with formatted dates
-  const chartData = data.map((d) => ({
-    ...d,
-    displayDate: formatDate(d.date),
-  }));
+  // Prepare data with timestamps for accurate time scaling
+  const chartData = data
+    .map((d) => ({
+      ...d,
+      timestamp: parseTimestamp(d.date),
+      hasTime,
+      timeZone,
+      secondaryTimeZone: secondaryZone,
+    }))
+    .sort((a, b) => a.timestamp - b.timestamp);
 
   const formatVolume = (value: number) => {
     if (value >= 1_000_000) {
@@ -143,6 +225,77 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       return `${(value / 1_000).toFixed(1)}K`;
     }
     return value.toString();
+  };
+
+  const CandlesLayer: React.FC<any> = ({ xAxisMap, yAxisMap, data: layerData }) => {
+    const xAxis = Object.values(xAxisMap || {})[0] as any;
+    const yAxis = Object.values(yAxisMap || {})[0] as any;
+    if (!xAxis || !yAxis) return null;
+
+    const xScale = xAxis.scale;
+    const yScale = yAxis.scale;
+    if (!xScale || !yScale) return null;
+
+    let candleWidth = 6;
+    if (layerData && layerData.length >= 2) {
+      let minDiff = Number.POSITIVE_INFINITY;
+      const maxSamples = Math.min(layerData.length - 1, 40);
+      for (let i = 1; i <= maxSamples; i += 1) {
+        const prev = xScale(layerData[i - 1].timestamp);
+        const next = xScale(layerData[i].timestamp);
+        const diff = Math.abs(next - prev);
+        if (Number.isFinite(diff) && diff > 0) {
+          minDiff = Math.min(minDiff, diff);
+        }
+      }
+      if (Number.isFinite(minDiff) && minDiff > 0) {
+        candleWidth = Math.min(18, Math.max(2, minDiff * 0.6));
+      }
+    } else if (xAxis.bandSize) {
+      candleWidth = Math.min(18, Math.max(2, xAxis.bandSize * 0.6));
+    }
+
+    return (
+      <g>
+        {layerData.map((entry: any, index: number) => {
+          const x = xScale(entry.timestamp);
+          if (!Number.isFinite(x)) return null;
+
+          const openY = yScale(entry.open);
+          const closeY = yScale(entry.close);
+          const highY = yScale(entry.high);
+          const lowY = yScale(entry.low);
+
+          const isUp = entry.close >= entry.open;
+          const color = isUp ? '#16a34a' : '#dc2626';
+          const bodyY = Math.min(openY, closeY);
+          const bodyHeight = Math.max(1, Math.abs(openY - closeY));
+
+          return (
+            <g key={`candle-${index}`}>
+              <line
+                x1={x}
+                x2={x}
+                y1={highY}
+                y2={lowY}
+                stroke={color}
+                strokeWidth={1}
+              />
+              <rect
+                x={x - candleWidth / 2}
+                y={bodyY}
+                width={candleWidth}
+                height={bodyHeight}
+                fill={color}
+                stroke={color}
+                rx={1}
+                ry={1}
+              />
+            </g>
+          );
+        })}
+      </g>
+    );
   };
 
   return (
@@ -154,9 +307,15 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
           <XAxis
-            dataKey="displayDate"
+            dataKey="timestamp"
+            type="number"
+            scale="time"
+            domain={['dataMin', 'dataMax']}
             tick={{ fontSize: 12 }}
-            interval={Math.floor(data.length / 10) || 0}
+            minTickGap={24}
+            tickFormatter={(value: number) =>
+              formatDateLabel(value, hasTime, timeZone)
+            }
           />
           <YAxis
             yAxisId="price"
@@ -169,38 +328,23 @@ export const CandleChart: React.FC<CandleChartProps> = ({
             }
           />
           <Tooltip content={<CustomTooltip currency={currency} />} />
-          <Legend />
-          
-          {/* Close price line for candlestick effect */}
+          <Legend
+            payload={[
+              { value: 'Up', type: 'square', color: '#16a34a' },
+              { value: 'Down', type: 'square', color: '#dc2626' },
+            ]}
+          />
           <Line
             yAxisId="price"
             type="monotone"
             dataKey="close"
-            stroke="#3b82f6"
-            strokeWidth={2}
+            stroke="rgba(0,0,0,0)"
+            strokeWidth={0}
             dot={false}
-            name="Close"
+            isAnimationActive={false}
+            legendType="none"
           />
-          <Line
-            yAxisId="price"
-            type="monotone"
-            dataKey="high"
-            stroke="#10b981"
-            strokeWidth={1}
-            dot={false}
-            strokeDasharray="3 3"
-            name="High"
-          />
-          <Line
-            yAxisId="price"
-            type="monotone"
-            dataKey="low"
-            stroke="#ef4444"
-            strokeWidth={1}
-            dot={false}
-            strokeDasharray="3 3"
-            name="Low"
-          />
+          <Customized component={CandlesLayer} />
         </ComposedChart>
       </ResponsiveContainer>
       
@@ -212,10 +356,34 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
           <XAxis
-            dataKey="displayDate"
+            dataKey="timestamp"
+            type="number"
+            scale="time"
+            domain={['dataMin', 'dataMax']}
             tick={{ fontSize: 12 }}
-            interval={Math.floor(data.length / 10) || 0}
+            minTickGap={24}
+            tickFormatter={(value: number) =>
+              formatDateLabel(value, hasTime, timeZone)
+            }
           />
+          {secondaryZone && (
+            <XAxis
+              xAxisId="secondary-volume"
+              dataKey="timestamp"
+              type="number"
+              scale="time"
+              domain={['dataMin', 'dataMax']}
+              tick={{ fontSize: 11, fill: '#6b7280' }}
+              minTickGap={24}
+              orientation="bottom"
+              axisLine={false}
+              tickLine={false}
+              interval="preserveStartEnd"
+              tickFormatter={(value: number) =>
+                formatDateLabel(value, hasTime, secondaryZone)
+              }
+            />
+          )}
           <YAxis
             tick={{ fontSize: 12 }}
             tickFormatter={formatVolume}

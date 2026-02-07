@@ -55,7 +55,9 @@ class KoreanMarketService:
         symbol: str,
         period: str = "D",
         adjust_price: bool = True,
-        limit: int = 100,
+        limit: Optional[int] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
     ) -> Optional[List[KoreanCandleData]]:
         """
         Get daily/period candle chart data for a Korean stock.
@@ -70,14 +72,19 @@ class KoreanMarketService:
             List of KoreanCandleData or None
         """
         return kdevelopers_client.get_daily_candle(
-            symbol, period, adjust_price, limit
+            symbol,
+            period,
+            adjust_price,
+            limit,
+            start_date=start_date,
+            end_date=end_date,
         )
 
     async def get_minute_candle(
         self,
         symbol: str,
         interval: int = 1,
-        limit: int = 100,
+        limit: Optional[int] = None,
         date: Optional[str] = None,
         time_str: str = "",
     ) -> Optional[List[KoreanCandleData]]:
@@ -92,8 +99,15 @@ class KoreanMarketService:
         Returns:
             List of KoreanCandleData or None
         """
+        max_per_day = 390 // interval if interval else 390
+        include_previous = limit is None or limit > max_per_day or bool(time_str)
         return kdevelopers_client.get_minute_candle(
-            symbol, interval, limit, date=date, time_str=time_str
+            symbol,
+            interval,
+            limit,
+            date=date,
+            time_str=time_str,
+            include_previous=include_previous,
         )
 
     async def get_account_balance(

@@ -45,11 +45,11 @@ class StockMasterFileManager:
         Initialize the master file manager.
 
         Args:
-            data_dir: Directory to store master files. Defaults to backend/data/master_files
+            data_dir: Directory to store master files. Defaults to backend/data/kr_stock_master
         """
         if data_dir is None:
             self.data_dir = (
-                Path(__file__).parent.parent / "data" / "master_files"
+                Path(__file__).parent.parent / "data" / "kr_stock_master"
             )
         else:
             self.data_dir = Path(data_dir)
@@ -766,7 +766,7 @@ class StockMasterFileManager:
             return False
 
         if output_dir is None:
-            output_dir = self.data_dir.parent
+            output_dir = self.data_dir
 
         output_file = output_dir / f"{market}_stk_master_full.csv"
 
@@ -812,7 +812,7 @@ class StockMasterFileManager:
             return False
 
         if output_dir is None:
-            output_dir = self.data_dir.parent
+            output_dir = self.data_dir
 
         output_file = output_dir / f"{market}_stk_master.csv"
 

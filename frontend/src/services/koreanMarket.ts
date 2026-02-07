@@ -51,13 +51,23 @@ export const koreanMarketService = {
     symbol: string,
     period: PeriodType = 'D',
     adjustPrice = true,
-    limit = 100
+    limit?: number,
+    startDate?: string,
+    endDate?: string
   ): Promise<KoreanCandleData[]> {
     const params = new URLSearchParams({
       period,
       adjust_price: adjustPrice.toString(),
-      limit: limit.toString(),
     });
+    if (limit !== undefined) {
+      params.append('limit', limit.toString());
+    }
+    if (startDate) {
+      params.append('start_date', startDate);
+    }
+    if (endDate) {
+      params.append('end_date', endDate);
+    }
 
     const response = await axios.get<KoreanCandleData[]>(
       `${API_BASE_URL}/korean/candle/${symbol}?${params}`
@@ -71,15 +81,21 @@ export const koreanMarketService = {
   async getMinuteCandle(
     symbol: string,
     interval: MinuteInterval = 1,
-    limit = 100,
-    date?: string
+    limit?: number,
+    date?: string,
+    timeStr?: string
   ): Promise<KoreanCandleData[]> {
     const params = new URLSearchParams({
       interval: interval.toString(),
-      limit: limit.toString(),
     });
+    if (limit !== undefined) {
+      params.append('limit', limit.toString());
+    }
     if (date) {
       params.append('date', date);
+    }
+    if (timeStr) {
+      params.append('time_str', timeStr);
     }
 
     const response = await axios.get<KoreanCandleData[]>(

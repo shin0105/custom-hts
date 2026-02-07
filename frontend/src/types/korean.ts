@@ -44,6 +44,5 @@ export interface KoreanCandleData {
 }
 
 export type ChartInterval = 'daily' | 'minute';
-export type MinuteInterval = 1 | 5 | 30 | 60;
+export type MinuteInterval = 1 | 5 | 10 | 30 | 60;
 export type PeriodType = 'D' | 'W' | 'M';
-

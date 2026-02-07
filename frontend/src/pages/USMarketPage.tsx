@@ -22,6 +22,7 @@ export const USMarketPage: React.FC = () => {
   const [interval, setInterval] = useState<USInterval>('1d');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [startTime, setStartTime] = useState<string>('09:30');
 
   const handleSearch = async () => {
     setLoading(true);
@@ -53,13 +54,33 @@ export const USMarketPage: React.FC = () => {
 
   const loadCandleData = async () => {
     try {
-      const candles = await usMarketService.getHistoricalData(
+      let candles = await usMarketService.getHistoricalData(
         symbol,
         period,
         interval,
         startDate || undefined,
         endDate || undefined
       );
+      if (startTime) {
+        const [startH, startM] = startTime.split(':').map(Number);
+        const startMinutes = startH * 60 + startM;
+        const tz = 'America/New_York';
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: tz,
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        });
+
+        candles = candles.filter((c) => {
+          const parsed = new Date(c.date.replace(' ', 'T'));
+          if (Number.isNaN(parsed.getTime())) return true;
+          const parts = formatter.formatToParts(parsed);
+          const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
+          const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
+          return hour * 60 + minute >= startMinutes;
+        });
+      }
       setCandleData(candles);
     } catch (err) {
       console.error('Failed to load candle data:', err);
@@ -72,13 +93,33 @@ export const USMarketPage: React.FC = () => {
     if (symbol && quote) {
       const loadData = async () => {
         try {
-          const candles = await usMarketService.getHistoricalData(
+          let candles = await usMarketService.getHistoricalData(
             symbol,
             period,
             interval,
             startDate || undefined,
             endDate || undefined
           );
+          if (startTime) {
+            const [startH, startM] = startTime.split(':').map(Number);
+            const startMinutes = startH * 60 + startM;
+            const tz = 'America/New_York';
+            const formatter = new Intl.DateTimeFormat('en-US', {
+              timeZone: tz,
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            });
+
+            candles = candles.filter((c) => {
+              const parsed = new Date(c.date.replace(' ', 'T'));
+              if (Number.isNaN(parsed.getTime())) return true;
+              const parts = formatter.formatToParts(parsed);
+              const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
+              const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
+              return hour * 60 + minute >= startMinutes;
+            });
+          }
           setCandleData(candles);
         } catch (err) {
           console.error('Failed to load candle data:', err);
@@ -87,7 +128,7 @@ export const USMarketPage: React.FC = () => {
       };
       loadData();
     }
-  }, [symbol, quote, period, interval, startDate, endDate]);
+  }, [symbol, quote, period, interval, startDate, endDate, startTime]);
 
   const containerStyle: React.CSSProperties = {
     maxWidth: '1400px',
@@ -257,10 +298,25 @@ export const USMarketPage: React.FC = () => {
                 placeholder="Optional"
               />
             </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '14px', fontWeight: '500' }}>Time:</span>
+              <input
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                style={selectStyle}
+              />
+            </label>
           </div>
 
           {/* Chart Display */}
-          <CandleChart data={candleData} currency="USD" height={500} />
+          <CandleChart
+            data={candleData}
+            currency="USD"
+            height={500}
+            primaryTimeZone="America/New_York"
+            secondaryTimeZone="Asia/Seoul"
+          />
         </div>
       )}
 

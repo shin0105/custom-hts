@@ -120,7 +120,15 @@ async def get_korean_candle(
         description="Period type (D: daily, W: weekly, M: monthly)",
     ),
     adjust_price: bool = Query(True, description="Adjust for stock splits"),
-    limit: int = Query(100, ge=1, le=500, description="Number of candles"),
+    limit: Optional[int] = Query(
+        None, ge=1, le=500, description="Number of candles (optional)"
+    ),
+    start_date: Optional[str] = Query(
+        None, description="Start date in YYYYMMDD (optional)"
+    ),
+    end_date: Optional[str] = Query(
+        None, description="End date in YYYYMMDD (optional)"
+    ),
 ) -> List[KoreanCandleData]:
     """
     Get candle chart data for a Korean stock.
@@ -135,7 +143,12 @@ async def get_korean_candle(
         List of candle data (OHLCV)
     """
     candles = await korean_market_service.get_daily_candle(
-        symbol, period.value, adjust_price, limit
+        symbol,
+        period.value,
+        adjust_price,
+        limit,
+        start_date=start_date,
+        end_date=end_date,
     )
     if not candles:
         raise HTTPException(
@@ -151,12 +164,14 @@ async def get_korean_minute_candle(
     interval: MinuteInterval = Query(
         MinuteInterval.ONE, description="Minute interval (1, 5, 10, 30, 60)"
     ),
-    limit: int = Query(100, ge=1, le=500, description="Number of candles"),
+    limit: Optional[int] = Query(
+        None, ge=1, le=500, description="Number of candles (optional)"
+    ),
     date: Optional[str] = Query(
         None, description="Trading date in YYYYMMDD (defaults to today in KST)"
     ),
     time_str: str = Query(
-        "", description="Time filter in HHMMSS (empty returns all)"
+        "", description="Time filter in HHMMSS (empty defaults to 09:00:00)"
     ),
 ) -> List[KoreanCandleData]:
     """
@@ -511,13 +526,49 @@ async def get_all_financials(
     else:
         reprt_code = "11011"
 
+    requested_year = year
     financials = opendart_client.get_finstate_all(symbol, year, reprt_code, fs_div)
 
-    if financials is None or not financials:
+    if financials is None:
         raise HTTPException(
             status_code=404,
             detail=f"Financial data not found for {symbol} (year: {year}, quarter: {quarter})",
         )
+
+    if not financials:
+        fallback_year = None
+        for offset in range(1, 4):
+            candidate_year = requested_year - offset
+            candidate = opendart_client.get_finstate_all(
+                symbol, candidate_year, reprt_code, fs_div
+            )
+            if candidate:
+                financials = candidate
+                fallback_year = candidate_year
+                break
+
+        if not financials:
+            return {
+                "symbol": symbol,
+                "year": requested_year,
+                "requested_year": requested_year,
+                "quarter": quarter,
+                "fs_div": fs_div,
+                "count": 0,
+                "data": [],
+                "note": "No financial data available for the requested period.",
+            }
+
+        return {
+            "symbol": symbol,
+            "year": fallback_year,
+            "requested_year": requested_year,
+            "quarter": quarter,
+            "fs_div": fs_div,
+            "count": len(financials),
+            "data": financials,
+            "note": f"No data for requested year. Returned {fallback_year} data instead.",
+        }
 
     return {
         "symbol": symbol,

@@ -195,6 +195,11 @@ class OpenDartClient:
             status = data.get("status", "")
             if status != "000":
                 error_msg = data.get("message", "Unknown error")
+                if status == "013" or "조회된 데이타가 없습니다" in error_msg:
+                    logger.info(
+                        f"DART API no data for {symbol} (year: {year}, quarter: {quarter})"
+                    )
+                    return None
                 logger.error(f"DART API error (status: {status}): {error_msg}")
                 return None
 
@@ -282,8 +287,15 @@ class OpenDartClient:
 
             data = response.json()
 
-            if data.get("status") != "000":
-                logger.error(f"DART API error: {data.get('message')}")
+            status = data.get("status", "")
+            if status != "000":
+                error_msg = data.get("message", "Unknown error")
+                if status == "013" or "조회된 데이타가 없습니다" in error_msg:
+                    logger.info(
+                        f"DART API no data for {symbol} (year: {year}, quarter: {quarter})"
+                    )
+                    return []
+                logger.error(f"DART API error: {error_msg}")
                 return None
 
             return data.get("list", [])

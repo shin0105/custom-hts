@@ -52,9 +52,16 @@ class SupabaseClient:
             return False
 
         try:
-            response = self._client.table(table).upsert(data).execute()
+            payload = self._serialize_for_json(data)
+            self._client.table(table).upsert(payload).execute()
             return True
         except Exception as e:
+            message = str(e)
+            if "PGRST205" in message or "Could not find the table" in message:
+                print(
+                    f"Skipping cache save: table '{table}' not found in Supabase."
+                )
+                return False
             print(f"Failed to save financial statement: {e}")
             return False
 
@@ -93,6 +100,12 @@ class SupabaseClient:
                 return response.data[0]
             return None
         except Exception as e:
+            message = str(e)
+            if "PGRST205" in message or "Could not find the table" in message:
+                print(
+                    f"Skipping cache read: table '{table}' not found in Supabase."
+                )
+                return None
             print(f"Failed to get financial statement: {e}")
             return None
 
@@ -162,6 +175,15 @@ class SupabaseClient:
         except Exception as e:
             print(f"Failed to delete KDevelopers token: {e}")
             return False
+
+    def _serialize_for_json(self, value: Any) -> Any:
+        if isinstance(value, datetime):
+            return value.isoformat()
+        if isinstance(value, dict):
+            return {k: self._serialize_for_json(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._serialize_for_json(v) for v in value]
+        return value
 
 
 # Global instance

@@ -464,6 +464,8 @@ class KDevelopersClient:
         period: str = "D",
         adjust_price: bool = True,
         limit: int = 100,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
     ) -> Optional[List[KoreanCandleData]]:
         """
         Get daily/period candle chart data for a Korean stock.
@@ -498,7 +500,7 @@ class KDevelopersClient:
                 # Parse the response
                 candles = []
                 for i, item in enumerate(output_list):
-                    if i >= limit:
+                    if limit is not None and i >= limit:
                         break
 
                     close_price = safe_float(item.get("stck_clpr"))
@@ -519,6 +521,23 @@ class KDevelopersClient:
                     )
                     candles.append(candle)
 
+                if start_date or end_date:
+                    if start_date and (len(start_date) != 8 or not start_date.isdigit()):
+                        raise ValueError("start_date must be in YYYYMMDD format")
+                    if end_date and (len(end_date) != 8 or not end_date.isdigit()):
+                        raise ValueError("end_date must be in YYYYMMDD format")
+                    if start_date and end_date and start_date > end_date:
+                        start_date, end_date = end_date, start_date
+
+                    def in_range(date_str: str) -> bool:
+                        if start_date and date_str < start_date:
+                            return False
+                        if end_date and date_str > end_date:
+                            return False
+                        return True
+
+                    candles = [c for c in candles if c.date and in_range(c.date)]
+
                 return candles
             else:
                 res.print_error(api_url)
@@ -533,7 +552,7 @@ class KDevelopersClient:
         self,
         symbol: str,
         interval: int = 1,
-        limit: int = 100,
+        limit: Optional[int] = None,
         date: Optional[str] = None,
         time_str: str = "",
         include_previous: bool = False,
@@ -571,21 +590,32 @@ class KDevelopersClient:
             if time_str and (len(time_str) != 6 or not time_str.isdigit()):
                 raise ValueError("time_str must be in HHMMSS format or empty")
 
+            if not time_str:
+                time_str = "090000"
+
             api_url = "/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice"
             tr_id = "FHKST03010230"
 
             params = {
                 "FID_COND_MRKT_DIV_CODE": "J",
                 "FID_INPUT_ISCD": symbol,
-                "FID_INPUT_HOUR_1": time_str,
+                "FID_INPUT_HOUR_1": "",
                 "FID_INPUT_DATE_1": date,
                 "FID_PW_DATA_INCU_YN": "Y" if include_previous else "N",
                 "FID_FAKE_TICK_INCU_YN": "",
             }
 
-            output_list = []
-            for attempt in range(1 if date_provided else 7):
+            output_list: list[dict[str, Any]] = []
+            requested_date = date
+            max_days = 7 if include_previous or not date_provided else 1
+            for day_index in range(max_days):
                 params["FID_INPUT_DATE_1"] = date
+                if time_str:
+                    params["FID_INPUT_HOUR_1"] = (
+                        time_str if day_index == 0 else "235959"
+                    )
+                else:
+                    params["FID_INPUT_HOUR_1"] = ""
                 res = self._url_fetch(api_url, tr_id, "", params)
 
                 if not res.is_ok():
@@ -595,12 +625,9 @@ class KDevelopersClient:
                     )
                     return None
 
-                output_list = res.get_body().output2
-                if output_list:
-                    break
-
-                if date_provided:
-                    break
+                day_rows = res.get_body().output2
+                if day_rows:
+                    output_list.extend(day_rows)
 
                 try:
                     date_dt = datetime.strptime(date, "%Y%m%d")
@@ -704,8 +731,9 @@ class KDevelopersClient:
                     )
                 )
 
-            candles.reverse()
-            return candles[:limit]
+            if limit is not None and len(candles) > limit:
+                candles = candles[-limit:]
+            return candles
 
         except Exception as e:
             logger.error(f"Exception in get_minute_candle for {symbol}: {e}")

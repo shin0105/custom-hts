@@ -27,7 +27,9 @@ export const KoreanMarketPage: React.FC = () => {
   const [period, setPeriod] = useState<PeriodType>('D');
   const [minuteInterval, setMinuteInterval] = useState<MinuteInterval>(1);
   const [selectedDate, setSelectedDate] = useState<string>('');
-  const [candleLimit, setCandleLimit] = useState(100);
+  const [minuteTime, setMinuteTime] = useState<string>('09:00');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
 
   // Financial statement controls
   const [finYear, setFinYear] = useState<number>(new Date().getFullYear() - 1);
@@ -79,7 +81,9 @@ export const KoreanMarketPage: React.FC = () => {
           symbol,
           period,
           true,
-          candleLimit
+          undefined,
+          startDate || undefined,
+          endDate || undefined
         );
         setCandleData(candles);
       } else {
@@ -94,16 +98,18 @@ export const KoreanMarketPage: React.FC = () => {
           const candles = await koreanMarketService.getMinuteCandle(
             symbol,
             minuteInterval,
-            candleLimit,
-            dateStr
+            undefined,
+            dateStr,
+            minuteTime ? `${minuteTime.replace(':', '')}00` : undefined
           );
           setCandleData(candles);
         } else {
           const candles = await koreanMarketService.getMinuteCandle(
             symbol,
             minuteInterval,
-            candleLimit,
-            selectedDate
+            undefined,
+            selectedDate,
+            minuteTime ? `${minuteTime.replace(':', '')}00` : undefined
           );
           setCandleData(candles);
         }
@@ -119,7 +125,15 @@ export const KoreanMarketPage: React.FC = () => {
     if (symbol && quote) {
       loadCandleData();
     }
-  }, [chartInterval, period, minuteInterval, selectedDate, candleLimit]);
+  }, [
+    chartInterval,
+    period,
+    minuteInterval,
+    selectedDate,
+    minuteTime,
+    startDate,
+    endDate,
+  ]);
 
   const containerStyle: React.CSSProperties = {
     maxWidth: '1400px',
@@ -249,6 +263,38 @@ export const KoreanMarketPage: React.FC = () => {
                     <option value="M">Monthly</option>
                   </select>
                 </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: '500' }}>Start:</span>
+                  <input
+                    type="date"
+                    value={
+                      startDate
+                        ? `${startDate.slice(0, 4)}-${startDate.slice(4, 6)}-${startDate.slice(6, 8)}`
+                        : ''
+                    }
+                    onChange={(e) => {
+                      const dateStr = e.target.value.replace(/-/g, '');
+                      setStartDate(dateStr);
+                    }}
+                    style={selectStyle}
+                  />
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: '500' }}>End:</span>
+                  <input
+                    type="date"
+                    value={
+                      endDate
+                        ? `${endDate.slice(0, 4)}-${endDate.slice(4, 6)}-${endDate.slice(6, 8)}`
+                        : ''
+                    }
+                    onChange={(e) => {
+                      const dateStr = e.target.value.replace(/-/g, '');
+                      setEndDate(dateStr);
+                    }}
+                    style={selectStyle}
+                  />
+                </label>
               </>
             ) : (
               <>
@@ -261,6 +307,7 @@ export const KoreanMarketPage: React.FC = () => {
                   >
                     <option value={1}>1 Minute</option>
                     <option value={5}>5 Minutes</option>
+                    <option value={10}>10 Minutes</option>
                     <option value={30}>30 Minutes</option>
                     <option value={60}>60 Minutes</option>
                   </select>
@@ -282,22 +329,21 @@ export const KoreanMarketPage: React.FC = () => {
                     style={selectStyle}
                   />
                 </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: '500' }}>Time:</span>
+                  <input
+                    type="time"
+                    value={minuteTime}
+                    onChange={(e) => setMinuteTime(e.target.value)}
+                    style={selectStyle}
+                  />
+                </label>
               </>
             )}
 
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '14px', fontWeight: '500' }}>Candles:</span>
-              <select
-                value={candleLimit}
-                onChange={(e) => setCandleLimit(Number(e.target.value))}
-                style={selectStyle}
-              >
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-                <option value={200}>200</option>
-                <option value={500}>500</option>
-              </select>
-            </label>
+            <div style={{ fontSize: '12px', color: '#6b7280' }}>
+              Minute time defaults to 09:00 KST.
+            </div>
           </div>
 
           {/* Chart Display */}
