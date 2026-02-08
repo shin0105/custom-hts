@@ -78,8 +78,9 @@ class KoreanEstimatePerform(BaseModel):
     output3: List[Dict[str, Any]] = Field(
         default_factory=list, description="Estimate performance detail (set 2)"
     )
-    output4: List[Dict[str, Any]] = Field(
-        default_factory=list, description="Estimate performance detail (set 3)"
+    output4: List[str] = Field(
+        default_factory=list,
+        description="Estimate performance year labels (e.g., 2023.12, 2025.12E)",
     )
 
 
