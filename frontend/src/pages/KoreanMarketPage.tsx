@@ -352,10 +352,15 @@ export const KoreanMarketPage: React.FC = () => {
 
   const matchesStatement = (item: FinancialItem) => {
     const sjDiv = (item.sj_div || '').toUpperCase();
-    if (sjDiv) return sjDiv === finStatement;
+    if (sjDiv) {
+      if (finStatement === 'IS') return sjDiv === 'IS' || sjDiv === 'CIS';
+      if (finStatement === 'BS') return sjDiv === 'BS';
+      if (finStatement === 'CF') return sjDiv === 'CF';
+    }
     const sjName = item.sj_nm || '';
     if (finStatement === 'BS') return sjName.includes('재무상태표');
-    if (finStatement === 'IS') return sjName.includes('손익계산서');
+    if (finStatement === 'IS')
+      return sjName.includes('손익계산서') || sjName.includes('포괄손익');
     if (finStatement === 'CF') return sjName.includes('현금흐름');
     return false;
   };
