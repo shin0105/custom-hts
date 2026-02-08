@@ -1100,6 +1100,107 @@ class KDevelopersClient:
 
         return filtered_results
 
+    def get_estimate_perform(
+        self,
+        sht_cd: str,
+        tr_cont: str = "",
+        max_depth: int = 10,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        [국내주식] 종목정보 > 국내주식 종목추정실적[국내주식-187]
+        국내주식 종목추정실적 API를 호출하여 raw output list로 반환합니다.
+
+        Args:
+            sht_cd: 종목코드 (예: 265520)
+            tr_cont: 연속 거래 여부
+            max_depth: 최대 재귀 깊이 (기본값: 10)
+
+        Returns:
+            Dict[str, List[Dict[str, Any]]]: output1~output4 raw output lists
+        """
+        if not sht_cd:
+            logger.error("sht_cd is required. (e.g. '265520')")
+            raise ValueError("sht_cd is required. (e.g. '265520')")
+
+        api_url = "/uapi/domestic-stock/v1/quotations/estimate-perform"
+        tr_id = "HHKST668300C0"
+
+        params = {
+            "SHT_CD": sht_cd,
+        }
+
+        def normalize_output(output: Any) -> List[Dict[str, Any]]:
+            if output is None:
+                return []
+            if isinstance(output, list):
+                normalized = []
+                for item in output:
+                    if hasattr(item, "_asdict"):
+                        normalized.append(item._asdict())
+                    elif isinstance(item, dict):
+                        normalized.append(item)
+                return normalized
+            if hasattr(output, "_asdict"):
+                return [output._asdict()]
+            if isinstance(output, dict):
+                return [output]
+            return []
+
+        results = {
+            "output1": [],
+            "output2": [],
+            "output3": [],
+            "output4": [],
+        }
+
+        depth = 0
+        current_tr_cont = tr_cont
+
+        while depth < max_depth:
+            res = self._url_fetch(api_url, tr_id, current_tr_cont, params)
+
+            if not res.is_ok():
+                res.print_error(api_url)
+                logger.error(
+                    "API call failed: %s - %s",
+                    res.get_error_code(),
+                    res.get_error_message(),
+                )
+                return results
+
+            body = res.get_body()
+            results["output1"].extend(
+                normalize_output(getattr(body, "output1", None))
+            )
+            results["output2"].extend(
+                normalize_output(getattr(body, "output2", None))
+            )
+            results["output3"].extend(
+                normalize_output(getattr(body, "output3", None))
+            )
+            results["output4"].extend(
+                normalize_output(getattr(body, "output4", None))
+            )
+
+            next_tr_cont = res.get_header().tr_cont
+            if next_tr_cont in ["M", "F"]:
+                logger.info("Calling next page for estimate_perform...")
+                self._smart_sleep()
+                current_tr_cont = "N"
+                depth += 1
+                continue
+
+            logger.info("estimate_perform fetch complete.")
+            break
+
+        if depth >= max_depth:
+            logger.warning(
+                "Maximum recursion depth (%d) reached. Stopping further requests.",
+                max_depth,
+            )
+
+        return results
+
 
 # Global instance
 kdevelopers_client = KDevelopersClient()

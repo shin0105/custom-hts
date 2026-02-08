@@ -8,6 +8,7 @@ from ..models.korean import (
     KoreanFinancialStatement,
     KoreanCandleData,
     KoreanValuationMetrics,
+    KoreanEstimatePerform,
 )
 from ..integrations.kdevelopers import kdevelopers_client
 from ..integrations.opendart import opendart_client
@@ -148,6 +149,116 @@ class KoreanMarketService:
             Raw output list from search-stock-info API
         """
         return kdevelopers_client.search_stock_info(prdt_type_cd, pdno)
+
+    async def get_estimate_perform(
+        self, symbol: str
+    ) -> Optional[KoreanEstimatePerform]:
+        """
+        Get estimated performance data for a Korean stock.
+
+        Args:
+            symbol: Stock code
+
+        Returns:
+            KoreanEstimatePerform or None
+        """
+        data = kdevelopers_client.get_estimate_perform(symbol)
+        if data is None:
+            return None
+        if all(not data.get(key) for key in ["output1", "output2", "output3", "output4"]):
+            return None
+        output1 = data.get("output1") or []
+        if output1:
+            output1_field_map = {
+                "sht_cd": "elw_short_code",
+                "item_kor_nm": "hts_korean_name",
+                "name1": "elw_current_price",
+                "name2": "change_vs_prev_close",
+                "estdate": "change_sign",
+                "rcmd_name": "change_rate",
+                "capital": "cumulative_volume",
+                "forn_item_lmtrt": "strike_price",
+            }
+            mapped_output1 = []
+            for row in output1:
+                mapped_row = {}
+                for key, value in row.items():
+                    mapped_key = output1_field_map.get(key, key)
+                    mapped_row[mapped_key] = value
+                mapped_output1.append(mapped_row)
+            data["output1"] = mapped_output1
+
+        output4_rows = data.get("output4") or []
+        years = [row.get("dt") for row in output4_rows if row.get("dt")]
+        if years:
+            data["output4"] = years
+
+        output2_rows = data.get("output2") or []
+        output2_labels = [
+            "revenue",
+            "revenue_growth_rate",
+            "operating_income",
+            "operating_income_growth_rate",
+            "net_income",
+            "net_income_growth_rate",
+        ]
+        if output2_rows:
+            mapped_output2 = []
+            for idx, row in enumerate(output2_rows):
+                metric_key = (
+                    output2_labels[idx]
+                    if idx < len(output2_labels)
+                    else f"metric_{idx + 1}"
+                )
+                values = []
+                year_values = {}
+                for col_idx, year in enumerate(years):
+                    value = row.get(f"data{col_idx + 1}")
+                    values.append(value)
+                    year_values[year] = value
+                mapped_output2.append(
+                    {
+                        "metric": metric_key,
+                        "values": values,
+                        "year_values": year_values,
+                    }
+                )
+            data["output2"] = mapped_output2
+
+        output3_rows = data.get("output3") or []
+        output3_labels = [
+            "ebitda",
+            "eps",
+            "eps_growth_rate",
+            "per",
+            "ev_ebitda",
+            "roe",
+            "debt_ratio",
+            "interest_coverage_ratio",
+        ]
+        if output3_rows:
+            mapped_output3 = []
+            for idx, row in enumerate(output3_rows):
+                metric_key = (
+                    output3_labels[idx]
+                    if idx < len(output3_labels)
+                    else f"metric_{idx + 1}"
+                )
+                values = []
+                year_values = {}
+                for col_idx, year in enumerate(years):
+                    value = row.get(f"data{col_idx + 1}")
+                    values.append(value)
+                    year_values[year] = value
+                mapped_output3.append(
+                    {
+                        "metric": metric_key,
+                        "values": values,
+                        "year_values": year_values,
+                    }
+                )
+            data["output3"] = mapped_output3
+        return KoreanEstimatePerform(symbol=symbol, **data)
 
     async def get_valuation_metrics(
         self,

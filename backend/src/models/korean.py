@@ -1,6 +1,6 @@
 """Pydantic models for Korean market data."""
 
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -63,6 +63,24 @@ class KoreanValuationMetrics(BaseModel):
         None, description="Market capitalization in KRW"
     )
     as_of: datetime = Field(..., description="Valuation timestamp")
+
+
+class KoreanEstimatePerform(BaseModel):
+    """Korean stock estimate performance data from KDevelopers."""
+
+    symbol: str = Field(..., description="Stock symbol")
+    output1: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Estimate performance summary"
+    )
+    output2: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Estimate performance detail (set 1)"
+    )
+    output3: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Estimate performance detail (set 2)"
+    )
+    output4: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Estimate performance detail (set 3)"
+    )
 
 
 class KoreanSearchResult(BaseModel):

@@ -55,6 +55,22 @@ export interface KoreanValuationMetrics {
   as_of: string;
 }
 
+export interface KoreanEstimatePerform {
+  symbol: string;
+  output1: Record<string, any>[];
+  output2: Array<{
+    metric: string;
+    values: Array<string | number | null>;
+    year_values: Record<string, string | number | null>;
+  }>;
+  output3: Array<{
+    metric: string;
+    values: Array<string | number | null>;
+    year_values: Record<string, string | number | null>;
+  }>;
+  output4: string[];
+}
+
 export interface KoreanAccountBalance {
   account_number: string;
   total_evaluation: number;

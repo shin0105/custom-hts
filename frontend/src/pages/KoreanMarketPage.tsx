@@ -13,6 +13,7 @@ import type {
   MinuteInterval,
   PeriodType,
   KoreanValuationMetrics,
+  KoreanEstimatePerform,
 } from '../types/korean';
 
 type FinancialItem = {
@@ -39,6 +40,8 @@ export const KoreanMarketPage: React.FC = () => {
   const [valuation, setValuation] = useState<KoreanValuationMetrics | null>(null);
   const [comprehensiveFinancials, setComprehensiveFinancials] =
     useState<FinancialsResponse | null>(null);
+  const [estimatePerform, setEstimatePerform] =
+    useState<KoreanEstimatePerform | null>(null);
   const [candleData, setCandleData] = useState<KoreanCandleData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,11 +89,15 @@ export const KoreanMarketPage: React.FC = () => {
 
       // Get financials
       await loadFinancials();
+
+      // Get estimated performance
+      await loadEstimatePerform();
     } catch (err) {
       setError('Failed to load stock data. Please check the symbol and try again.');
       setQuote(null);
       setValuation(null);
       setComprehensiveFinancials(null);
+      setEstimatePerform(null);
       setCandleData([]);
     } finally {
       setLoading(false);
@@ -158,6 +165,16 @@ export const KoreanMarketPage: React.FC = () => {
     }
   };
 
+  const loadEstimatePerform = async () => {
+    try {
+      const estimate = await koreanMarketService.getEstimatePerform(symbol);
+      setEstimatePerform(estimate);
+    } catch (estimateError) {
+      console.error('Failed to load estimate performance:', estimateError);
+      setEstimatePerform(null);
+    }
+  };
+
   // Reload candles when chart settings change
   useEffect(() => {
     if (symbol && quote) {
@@ -198,6 +215,12 @@ export const KoreanMarketPage: React.FC = () => {
       loadValuation();
     }
   }, [finYear, finQuarter, finPeriod, fsDivision, symbol, quote]);
+
+  useEffect(() => {
+    if (symbol && quote) {
+      loadEstimatePerform();
+    }
+  }, [symbol, quote]);
 
   const containerStyle: React.CSSProperties = {
     maxWidth: '1400px',
@@ -266,6 +289,51 @@ export const KoreanMarketPage: React.FC = () => {
       return value.toLocaleString();
     }
     return String(value);
+  };
+
+  const estimateOutput1Labels: Record<string, string> = {
+    elw_short_code: 'ELW Short Code',
+    hts_korean_name: 'HTS Korean Name',
+    elw_current_price: 'ELW Current Price',
+    change_vs_prev_close: 'Change vs Prev Close',
+    change_sign: 'Change Sign',
+    change_rate: 'Change Rate',
+    cumulative_volume: 'Cumulative Volume',
+    strike_price: 'Strike Price',
+  };
+
+  const estimateMetricLabels: Record<string, string> = {
+    revenue: 'Revenue',
+    revenue_growth_rate: 'Revenue Growth Rate',
+    operating_income: 'Operating Income',
+    operating_income_growth_rate: 'Operating Income Growth Rate',
+    net_income: 'Net Income',
+    net_income_growth_rate: 'Net Income Growth Rate',
+    ebitda: 'EBITDA',
+    eps: 'EPS',
+    eps_growth_rate: 'EPS Growth Rate',
+    per: 'PER',
+    ev_ebitda: 'EV/EBITDA',
+    roe: 'ROE',
+    debt_ratio: 'Debt Ratio',
+    interest_coverage_ratio: 'Interest Coverage Ratio',
+  };
+
+  const estimateYearLabels = (estimatePerform?.output4 || []) as string[];
+
+  const buildEstimateSummaryEntries = (row: Record<string, any>) => {
+    const orderedKeys = Object.keys(estimateOutput1Labels).filter(
+      (key) => key in row
+    );
+    const remainingKeys = Object.keys(row)
+      .filter((key) => !orderedKeys.includes(key))
+      .sort();
+    const allKeys = [...orderedKeys, ...remainingKeys];
+    return allKeys.map((key) => ({
+      key,
+      label: estimateOutput1Labels[key] ?? key,
+      value: row[key],
+    }));
   };
 
   const statementMap = {
@@ -718,6 +786,220 @@ export const KoreanMarketPage: React.FC = () => {
             >
               <p style={{ color: '#6b7280', margin: 0 }}>
                 No financial data available for the selected period. Try a different year or quarter.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Estimated Performance Section */}
+      {quote && (
+        <div style={{ marginBottom: '24px' }}>
+          <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>
+            Estimated Performance (KDevelopers)
+          </h2>
+
+          {estimatePerform ? (
+            <div
+              style={{
+                border: '1px solid #e5e7eb',
+                borderRadius: '8px',
+                backgroundColor: 'white',
+                overflow: 'hidden',
+              }}
+            >
+              <div style={{ padding: '16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>
+                  <strong>Symbol:</strong> {estimatePerform.symbol}
+                </p>
+              </div>
+
+              {estimatePerform.output1.length > 0 && (
+                <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>
+                    Summary
+                  </div>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gap: '12px',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                    }}
+                  >
+                    {buildEstimateSummaryEntries(estimatePerform.output1[0]).map((entry) => (
+                      <div
+                        key={entry.key}
+                        style={{
+                          backgroundColor: '#f8fafc',
+                          borderRadius: '8px',
+                          padding: '12px',
+                          border: '1px solid #e2e8f0',
+                        }}
+                      >
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>
+                          {entry.label}
+                        </div>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', marginTop: '4px' }}>
+                          {formatValue(entry.value)}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                          {entry.key}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {estimatePerform.output2.length > 0 && estimateYearLabels.length > 0 && (
+                <div style={{ borderTop: '1px solid #e5e7eb' }}>
+                  <div style={{ padding: '12px 16px', fontSize: '14px', fontWeight: 600, backgroundColor: '#f9fafb' }}>
+                    Income Statement Estimates
+                  </div>
+                  <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f9fafb', zIndex: 1 }}>
+                        <tr>
+                          <th
+                            style={{
+                              padding: '10px 12px',
+                              textAlign: 'left',
+                              borderBottom: '2px solid #e5e7eb',
+                              fontWeight: 600,
+                            }}
+                          >
+                            Metric
+                          </th>
+                          {estimateYearLabels.map((label, index) => (
+                            <th
+                              key={`${label}-${index}`}
+                              style={{
+                                padding: '10px 12px',
+                                textAlign: 'left',
+                                borderBottom: '2px solid #e5e7eb',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {estimatePerform.output2.map((row, rowIndex) => {
+                          const bgColor = rowIndex % 2 === 0 ? '#f8fafc' : 'white';
+                          const label = estimateMetricLabels[row.metric] ?? row.metric ?? `Metric ${rowIndex + 1}`;
+                          const values = Array.isArray(row.values) ? row.values : estimateYearLabels.map((year) => row.year_values?.[year]);
+                          return (
+                            <tr key={label} style={{ backgroundColor: bgColor }}>
+                              <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6' }}>
+                                {label}
+                              </td>
+                              {values.map((value, index) => (
+                                <td
+                                  key={`${label}-${index}`}
+                                  style={{
+                                    padding: '8px 12px',
+                                    borderBottom: '1px solid #f3f4f6',
+                                    fontFamily: 'monospace',
+                                  }}
+                                >
+                                  {formatValue(value)}
+                                </td>
+                              ))}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {estimatePerform.output3.length > 0 && estimateYearLabels.length > 0 && (
+                <div style={{ borderTop: '1px solid #e5e7eb' }}>
+                  <div style={{ padding: '12px 16px', fontSize: '14px', fontWeight: 600, backgroundColor: '#f9fafb' }}>
+                    Investment Indicators
+                  </div>
+                  <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f9fafb', zIndex: 1 }}>
+                        <tr>
+                          <th
+                            style={{
+                              padding: '10px 12px',
+                              textAlign: 'left',
+                              borderBottom: '2px solid #e5e7eb',
+                              fontWeight: 600,
+                            }}
+                          >
+                            Metric
+                          </th>
+                          {estimateYearLabels.map((label, index) => (
+                            <th
+                              key={`${label}-${index}`}
+                              style={{
+                                padding: '10px 12px',
+                                textAlign: 'left',
+                                borderBottom: '2px solid #e5e7eb',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {estimatePerform.output3.map((row, rowIndex) => {
+                          const bgColor = rowIndex % 2 === 0 ? '#f8fafc' : 'white';
+                          const label = estimateMetricLabels[row.metric] ?? row.metric ?? `Metric ${rowIndex + 1}`;
+                          const values = Array.isArray(row.values) ? row.values : estimateYearLabels.map((year) => row.year_values?.[year]);
+                          return (
+                            <tr key={label} style={{ backgroundColor: bgColor }}>
+                              <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6' }}>
+                                {label}
+                              </td>
+                              {values.map((value, index) => (
+                                <td
+                                  key={`${label}-${index}`}
+                                  style={{
+                                    padding: '8px 12px',
+                                    borderBottom: '1px solid #f3f4f6',
+                                    fontFamily: 'monospace',
+                                  }}
+                                >
+                                  {formatValue(value)}
+                                </td>
+                              ))}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {(!estimatePerform.output2.length || !estimateYearLabels.length) &&
+                (!estimatePerform.output3.length || !estimateYearLabels.length) && (
+                  <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>
+                    No estimate performance table data available.
+                  </div>
+                )}
+            </div>
+          ) : (
+            <div
+              style={{
+                padding: '24px',
+                border: '1px solid #e5e7eb',
+                borderRadius: '8px',
+                backgroundColor: '#f9fafb',
+                textAlign: 'center',
+              }}
+            >
+              <p style={{ color: '#6b7280', margin: 0 }}>
+                No estimate performance data available for this symbol.
               </p>
             </div>
           )}

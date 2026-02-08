@@ -11,6 +11,7 @@ import type {
   MinuteInterval,
   KoreanAccountResponse,
   KoreanValuationMetrics,
+  KoreanEstimatePerform,
 } from '../types/korean';
 
 const API_BASE_URL = '/api';
@@ -154,6 +155,16 @@ export const koreanMarketService = {
     const params = new URLSearchParams({ account_product_code: accountProductCode });
     const response = await axios.get<KoreanAccountResponse>(
       `${API_BASE_URL}/korean/account?${params}`
+    );
+    return response.data;
+  },
+
+  /**
+   * Get estimated performance data for a Korean stock.
+   */
+  async getEstimatePerform(symbol: string): Promise<KoreanEstimatePerform> {
+    const response = await axios.get<KoreanEstimatePerform>(
+      `${API_BASE_URL}/korean/estimate-perform/${symbol}`
     );
     return response.data;
   },

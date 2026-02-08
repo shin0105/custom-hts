@@ -9,6 +9,7 @@ from ..models.korean import (
     KoreanFinancialStatement,
     KoreanCandleData,
     KoreanValuationMetrics,
+    KoreanEstimatePerform,
 )
 from ..services.korean_market import korean_market_service
 from ..utils.config import settings
@@ -259,6 +260,26 @@ async def get_korean_stock_info(
         raise HTTPException(
             status_code=404,
             detail=f"Stock info not found for pdno {pdno}",
+        )
+    return result
+
+
+@router.get("/estimate-perform/{symbol}", response_model=KoreanEstimatePerform)
+async def get_korean_estimate_perform(symbol: str) -> KoreanEstimatePerform:
+    """
+    Get estimated performance data for a Korean stock.
+
+    Args:
+        symbol: Stock code (e.g., 005930)
+
+    Returns:
+        Estimate performance data from KDevelopers
+    """
+    result = await korean_market_service.get_estimate_perform(symbol)
+    if not result:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Estimate performance not found for symbol {symbol}",
         )
     return result
 
