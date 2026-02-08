@@ -572,38 +572,15 @@ async def get_all_financials(
         )
 
     if not financials:
-        fallback_year = None
-        for offset in range(1, 4):
-            candidate_year = requested_year - offset
-            candidate = opendart_client.get_finstate_all(
-                symbol, candidate_year, reprt_code, fs_div
-            )
-            if candidate:
-                financials = candidate
-                fallback_year = candidate_year
-                break
-
-        if not financials:
-            return {
-                "symbol": symbol,
-                "year": requested_year,
-                "requested_year": requested_year,
-                "quarter": quarter,
-                "fs_div": fs_div,
-                "count": 0,
-                "data": [],
-                "note": "No financial data available for the requested period.",
-            }
-
         return {
             "symbol": symbol,
-            "year": fallback_year,
+            "year": requested_year,
             "requested_year": requested_year,
             "quarter": quarter,
             "fs_div": fs_div,
-            "count": len(financials),
-            "data": financials,
-            "note": f"No data for requested year. Returned {fallback_year} data instead.",
+            "count": 0,
+            "data": [],
+            "note": f"DART API no data for {symbol} (year: {year}, quarter: {quarter}).",
         }
 
     return {

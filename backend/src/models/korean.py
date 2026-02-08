@@ -62,11 +62,26 @@ class KoreanValuationMetrics(BaseModel):
         None, description="Forward 12-month PER (projection-weighted)"
     )
     pbr: Optional[float] = Field(None, description="Price-to-book ratio")
+    eps_ttm: Optional[float] = Field(
+        None, description="Trailing twelve-month EPS (aggregated 4Q)"
+    )
+    bps_ttm: Optional[float] = Field(
+        None, description="Trailing twelve-month BPS (average equity per share)"
+    )
+    per_ttm: Optional[float] = Field(
+        None, description="Trailing twelve-month PER (price / EPS TTM)"
+    )
+    pbr_ttm: Optional[float] = Field(
+        None, description="Trailing twelve-month PBR (price / BPS TTM)"
+    )
     shares_outstanding: Optional[float] = Field(
         None, description="Shares outstanding"
     )
     market_cap: Optional[float] = Field(
         None, description="Market capitalization in KRW"
+    )
+    notes: Optional[List[str]] = Field(
+        None, description="Warnings or data availability notes"
     )
     as_of: datetime = Field(..., description="Valuation timestamp")
 

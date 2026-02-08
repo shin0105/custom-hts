@@ -267,6 +267,63 @@ class YFinanceClient:
             if pbr is None and bps not in (None, 0):
                 pbr = price / bps
 
+            eps_ttm = None
+            bps_ttm = None
+            per_ttm = None
+            pbr_ttm = None
+
+            quarterly_financials = ticker.quarterly_financials
+            quarterly_balance_sheet = getattr(
+                ticker, "quarterly_balance_sheet", None
+            )
+
+            if (
+                quarterly_financials is not None
+                and not quarterly_financials.empty
+                and "Net Income" in quarterly_financials.index
+            ):
+                net_income_series = quarterly_financials.loc["Net Income"]
+                net_income_values = [
+                    safe_float(value) for value in list(net_income_series)[:4]
+                ]
+                if (
+                    len(net_income_values) == 4
+                    and all(value is not None for value in net_income_values)
+                    and shares_outstanding not in (None, 0)
+                ):
+                    net_income_ttm = sum(net_income_values)
+                    eps_ttm = net_income_ttm / shares_outstanding
+                    if eps_ttm != 0:
+                        per_ttm = price / eps_ttm
+
+            if (
+                quarterly_balance_sheet is not None
+                and not quarterly_balance_sheet.empty
+            ):
+                equity_keys = [
+                    "Stockholders Equity",
+                    "Stockholders' Equity",
+                    "Total Stockholder Equity",
+                    "Total Stockholders Equity",
+                ]
+                equity_series = None
+                for key in equity_keys:
+                    if key in quarterly_balance_sheet.index:
+                        equity_series = quarterly_balance_sheet.loc[key]
+                        break
+                if equity_series is not None:
+                    equity_values = [
+                        safe_float(value) for value in list(equity_series)[:4]
+                    ]
+                    equity_values = [
+                        value for value in equity_values if value is not None
+                    ]
+                    if equity_values and shares_outstanding not in (None, 0):
+                        equity_avg = sum(equity_values) / len(equity_values)
+                        bps_ttm = equity_avg / shares_outstanding
+                        if bps_ttm != 0:
+                            pbr_ttm = price / bps_ttm
+
             return USValuationMetrics(
                 symbol=symbol.upper(),
                 price=price,
@@ -274,6 +331,10 @@ class YFinanceClient:
                 bps=bps,
                 per=per,
                 pbr=pbr,
+                eps_ttm=eps_ttm,
+                bps_ttm=bps_ttm,
+                per_ttm=per_ttm,
+                pbr_ttm=pbr_ttm,
                 shares_outstanding=shares_outstanding,
                 market_cap=market_cap,
                 as_of=datetime.now(),

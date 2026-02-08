@@ -57,6 +57,18 @@ class USValuationMetrics(BaseModel):
     bps: Optional[float] = Field(None, description="Book value per share")
     per: Optional[float] = Field(None, description="Price-to-earnings ratio")
     pbr: Optional[float] = Field(None, description="Price-to-book ratio")
+    eps_ttm: Optional[float] = Field(
+        None, description="Trailing twelve-month EPS (aggregated 4Q)"
+    )
+    bps_ttm: Optional[float] = Field(
+        None, description="Trailing twelve-month BPS (average equity per share)"
+    )
+    per_ttm: Optional[float] = Field(
+        None, description="Trailing twelve-month PER (price / EPS TTM)"
+    )
+    pbr_ttm: Optional[float] = Field(
+        None, description="Trailing twelve-month PBR (price / BPS TTM)"
+    )
     shares_outstanding: Optional[float] = Field(
         None, description="Shares outstanding"
     )

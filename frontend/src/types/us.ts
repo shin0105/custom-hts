@@ -52,6 +52,10 @@ export interface USValuationMetrics {
   bps?: number;
   per?: number;
   pbr?: number;
+  eps_ttm?: number;
+  bps_ttm?: number;
+  per_ttm?: number;
+  pbr_ttm?: number;
   shares_outstanding?: number;
   market_cap?: number;
   as_of: string;

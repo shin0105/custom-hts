@@ -355,8 +355,9 @@ class KoreanMarketService:
         if not quote:
             return None
 
-        financials, _, _ = self._get_latest_financials(
-            symbol, year, quarter, fs_div
+        notes: List[str] = []
+        financials = opendart_client.get_financial_statement(
+            symbol, year, quarter, fs_div=fs_div
         )
         if financials is None:
             logger.info(
@@ -365,6 +366,9 @@ class KoreanMarketService:
                 year,
                 quarter if quarter is not None else "annual",
                 fs_div,
+            )
+            notes.append(
+                f"No financials available for requested period (year: {year}, quarter: {quarter})."
             )
 
         stock_info = kdevelopers_client.search_stock_info("300", symbol)
@@ -496,6 +500,72 @@ class KoreanMarketService:
                                 if eps_12mf != 0:
                                     per_12mf = quote.current_price / eps_12mf
 
+        eps_ttm = None
+        bps_ttm = None
+        per_ttm = None
+        pbr_ttm = None
+
+        ttm_quarters: List[Tuple[int, int]] = []
+        if quarter is None:
+            start_year, start_quarter = year, 4
+            notes.append(
+                f"TTM window uses {year} Q4 as the latest quarter because no quarter was specified."
+            )
+        else:
+            start_year, start_quarter = year, quarter
+
+        current_year, current_quarter = start_year, start_quarter
+        for _ in range(4):
+            ttm_quarters.append((current_year, current_quarter))
+            if current_quarter == 1:
+                current_year -= 1
+                current_quarter = 4
+            else:
+                current_quarter -= 1
+
+        ttm_financials: List[Tuple[Tuple[int, int], Optional[KoreanFinancialStatement]]] = []
+        missing_ttm = []
+        for ttm_year, ttm_quarter in ttm_quarters:
+            fs = opendart_client.get_financial_statement(
+                symbol, ttm_year, ttm_quarter, fs_div=fs_div
+            )
+            if fs is None:
+                missing_ttm.append((ttm_year, ttm_quarter))
+            ttm_financials.append(((ttm_year, ttm_quarter), fs))
+
+        if missing_ttm:
+            missing_label = ", ".join(
+                [f"{year_value} Q{quarter_value}" for year_value, quarter_value in missing_ttm]
+            )
+            notes.append(
+                f"TTM metrics unavailable; missing quarterly data for {missing_label}."
+            )
+        else:
+            net_income_values = [
+                fs.net_income for _, fs in ttm_financials if fs and fs.net_income is not None
+            ]
+            equity_values = [
+                fs.total_equity for _, fs in ttm_financials if fs and fs.total_equity is not None
+            ]
+
+            if len(net_income_values) == 4 and shares_outstanding:
+                net_income_ttm = sum(net_income_values)
+                if shares_outstanding != 0:
+                    eps_ttm = net_income_ttm / shares_outstanding
+                    if eps_ttm != 0:
+                        per_ttm = quote.current_price / eps_ttm
+            elif net_income_values:
+                notes.append("TTM EPS/PER partial data; require 4 quarterly net income values.")
+
+            if equity_values and shares_outstanding:
+                equity_avg = sum(equity_values) / len(equity_values)
+                if shares_outstanding != 0:
+                    bps_ttm = equity_avg / shares_outstanding
+                    if bps_ttm != 0:
+                        pbr_ttm = quote.current_price / bps_ttm
+            elif missing_ttm:
+                notes.append("TTM BPS/PBR partial data; missing quarterly total equity values.")
+
         return KoreanValuationMetrics(
             symbol=symbol,
             price=quote.current_price,
@@ -505,51 +575,14 @@ class KoreanMarketService:
             per=per,
             per_12mf=per_12mf,
             pbr=pbr,
+            eps_ttm=eps_ttm,
+            bps_ttm=bps_ttm,
+            per_ttm=per_ttm,
+            pbr_ttm=pbr_ttm,
             shares_outstanding=shares_outstanding,
             market_cap=market_cap,
+            notes=notes or None,
             as_of=datetime.now(),
         )
-
-    def _get_latest_financials(
-        self,
-        symbol: str,
-        year: int,
-        quarter: Optional[int],
-        fs_div: str,
-        lookback_years: int = 4,
-    ) -> Tuple[Optional[KoreanFinancialStatement], Optional[int], Optional[int]]:
-        """
-        Fetch the most recent available financials, falling back to prior years.
-
-        Returns:
-            (financials, used_year, used_quarter)
-        """
-        candidates: List[Tuple[int, Optional[int]]] = []
-
-        if quarter is not None:
-            candidates.append((year, quarter))
-            candidates.append((year, None))
-            for offset in range(1, lookback_years + 1):
-                candidates.append((year - offset, quarter))
-                candidates.append((year - offset, None))
-        else:
-            candidates.append((year, None))
-            for offset in range(1, lookback_years + 1):
-                candidates.append((year - offset, None))
-
-        seen = set()
-        for candidate_year, candidate_quarter in candidates:
-            key = (candidate_year, candidate_quarter)
-            if key in seen:
-                continue
-            seen.add(key)
-            financials = opendart_client.get_financial_statement(
-                symbol, candidate_year, candidate_quarter, fs_div=fs_div
-            )
-            if financials:
-                return financials, candidate_year, candidate_quarter
-
-        return None, None, None
-
 
 korean_market_service = KoreanMarketService()

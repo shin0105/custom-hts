@@ -3,6 +3,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { StockCard } from '../components/StockCard';
 import { CandleChart } from '../components/CandleChart';
 import { koreanMarketService } from '../services/koreanMarket';
@@ -38,10 +39,13 @@ export const KoreanMarketPage: React.FC = () => {
   const [symbol, setSymbol] = useState('005930'); // Samsung Electronics
   const [quote, setQuote] = useState<KoreanStockQuote | null>(null);
   const [valuation, setValuation] = useState<KoreanValuationMetrics | null>(null);
+  const [valuationError, setValuationError] = useState<string | null>(null);
   const [comprehensiveFinancials, setComprehensiveFinancials] =
     useState<FinancialsResponse | null>(null);
+  const [financialsError, setFinancialsError] = useState<string | null>(null);
   const [estimatePerform, setEstimatePerform] =
     useState<KoreanEstimatePerform | null>(null);
+  const [estimateError, setEstimateError] = useState<string | null>(null);
   const [candleData, setCandleData] = useState<KoreanCandleData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,9 +66,22 @@ export const KoreanMarketPage: React.FC = () => {
   const [finStatement, setFinStatement] = useState<'IS' | 'BS' | 'CF'>('IS');
   const [fsDivision, setFsDivision] = useState<'CFS' | 'OFS'>('CFS');
 
+  const getApiErrorMessage = (err: unknown, fallback: string) => {
+    if (axios.isAxiosError(err)) {
+      const detail = err.response?.data?.detail;
+      if (typeof detail === 'string' && detail.trim() !== '') {
+        return detail;
+      }
+    }
+    return fallback;
+  };
+
   const handleSearch = async () => {
     setLoading(true);
     setError(null);
+    setValuationError(null);
+    setFinancialsError(null);
+    setEstimateError(null);
     try {
       // Get quote
       const quoteData = await koreanMarketService.getQuote(symbol);
@@ -79,9 +96,13 @@ export const KoreanMarketPage: React.FC = () => {
           fsDivision
         );
         setValuation(valuationData);
+        setValuationError(null);
       } catch (valError) {
         console.error('Failed to load valuation metrics:', valError);
         setValuation(null);
+        setValuationError(
+          getApiErrorMessage(valError, 'Failed to load valuation metrics.')
+        );
       }
 
       // Get candles
@@ -113,9 +134,13 @@ export const KoreanMarketPage: React.FC = () => {
         fsDivision
       );
       setComprehensiveFinancials(finData);
+      setFinancialsError(null);
     } catch (finError) {
       console.error('Failed to load financials:', finError);
       setComprehensiveFinancials(null);
+      setFinancialsError(
+        getApiErrorMessage(finError, 'Failed to load financial statements.')
+      );
     }
   };
 
@@ -169,9 +194,16 @@ export const KoreanMarketPage: React.FC = () => {
     try {
       const estimate = await koreanMarketService.getEstimatePerform(symbol);
       setEstimatePerform(estimate);
+      setEstimateError(null);
     } catch (estimateError) {
       console.error('Failed to load estimate performance:', estimateError);
       setEstimatePerform(null);
+      setEstimateError(
+        getApiErrorMessage(
+          estimateError,
+          'Failed to load estimate performance data.'
+        )
+      );
     }
   };
 
@@ -207,9 +239,13 @@ export const KoreanMarketPage: React.FC = () => {
             fsDivision
           );
           setValuation(valuationData);
+          setValuationError(null);
         } catch (valError) {
           console.error('Failed to load valuation metrics:', valError);
           setValuation(null);
+          setValuationError(
+            getApiErrorMessage(valError, 'Failed to load valuation metrics.')
+          );
         }
       };
       loadValuation();
@@ -485,6 +521,14 @@ export const KoreanMarketPage: React.FC = () => {
                 </div>
               </div>
               <div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>PER (TTM)</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                  {valuation.per_ttm !== undefined && valuation.per_ttm !== null
+                    ? valuation.per_ttm.toFixed(2)
+                    : 'N/A'}
+                </div>
+              </div>
+              <div>
                 <div style={{ fontSize: '12px', color: '#6b7280' }}>PBR</div>
                 <div style={{ fontSize: '18px', fontWeight: 700 }}>
                   {valuation.pbr !== undefined && valuation.pbr !== null
@@ -493,10 +537,26 @@ export const KoreanMarketPage: React.FC = () => {
                 </div>
               </div>
               <div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>PBR (TTM)</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                  {valuation.pbr_ttm !== undefined && valuation.pbr_ttm !== null
+                    ? valuation.pbr_ttm.toFixed(2)
+                    : 'N/A'}
+                </div>
+              </div>
+              <div>
                 <div style={{ fontSize: '12px', color: '#6b7280' }}>EPS</div>
                 <div style={{ fontSize: '18px', fontWeight: 700 }}>
                   {valuation.eps !== undefined && valuation.eps !== null
                     ? `₩${valuation.eps.toFixed(2)}`
+                    : 'N/A'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>EPS (TTM)</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                  {valuation.eps_ttm !== undefined && valuation.eps_ttm !== null
+                    ? `₩${valuation.eps_ttm.toFixed(2)}`
                     : 'N/A'}
                 </div>
               </div>
@@ -517,6 +577,14 @@ export const KoreanMarketPage: React.FC = () => {
                 </div>
               </div>
               <div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>BPS (TTM)</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                  {valuation.bps_ttm !== undefined && valuation.bps_ttm !== null
+                    ? `₩${valuation.bps_ttm.toFixed(2)}`
+                    : 'N/A'}
+                </div>
+              </div>
+              <div>
                 <div style={{ fontSize: '12px', color: '#6b7280' }}>PER (12MF)</div>
                 <div style={{ fontSize: '18px', fontWeight: 700 }}>
                   {valuation.per_12mf !== undefined && valuation.per_12mf !== null
@@ -524,6 +592,25 @@ export const KoreanMarketPage: React.FC = () => {
                     : 'N/A'}
                 </div>
               </div>
+            </div>
+          )}
+          {(valuationError || (valuation && valuation.notes?.length)) && (
+            <div
+              style={{
+                marginTop: '12px',
+                padding: '12px',
+                backgroundColor: '#fff7ed',
+                color: '#9a3412',
+                borderRadius: '6px',
+                border: '1px solid #fdba74',
+                fontSize: '13px',
+              }}
+            >
+              {valuationError && <div>{valuationError}</div>}
+              {!valuationError &&
+                valuation?.notes?.map((note, index) => (
+                  <div key={`${note}-${index}`}>{note}</div>
+                ))}
             </div>
           )}
         </div>
@@ -721,6 +808,20 @@ export const KoreanMarketPage: React.FC = () => {
             </div>
           </div>
 
+          {financialsError && (
+            <div
+              style={{
+                padding: '12px',
+                marginBottom: '12px',
+                backgroundColor: '#fee2e2',
+                color: '#991b1b',
+                borderRadius: '6px',
+              }}
+            >
+              {financialsError}
+            </div>
+          )}
+
           {comprehensiveFinancials && comprehensiveFinancials.count > 0 ? (
             <div
               style={{
@@ -806,7 +907,8 @@ export const KoreanMarketPage: React.FC = () => {
               }}
             >
               <p style={{ color: '#6b7280', margin: 0 }}>
-                No financial data available for the selected period. Try a different year or quarter.
+                {comprehensiveFinancials?.note ||
+                  'No financial data available for the selected period. Try a different year or quarter.'}
               </p>
             </div>
           )}
@@ -819,6 +921,20 @@ export const KoreanMarketPage: React.FC = () => {
           <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>
             Estimated Performance (KDevelopers)
           </h2>
+
+          {estimateError && (
+            <div
+              style={{
+                padding: '12px',
+                marginBottom: '12px',
+                backgroundColor: '#fee2e2',
+                color: '#991b1b',
+                borderRadius: '6px',
+              }}
+            >
+              {estimateError}
+            </div>
+          )}
 
           {estimatePerform ? (
             <div
@@ -1025,7 +1141,7 @@ export const KoreanMarketPage: React.FC = () => {
               }}
             >
               <p style={{ color: '#6b7280', margin: 0 }}>
-                No estimate performance data available for this symbol.
+                {estimateError || 'No estimate performance data available for this symbol.'}
               </p>
             </div>
           )}

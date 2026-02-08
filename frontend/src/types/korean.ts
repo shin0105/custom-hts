@@ -52,8 +52,13 @@ export interface KoreanValuationMetrics {
   per?: number;
   per_12mf?: number;
   pbr?: number;
+  eps_ttm?: number;
+  bps_ttm?: number;
+  per_ttm?: number;
+  pbr_ttm?: number;
   shares_outstanding?: number;
   market_cap?: number;
+  notes?: string[];
   as_of: string;
 }
 
