@@ -232,7 +232,14 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     return value.toString();
   };
 
-  const CandlesLayer: React.FC<any> = ({ xAxisMap, yAxisMap, data: layerData }) => {
+  const CandlesLayer: React.FC<any> = ({
+    xAxisMap,
+    yAxisMap,
+    data: layerData,
+    offset,
+    width,
+    height,
+  }) => {
     const xAxis = Object.values(xAxisMap || {})[0] as any;
     const yAxis = Object.values(yAxisMap || {})[0] as any;
     if (!xAxis || !yAxis) return null;
@@ -240,6 +247,12 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     const xScale = xAxis.scale;
     const yScale = yAxis.scale;
     if (!xScale || !yScale) return null;
+
+    const clipId = React.useId();
+    const clipX = offset?.left ?? 0;
+    const clipY = offset?.top ?? 0;
+    const clipWidth = offset?.width ?? width ?? 0;
+    const clipHeight = offset?.height ?? height ?? 0;
 
     let candleWidth = 6;
     if (layerData && layerData.length >= 2) {
@@ -261,7 +274,17 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     }
 
     return (
-      <g>
+      <g clipPath={`url(#${clipId})`}>
+        <defs>
+          <clipPath id={clipId}>
+            <rect
+              x={clipX}
+              y={clipY}
+              width={clipWidth}
+              height={clipHeight}
+            />
+          </clipPath>
+        </defs>
         {layerData.map((entry: any, index: number) => {
           const x = xScale(entry.timestamp);
           if (!Number.isFinite(x)) return null;
