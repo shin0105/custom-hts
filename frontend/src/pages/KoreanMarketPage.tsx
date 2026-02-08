@@ -833,6 +833,11 @@ export const KoreanMarketPage: React.FC = () => {
                 <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>
                   <strong>Symbol:</strong> {estimatePerform.symbol}
                 </p>
+                {estimatePerform.unit_notes && (
+                  <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#9ca3af' }}>
+                    {estimatePerform.unit_notes}
+                  </p>
+                )}
               </div>
 
               {estimatePerform.output1.length > 0 && (

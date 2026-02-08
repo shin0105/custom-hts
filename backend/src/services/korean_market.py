@@ -17,6 +17,9 @@ from ..integrations.supabase_client import supabase_client
 
 logger = logging.getLogger(__name__)
 
+ESTIMATE_AMOUNT_UNIT = "억원"
+ESTIMATE_AMOUNT_MULTIPLIER = 100_000_000
+
 
 class KoreanMarketService:
     """Service for Korean market data operations."""
@@ -259,6 +262,30 @@ class KoreanMarketService:
                     }
                 )
             data["output3"] = mapped_output3
+        data["units"] = {
+            "output2": {
+                "default": ESTIMATE_AMOUNT_UNIT,
+                "scale_to_krw": ESTIMATE_AMOUNT_MULTIPLIER,
+                "metrics": {
+                    "revenue": ESTIMATE_AMOUNT_UNIT,
+                    "operating_income": ESTIMATE_AMOUNT_UNIT,
+                    "net_income": ESTIMATE_AMOUNT_UNIT,
+                },
+            },
+            "output3": {
+                "ebitda": ESTIMATE_AMOUNT_UNIT,
+                "eps": "원",
+                "per": "배",
+                "ev_ebitda": "배",
+                "roe": "%",
+                "debt_ratio": "%",
+                "interest_coverage_ratio": "배",
+            },
+        }
+        data["unit_notes"] = (
+            "KDevelopers estimate-perform monetary values are reported in 억원. "
+            "Convert to KRW by multiplying by 100,000,000 when using them in calculations."
+        )
         return KoreanEstimatePerform(symbol=symbol, **data)
 
     async def get_valuation_metrics(
@@ -318,6 +345,11 @@ class KoreanMarketService:
             end = min(period_end, year_end_exclusive)
             delta = (end - start).days
             return max(delta, 0)
+
+        def estimate_amount_to_krw(value: Optional[float]) -> Optional[float]:
+            if value is None:
+                return None
+            return value * ESTIMATE_AMOUNT_MULTIPLIER
 
         quote = kdevelopers_client.get_quote(symbol)
         if not quote:
@@ -392,23 +424,55 @@ class KoreanMarketService:
                 if year_info_1 and year_info_2:
                     year_1, _ = year_info_1
                     year_2, _ = year_info_2
-                    eps_row = next(
+                    eps_map: Dict[str, Optional[float]] = {}
+                    net_income_row = next(
                         (
                             row
-                            for row in estimate_perform.output3
-                            if row.get("metric") == "eps"
+                            for row in estimate_perform.output2
+                            if row.get("metric") == "net_income"
                         ),
                         None,
                     )
-                    eps_map: Dict[str, Optional[float]] = {}
-                    if eps_row:
-                        year_values = eps_row.get("year_values") or {}
-                        if not year_values and eps_row.get("values"):
+                    if net_income_row and shares_outstanding:
+                        year_values = net_income_row.get("year_values") or {}
+                        if not year_values and net_income_row.get("values"):
                             for idx, label in enumerate(output4):
-                                if idx < len(eps_row["values"]):
-                                    year_values[label] = eps_row["values"][idx]
+                                if idx < len(net_income_row["values"]):
+                                    year_values[label] = net_income_row["values"][idx]
                         for label in output4:
-                            eps_map[label] = parse_number(year_values.get(label))
+                            net_income_value = parse_number(
+                                year_values.get(label)
+                            )
+                            net_income_krw = estimate_amount_to_krw(
+                                net_income_value
+                            )
+                            if (
+                                net_income_krw is not None
+                                and shares_outstanding
+                                and shares_outstanding != 0
+                            ):
+                                eps_map[label] = (
+                                    net_income_krw / shares_outstanding
+                                )
+                    if not eps_map:
+                        eps_row = next(
+                            (
+                                row
+                                for row in estimate_perform.output3
+                                if row.get("metric") == "eps"
+                            ),
+                            None,
+                        )
+                        if eps_row:
+                            year_values = eps_row.get("year_values") or {}
+                            if not year_values and eps_row.get("values"):
+                                for idx, label in enumerate(output4):
+                                    if idx < len(eps_row["values"]):
+                                        year_values[label] = eps_row["values"][idx]
+                            for label in output4:
+                                eps_map[label] = parse_number(
+                                    year_values.get(label)
+                                )
 
                     eps_1 = eps_map.get(label_1)
                     eps_2 = eps_map.get(label_2)

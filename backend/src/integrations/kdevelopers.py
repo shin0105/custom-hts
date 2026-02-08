@@ -1109,6 +1109,9 @@ class KDevelopersClient:
         """
         [국내주식] 종목정보 > 국내주식 종목추정실적[국내주식-187]
         국내주식 종목추정실적 API를 호출하여 raw output list로 반환합니다.
+        Note: Monetary values in estimate performance (e.g., revenue, operating income,
+        net income) are reported in 억원. Convert to KRW by multiplying by 100,000,000
+        when using them in calculations.
 
         Args:
             sht_cd: 종목코드 (예: 265520)

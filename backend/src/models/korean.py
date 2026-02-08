@@ -88,6 +88,14 @@ class KoreanEstimatePerform(BaseModel):
         default_factory=list,
         description="Estimate performance year labels (e.g., 2023.12, 2025.12E)",
     )
+    units: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Unit metadata for estimate outputs (e.g., 억원 for monetary values).",
+    )
+    unit_notes: Optional[str] = Field(
+        None,
+        description="Notes about estimate units and conversions (e.g., 억원 to KRW).",
+    )
 
 
 class KoreanSearchResult(BaseModel):

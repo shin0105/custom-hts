@@ -71,6 +71,8 @@ export interface KoreanEstimatePerform {
     year_values: Record<string, string | number | null>;
   }>;
   output4: string[];
+  units?: Record<string, any>;
+  unit_notes?: string;
 }
 
 export interface KoreanAccountBalance {
