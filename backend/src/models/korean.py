@@ -43,7 +43,26 @@ class KoreanFinancialStatement(BaseModel):
         None, description="Total equity in KRW"
     )
     eps: Optional[float] = Field(None, description="Earnings per share")
+    bps: Optional[float] = Field(None, description="Book value per share")
     updated_at: datetime = Field(..., description="Data update timestamp")
+
+
+class KoreanValuationMetrics(BaseModel):
+    """Korean stock valuation metrics."""
+
+    symbol: str = Field(..., description="Stock symbol")
+    price: float = Field(..., description="Current price in KRW")
+    eps: Optional[float] = Field(None, description="Earnings per share")
+    bps: Optional[float] = Field(None, description="Book value per share")
+    per: Optional[float] = Field(None, description="Price-to-earnings ratio")
+    pbr: Optional[float] = Field(None, description="Price-to-book ratio")
+    shares_outstanding: Optional[float] = Field(
+        None, description="Shares outstanding"
+    )
+    market_cap: Optional[float] = Field(
+        None, description="Market capitalization in KRW"
+    )
+    as_of: datetime = Field(..., description="Valuation timestamp")
 
 
 class KoreanSearchResult(BaseModel):

@@ -8,6 +8,7 @@ from ..models.korean import (
     KoreanStockQuote,
     KoreanFinancialStatement,
     KoreanCandleData,
+    KoreanValuationMetrics,
 )
 from ..services.korean_market import korean_market_service
 from ..utils.config import settings
@@ -52,6 +53,33 @@ async def get_korean_quote(symbol: str) -> KoreanStockQuote:
             status_code=404, detail=f"Quote not found for symbol {symbol}"
         )
     return quote
+
+
+@router.get("/valuation/{symbol}", response_model=KoreanValuationMetrics)
+async def get_korean_valuation(
+    symbol: str,
+    year: int = Query(datetime.now().year - 1, description="Fiscal year"),
+    quarter: Optional[int] = Query(
+        None, ge=1, le=4, description="Quarter (1-4)"
+    ),
+    fs_div: str = Query(
+        "CFS", description="Financial statement division (CFS/OFS)"
+    ),
+) -> KoreanValuationMetrics:
+    """
+    Get valuation metrics (PER/PBR/EPS/BPS) for a Korean stock.
+
+    Uses KDevelopers for price and OpenDART for financials.
+    """
+    metrics = await korean_market_service.get_valuation_metrics(
+        symbol, year, quarter, fs_div
+    )
+    if not metrics:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Valuation metrics not found for symbol {symbol}",
+        )
+    return metrics
 
 
 @router.get("/financials/{symbol}", response_model=KoreanFinancialStatement)

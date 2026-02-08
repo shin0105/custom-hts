@@ -1,10 +1,12 @@
 """Service layer for Korean market operations."""
 
 from typing import Optional, List, Dict, Any
+from datetime import datetime
 from ..models.korean import (
     KoreanStockQuote,
     KoreanFinancialStatement,
     KoreanCandleData,
+    KoreanValuationMetrics,
 )
 from ..integrations.kdevelopers import kdevelopers_client
 from ..integrations.opendart import opendart_client
@@ -143,6 +145,98 @@ class KoreanMarketService:
             Raw output list from search-stock-info API
         """
         return kdevelopers_client.search_stock_info(prdt_type_cd, pdno)
+
+    async def get_valuation_metrics(
+        self,
+        symbol: str,
+        year: int,
+        quarter: Optional[int] = None,
+        fs_div: str = "CFS",
+    ) -> Optional[KoreanValuationMetrics]:
+        """
+        Get valuation metrics for a Korean stock using KDevelopers + OpenDART.
+
+        Args:
+            symbol: Stock code
+            year: Fiscal year for financials
+            quarter: Optional quarter (1-4)
+            fs_div: Financial statement division (CFS/OFS)
+
+        Returns:
+            KoreanValuationMetrics or None
+        """
+
+        def parse_number(value: Any) -> Optional[float]:
+            try:
+                if value is None:
+                    return None
+                text = str(value).replace(",", "").strip()
+                if not text or text == "-":
+                    return None
+                return float(text)
+            except (ValueError, TypeError):
+                return None
+
+        quote = kdevelopers_client.get_quote(symbol)
+        if not quote:
+            return None
+
+        financials = opendart_client.get_financial_statement(
+            symbol, year, quarter, fs_div=fs_div
+        )
+
+        stock_info = kdevelopers_client.search_stock_info("300", symbol)
+        info_row = stock_info[0] if stock_info else {}
+
+        shares_outstanding = None
+        share_keys = [
+            "lstn_stcn",
+            "lstn_stcn_cnt",
+            "list_shrs",
+            "lstn_shrs",
+            "issu_shrs",
+            "istt_shrs",
+            "stck_lstn",
+            "stck_list_shrs",
+        ]
+        for key in share_keys:
+            shares_outstanding = parse_number(info_row.get(key))
+            if shares_outstanding:
+                break
+
+        eps = financials.eps if financials else None
+        if eps is None and financials and financials.net_income and shares_outstanding:
+            if shares_outstanding != 0:
+                eps = financials.net_income / shares_outstanding
+
+        bps = financials.bps if financials else None
+        if bps is None and financials and financials.total_equity and shares_outstanding:
+            if shares_outstanding != 0:
+                bps = financials.total_equity / shares_outstanding
+
+        per = None
+        if eps is not None and eps != 0:
+            per = quote.current_price / eps
+
+        pbr = None
+        if bps is not None and bps != 0:
+            pbr = quote.current_price / bps
+
+        market_cap = None
+        if shares_outstanding:
+            market_cap = quote.current_price * shares_outstanding
+
+        return KoreanValuationMetrics(
+            symbol=symbol,
+            price=quote.current_price,
+            eps=eps,
+            bps=bps,
+            per=per,
+            pbr=pbr,
+            shares_outstanding=shares_outstanding,
+            market_cap=market_cap,
+            as_of=datetime.now(),
+        )
 
 
 korean_market_service = KoreanMarketService()

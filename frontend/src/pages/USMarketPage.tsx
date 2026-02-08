@@ -6,12 +6,20 @@ import React, { useState, useEffect } from 'react';
 import { StockCard } from '../components/StockCard';
 import { CandleChart } from '../components/CandleChart';
 import { usMarketService } from '../services/usMarket';
-import type { USStockQuote, USFinancialStatement, USCandleData, USPeriod, USInterval } from '../types/us';
+import type {
+  USStockQuote,
+  USFinancialStatement,
+  USCandleData,
+  USPeriod,
+  USInterval,
+  USValuationMetrics,
+} from '../types/us';
 import { formatCurrency, formatLargeNumber } from '../utils/format';
 
 export const USMarketPage: React.FC = () => {
   const [symbol, setSymbol] = useState('AAPL'); // Apple
   const [quote, setQuote] = useState<USStockQuote | null>(null);
+  const [valuation, setValuation] = useState<USValuationMetrics | null>(null);
   const [financials, setFinancials] = useState<USFinancialStatement[] | null>(null);
   const [candleData, setCandleData] = useState<USCandleData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -57,6 +65,14 @@ export const USMarketPage: React.FC = () => {
       const quoteData = await usMarketService.getQuote(symbol);
       setQuote(quoteData);
 
+      try {
+        const valuationData = await usMarketService.getValuation(symbol);
+        setValuation(valuationData);
+      } catch (valError) {
+        console.error('Failed to load valuation metrics:', valError);
+        setValuation(null);
+      }
+
       // Get candle data
       await loadCandleData();
 
@@ -71,6 +87,7 @@ export const USMarketPage: React.FC = () => {
     } catch (err) {
       setError('Failed to load stock data. Please check the symbol and try again.');
       setQuote(null);
+      setValuation(null);
       setFinancials(null);
       setCandleData([]);
     } finally {
@@ -115,6 +132,21 @@ export const USMarketPage: React.FC = () => {
       loadData();
     }
   }, [symbol, quote, period, interval, startDate, endDate, startTime]);
+
+  useEffect(() => {
+    if (symbol && quote) {
+      const loadValuation = async () => {
+        try {
+          const valuationData = await usMarketService.getValuation(symbol);
+          setValuation(valuationData);
+        } catch (valError) {
+          console.error('Failed to load valuation metrics:', valError);
+          setValuation(null);
+        }
+      };
+      loadValuation();
+    }
+  }, [symbol, quote]);
 
   const containerStyle: React.CSSProperties = {
     maxWidth: '1400px',
@@ -211,6 +243,53 @@ export const USMarketPage: React.FC = () => {
               <p style={{ color: '#6b7280', margin: 0 }}>
                 Market Cap: <strong>${formatLargeNumber(quote.market_cap)}</strong>
               </p>
+            </div>
+          )}
+          {valuation && (
+            <div
+              style={{
+                marginTop: '12px',
+                padding: '16px',
+                border: '1px solid #e5e7eb',
+                borderRadius: '8px',
+                backgroundColor: 'white',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                gap: '12px',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>PER</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                  {valuation.per !== undefined && valuation.per !== null
+                    ? valuation.per.toFixed(2)
+                    : 'N/A'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>PBR</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                  {valuation.pbr !== undefined && valuation.pbr !== null
+                    ? valuation.pbr.toFixed(2)
+                    : 'N/A'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>EPS</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                  {valuation.eps !== undefined && valuation.eps !== null
+                    ? `$${valuation.eps.toFixed(2)}`
+                    : 'N/A'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>BPS</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                  {valuation.bps !== undefined && valuation.bps !== null
+                    ? `$${valuation.bps.toFixed(2)}`
+                    : 'N/A'}
+                </div>
+              </div>
             </div>
           )}
         </div>

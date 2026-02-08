@@ -295,6 +295,7 @@ class OpenDartClient:
                 total_liabilities=financial_data.get("total_liabilities"),
                 total_equity=financial_data.get("total_equity"),
                 eps=financial_data.get("eps"),
+                bps=financial_data.get("bps"),
                 updated_at=datetime.now(),
             )
         except requests.exceptions.RequestException as e:
@@ -405,6 +406,13 @@ class OpenDartClient:
             "자산총계": "total_assets",
             "부채총계": "total_liabilities",
             "자본총계": "total_equity",
+            "기본주당이익": "eps",
+            "희석주당이익": "eps",
+            "주당순이익": "eps",
+            "EPS": "eps",
+            "주당순자산": "bps",
+            "주당순자산가치": "bps",
+            "BPS": "bps",
         }
 
         for item in dart_data:
@@ -422,11 +430,14 @@ class OpenDartClient:
                     try:
                         amount_str = str(thstrm_amount).replace(",", "")
                         if amount_str and amount_str != "-":
-                            result[field_name] = float(amount_str)
+                            if field_name not in result:
+                                result[field_name] = float(amount_str)
                         else:
-                            result[field_name] = None
+                            if field_name not in result:
+                                result[field_name] = None
                     except (ValueError, AttributeError):
-                        result[field_name] = None
+                        if field_name not in result:
+                            result[field_name] = None
                     break
 
         return result

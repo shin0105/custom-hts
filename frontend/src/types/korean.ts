@@ -43,6 +43,18 @@ export interface KoreanCandleData {
   change_percent?: number;
 }
 
+export interface KoreanValuationMetrics {
+  symbol: string;
+  price: number;
+  eps?: number;
+  bps?: number;
+  per?: number;
+  pbr?: number;
+  shares_outstanding?: number;
+  market_cap?: number;
+  as_of: string;
+}
+
 export interface KoreanAccountBalance {
   account_number: string;
   total_evaluation: number;

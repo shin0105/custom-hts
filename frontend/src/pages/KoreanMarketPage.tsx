@@ -12,12 +12,33 @@ import type {
   ChartInterval,
   MinuteInterval,
   PeriodType,
+  KoreanValuationMetrics,
 } from '../types/korean';
+
+type FinancialItem = {
+  sj_nm?: string;
+  sj_div?: string;
+  account_nm?: string;
+  thstrm_amount?: string;
+};
+
+type FinancialsResponse = {
+  symbol: string;
+  year: number;
+  requested_year?: number;
+  quarter?: number;
+  fs_div: 'CFS' | 'OFS';
+  count: number;
+  data: FinancialItem[];
+  note?: string;
+};
 
 export const KoreanMarketPage: React.FC = () => {
   const [symbol, setSymbol] = useState('005930'); // Samsung Electronics
   const [quote, setQuote] = useState<KoreanStockQuote | null>(null);
-  const [comprehensiveFinancials, setComprehensiveFinancials] = useState<any>(null);
+  const [valuation, setValuation] = useState<KoreanValuationMetrics | null>(null);
+  const [comprehensiveFinancials, setComprehensiveFinancials] =
+    useState<FinancialsResponse | null>(null);
   const [candleData, setCandleData] = useState<KoreanCandleData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +54,9 @@ export const KoreanMarketPage: React.FC = () => {
 
   // Financial statement controls
   const [finYear, setFinYear] = useState<number>(new Date().getFullYear() - 1);
-  const [finQuarter, setFinQuarter] = useState<number | undefined>(undefined);
+  const [finPeriod, setFinPeriod] = useState<'annual' | 'quarterly'>('annual');
+  const [finQuarter, setFinQuarter] = useState<number>(1);
+  const [finStatement, setFinStatement] = useState<'IS' | 'BS' | 'CF'>('IS');
   const [fsDivision, setFsDivision] = useState<'CFS' | 'OFS'>('CFS');
 
   const handleSearch = async () => {
@@ -44,14 +67,29 @@ export const KoreanMarketPage: React.FC = () => {
       const quoteData = await koreanMarketService.getQuote(symbol);
       setQuote(quoteData);
 
+      // Get valuation metrics
+      try {
+        const valuationData = await koreanMarketService.getValuation(
+          symbol,
+          finYear,
+          finPeriod === 'quarterly' ? finQuarter : undefined,
+          fsDivision
+        );
+        setValuation(valuationData);
+      } catch (valError) {
+        console.error('Failed to load valuation metrics:', valError);
+        setValuation(null);
+      }
+
       // Get candles
       await loadCandleData();
 
-      // Try to get comprehensive financials from DART
+      // Get financials
       await loadFinancials();
     } catch (err) {
       setError('Failed to load stock data. Please check the symbol and try again.');
       setQuote(null);
+      setValuation(null);
       setComprehensiveFinancials(null);
       setCandleData([]);
     } finally {
@@ -64,7 +102,7 @@ export const KoreanMarketPage: React.FC = () => {
       const finData = await koreanMarketService.getAllFinancials(
         symbol,
         finYear,
-        finQuarter,
+        finPeriod === 'quarterly' ? finQuarter : undefined,
         fsDivision
       );
       setComprehensiveFinancials(finData);
@@ -135,6 +173,32 @@ export const KoreanMarketPage: React.FC = () => {
     endDate,
   ]);
 
+  useEffect(() => {
+    if (symbol && quote) {
+      loadFinancials();
+    }
+  }, [finYear, finQuarter, finPeriod, fsDivision, symbol, quote]);
+
+  useEffect(() => {
+    if (symbol && quote) {
+      const loadValuation = async () => {
+        try {
+          const valuationData = await koreanMarketService.getValuation(
+            symbol,
+            finYear,
+            finPeriod === 'quarterly' ? finQuarter : undefined,
+            fsDivision
+          );
+          setValuation(valuationData);
+        } catch (valError) {
+          console.error('Failed to load valuation metrics:', valError);
+          setValuation(null);
+        }
+      };
+      loadValuation();
+    }
+  }, [finYear, finQuarter, finPeriod, fsDivision, symbol, quote]);
+
   const containerStyle: React.CSSProperties = {
     maxWidth: '1400px',
     margin: '0 auto',
@@ -181,6 +245,107 @@ export const KoreanMarketPage: React.FC = () => {
     backgroundColor: 'white',
   };
 
+  const statementBadgeStyle = (active: boolean): React.CSSProperties => ({
+    padding: '6px 10px',
+    fontSize: '12px',
+    fontWeight: 600,
+    borderRadius: '999px',
+    border: active ? '1px solid #2563eb' : '1px solid #d1d5db',
+    backgroundColor: active ? '#eff6ff' : 'white',
+    color: active ? '#1d4ed8' : '#374151',
+    cursor: 'pointer',
+  });
+
+  const formatValue = (value: unknown) => {
+    if (value === null || value === undefined || value === '') return '-';
+    if (typeof value === 'number') {
+      const absValue = Math.abs(value);
+      if (!Number.isInteger(value) && absValue < 1000) {
+        return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+      }
+      return value.toLocaleString();
+    }
+    return String(value);
+  };
+
+  const statementMap = {
+    IS: { label: 'Income Statement', key: 'income_statement' as const },
+    BS: { label: 'Balance Sheet', key: 'balance_sheet' as const },
+    CF: { label: 'Cash Flow', key: 'cashflow_statement' as const },
+  };
+
+  const parseAmount = (value?: string) => {
+    if (!value) return null;
+    const cleaned = value.replace(/,/g, '').trim();
+    if (cleaned === '' || cleaned === '-') return null;
+    const parsed = Number(cleaned);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const matchesStatement = (item: FinancialItem) => {
+    const sjDiv = (item.sj_div || '').toUpperCase();
+    if (sjDiv) return sjDiv === finStatement;
+    const sjName = item.sj_nm || '';
+    if (finStatement === 'BS') return sjName.includes('재무상태표');
+    if (finStatement === 'IS') return sjName.includes('손익계산서');
+    if (finStatement === 'CF') return sjName.includes('현금흐름');
+    return false;
+  };
+
+  const selectedStatementItems = (comprehensiveFinancials?.data || []).filter(
+    matchesStatement
+  );
+
+  const pickValue = (
+    items: FinancialItem[],
+    keys: string[]
+  ): { key: string; value: number } | null => {
+    for (const key of keys) {
+      const match = items.find((item) => item.account_nm === key);
+      if (match) {
+        const parsed = parseAmount(match.thstrm_amount);
+        if (parsed !== null) {
+          return { key, value: parsed };
+        }
+      }
+    }
+    return null;
+  };
+
+  const buildHighlights = () => {
+    if (!selectedStatementItems.length) return [];
+    if (finStatement === 'BS') {
+      const assets = pickValue(selectedStatementItems, ['자산총계']);
+      const liabilities = pickValue(selectedStatementItems, ['부채총계']);
+      const equity = pickValue(selectedStatementItems, ['자본총계']);
+      return [
+        assets && { label: 'Assets', key: assets.key, value: assets.value },
+        liabilities && { label: 'Liabilities', key: liabilities.key, value: liabilities.value },
+        equity && { label: 'Equity', key: equity.key, value: equity.value },
+      ].filter(Boolean) as Array<{ label: string; key: string; value: number }>;
+    }
+    if (finStatement === 'IS') {
+      const revenue = pickValue(selectedStatementItems, ['매출액']);
+      const opIncome = pickValue(selectedStatementItems, ['영업이익']);
+      const netIncome = pickValue(selectedStatementItems, ['당기순이익', '분기순이익(손실)']);
+      return [
+        revenue && { label: 'Revenue', key: revenue.key, value: revenue.value },
+        opIncome && { label: 'Operating Income', key: opIncome.key, value: opIncome.value },
+        netIncome && { label: 'Net Income', key: netIncome.key, value: netIncome.value },
+      ].filter(Boolean) as Array<{ label: string; key: string; value: number }>;
+    }
+    const opCF = pickValue(selectedStatementItems, ['영업활동현금흐름']);
+    const invCF = pickValue(selectedStatementItems, ['투자활동현금흐름']);
+    const finCF = pickValue(selectedStatementItems, ['재무활동현금흐름']);
+    return [
+      opCF && { label: 'Operating CF', key: opCF.key, value: opCF.value },
+      invCF && { label: 'Investing CF', key: invCF.key, value: invCF.value },
+      finCF && { label: 'Financing CF', key: finCF.key, value: finCF.value },
+    ].filter(Boolean) as Array<{ label: string; key: string; value: number }>;
+  };
+
+  const highlights = buildHighlights();
+
   return (
     <div style={containerStyle}>
       <h1 style={{ fontSize: '32px', fontWeight: 'bold', marginBottom: '24px' }}>
@@ -225,6 +390,53 @@ export const KoreanMarketPage: React.FC = () => {
             changePercent={quote.change_percent}
             currency="KRW"
           />
+          {valuation && (
+            <div
+              style={{
+                marginTop: '12px',
+                padding: '16px',
+                border: '1px solid #e5e7eb',
+                borderRadius: '8px',
+                backgroundColor: 'white',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                gap: '12px',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>PER</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                  {valuation.per !== undefined && valuation.per !== null
+                    ? valuation.per.toFixed(2)
+                    : 'N/A'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>PBR</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                  {valuation.pbr !== undefined && valuation.pbr !== null
+                    ? valuation.pbr.toFixed(2)
+                    : 'N/A'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>EPS</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                  {valuation.eps !== undefined && valuation.eps !== null
+                    ? `₩${valuation.eps.toFixed(2)}`
+                    : 'N/A'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>BPS</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                  {valuation.bps !== undefined && valuation.bps !== null
+                    ? `₩${valuation.bps.toFixed(2)}`
+                    : 'N/A'}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -364,22 +576,26 @@ export const KoreanMarketPage: React.FC = () => {
                 onChange={(e) => setFinYear(Number(e.target.value))}
                 style={selectStyle}
               >
-                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(
-                  (year) => (
-                    <option key={year} value={year}>
-                      {year}
-                    </option>
-                  )
-                )}
+                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
               </select>
               <select
-                value={finQuarter || ''}
-                onChange={(e) =>
-                  setFinQuarter(e.target.value ? Number(e.target.value) : undefined)
-                }
+                value={finPeriod}
+                onChange={(e) => setFinPeriod(e.target.value as 'annual' | 'quarterly')}
                 style={selectStyle}
               >
-                <option value="">Annual</option>
+                <option value="annual">Annual</option>
+                <option value="quarterly">Quarterly</option>
+              </select>
+              <select
+                value={finQuarter}
+                onChange={(e) => setFinQuarter(Number(e.target.value))}
+                style={selectStyle}
+                disabled={finPeriod === 'annual'}
+              >
                 <option value={1}>Q1</option>
                 <option value={2}>Q2</option>
                 <option value={3}>Q3</option>
@@ -393,16 +609,30 @@ export const KoreanMarketPage: React.FC = () => {
                 <option value="CFS">Consolidated</option>
                 <option value="OFS">Separate</option>
               </select>
-              <button
-                onClick={loadFinancials}
-                style={{ ...buttonStyle, padding: '8px 16px', fontSize: '14px' }}
-              >
-                Reload
-              </button>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <button
+                  onClick={() => setFinStatement('IS')}
+                  style={statementBadgeStyle(finStatement === 'IS')}
+                >
+                  IS
+                </button>
+                <button
+                  onClick={() => setFinStatement('BS')}
+                  style={statementBadgeStyle(finStatement === 'BS')}
+                >
+                  BS
+                </button>
+                <button
+                  onClick={() => setFinStatement('CF')}
+                  style={statementBadgeStyle(finStatement === 'CF')}
+                >
+                  CF
+                </button>
+              </div>
             </div>
           </div>
 
-          {comprehensiveFinancials && comprehensiveFinancials.data ? (
+          {comprehensiveFinancials && comprehensiveFinancials.count > 0 ? (
             <div
               style={{
                 border: '1px solid #e5e7eb',
@@ -415,76 +645,66 @@ export const KoreanMarketPage: React.FC = () => {
                 <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>
                   <strong>Symbol:</strong> {comprehensiveFinancials.symbol} | 
                   <strong> Year:</strong> {comprehensiveFinancials.year} | 
-                  <strong> Quarter:</strong> {comprehensiveFinancials.quarter || 'Annual'} | 
-                  <strong> Division:</strong> {comprehensiveFinancials.fs_div} | 
-                  <strong> Items:</strong> {comprehensiveFinancials.count}
+                  <strong> Period:</strong> {comprehensiveFinancials.quarter ? `Q${comprehensiveFinancials.quarter}` : 'Annual'} | 
+                  <strong> Statement:</strong> {statementMap[finStatement].label} | 
+                  <strong> Items:</strong> {selectedStatementItems.length}
                 </p>
+                {comprehensiveFinancials.note && (
+                  <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#9ca3af' }}>
+                    {comprehensiveFinancials.note}
+                  </p>
+                )}
               </div>
-              
-              <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-                  <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f9fafb', zIndex: 1 }}>
-                    <tr>
-                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e5e7eb', fontWeight: '600' }}>
-                        Statement
-                      </th>
-                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e5e7eb', fontWeight: '600' }}>
-                        Account Name
-                      </th>
-                      <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #e5e7eb', fontWeight: '600' }}>
-                        Amount (백만원)
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {comprehensiveFinancials.data.map((item: any, index: number) => {
-                      const statementType = item.sj_nm || item.sj_div || '-';
-                      const accountName = item.account_nm || '-';
-                      const amount = item.thstrm_amount || '-';
-                      
-                      // Parse amount and format it
-                      let formattedAmount = amount;
-                      if (amount !== '-' && amount !== '' && !isNaN(Number(amount))) {
-                        const numAmount = Number(amount);
-                        formattedAmount = numAmount.toLocaleString();
-                      }
-                      
-                      // Color coding for different statement types
-                      let bgColor = 'white';
-                      if (statementType.includes('재무상태표') || item.sj_div === 'BS') {
-                        bgColor = index % 2 === 0 ? '#f0f9ff' : 'white';
-                      } else if (statementType.includes('손익계산서') || item.sj_div === 'IS') {
-                        bgColor = index % 2 === 0 ? '#f0fdf4' : 'white';
-                      } else if (statementType.includes('현금흐름') || item.sj_div === 'CF') {
-                        bgColor = index % 2 === 0 ? '#fef3c7' : 'white';
-                      }
-                      
-                      return (
-                        <tr key={index} style={{ backgroundColor: bgColor }}>
-                          <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6', fontSize: '13px' }}>
-                            {statementType}
-                          </td>
-                          <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6' }}>
-                            {accountName}
-                          </td>
-                          <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6', textAlign: 'right', fontFamily: 'monospace' }}>
-                            {formattedAmount}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              
-              <div style={{ padding: '12px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb', fontSize: '12px', color: '#6b7280' }}>
-                <p style={{ margin: 0 }}>
-                  <strong>Legend:</strong> 
-                  <span style={{ marginLeft: '12px', padding: '2px 8px', backgroundColor: '#f0f9ff', borderRadius: '4px' }}>BS: Balance Sheet (재무상태표)</span>
-                  <span style={{ marginLeft: '8px', padding: '2px 8px', backgroundColor: '#f0fdf4', borderRadius: '4px' }}>IS: Income Statement (손익계산서)</span>
-                  <span style={{ marginLeft: '8px', padding: '2px 8px', backgroundColor: '#fef3c7', borderRadius: '4px' }}>CF: Cash Flow (현금흐름표)</span>
-                </p>
-              </div>
+
+              {highlights.length > 0 && (
+                <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', padding: '16px', borderBottom: '1px solid #e5e7eb' }}>
+                  {highlights.map((item) => (
+                    <div key={item.key} style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '12px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>{item.label}</div>
+                      <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a', marginTop: '4px' }}>
+                        {formatValue(item.value)}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{item.key}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {selectedStatementItems.length > 0 ? (
+                <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                    <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f9fafb', zIndex: 1 }}>
+                      <tr>
+                        <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #e5e7eb', fontWeight: '600' }}>
+                          Account
+                        </th>
+                        <th style={{ padding: '12px', textAlign: 'right', borderBottom: '2px solid #e5e7eb', fontWeight: '600' }}>
+                          Value
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedStatementItems.map((item, index) => {
+                        const bgColor = index % 2 === 0 ? '#f8fafc' : 'white';
+                        return (
+                          <tr key={index} style={{ backgroundColor: bgColor }}>
+                            <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6' }}>
+                              {item.account_nm || '-'}
+                            </td>
+                            <td style={{ padding: '8px 12px', borderBottom: '1px solid #f3f4f6', textAlign: 'right', fontFamily: 'monospace' }}>
+                              {formatValue(parseAmount(item.thstrm_amount) ?? item.thstrm_amount ?? '-')}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>
+                  No items for this statement in the selected period.
+                </div>
+              )}
             </div>
           ) : (
             <div
@@ -497,7 +717,7 @@ export const KoreanMarketPage: React.FC = () => {
               }}
             >
               <p style={{ color: '#6b7280', margin: 0 }}>
-                No financial data available for the selected period. Try different year/quarter.
+                No financial data available for the selected period. Try a different year or quarter.
               </p>
             </div>
           )}

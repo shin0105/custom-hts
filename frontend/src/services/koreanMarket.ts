@@ -10,6 +10,7 @@ import type {
   PeriodType,
   MinuteInterval,
   KoreanAccountResponse,
+  KoreanValuationMetrics,
 } from '../types/korean';
 
 const API_BASE_URL = '/api';
@@ -41,6 +42,26 @@ export const koreanMarketService = {
 
     const response = await axios.get<KoreanFinancialStatement>(
       `${API_BASE_URL}/korean/financials/${symbol}?${params}`
+    );
+    return response.data;
+  },
+
+  /**
+   * Get valuation metrics (PER/PBR/EPS/BPS) for a Korean stock.
+   */
+  async getValuation(
+    symbol: string,
+    year?: number,
+    quarter?: number,
+    fsDivision: 'CFS' | 'OFS' = 'CFS'
+  ): Promise<KoreanValuationMetrics> {
+    const params = new URLSearchParams();
+    if (year) params.append('year', year.toString());
+    if (quarter) params.append('quarter', quarter.toString());
+    params.append('fs_div', fsDivision);
+
+    const response = await axios.get<KoreanValuationMetrics>(
+      `${API_BASE_URL}/korean/valuation/${symbol}?${params}`
     );
     return response.data;
   },

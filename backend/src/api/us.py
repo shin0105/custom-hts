@@ -2,7 +2,12 @@
 
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
-from ..models.us import USStockQuote, USFinancialStatement, USCandleData
+from ..models.us import (
+    USStockQuote,
+    USFinancialStatement,
+    USCandleData,
+    USValuationMetrics,
+)
 from ..services.us_market import us_market_service
 
 router = APIRouter(prefix="/us", tags=["US Market"])
@@ -25,6 +30,20 @@ async def get_us_quote(symbol: str) -> USStockQuote:
             status_code=404, detail=f"Quote not found for symbol {symbol}"
         )
     return quote
+
+
+@router.get("/valuation/{symbol}", response_model=USValuationMetrics)
+async def get_us_valuation(symbol: str) -> USValuationMetrics:
+    """
+    Get valuation metrics (PER/PBR/EPS/BPS) for a US stock.
+    """
+    metrics = await us_market_service.get_valuation_metrics(symbol.upper())
+    if not metrics:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Valuation metrics not found for symbol {symbol}",
+        )
+    return metrics
 
 
 @router.get("/financials/{symbol}", response_model=List[USFinancialStatement])

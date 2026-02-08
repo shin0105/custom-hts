@@ -3,12 +3,25 @@
 from typing import Optional, List
 from datetime import datetime
 import yfinance as yf
-from ..models.us import USStockQuote, USFinancialStatement, USCandleData
+from ..models.us import (
+    USStockQuote,
+    USFinancialStatement,
+    USCandleData,
+    USValuationMetrics,
+)
 from ..utils.helpers import safe_float, safe_int, calculate_change_percent
 
 
 class YFinanceClient:
     """Client for Yahoo Finance API."""
+
+    def _optional_float(self, value: Optional[float]) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
     def get_quote(self, symbol: str) -> Optional[USStockQuote]:
         """
@@ -220,6 +233,53 @@ class YFinanceClient:
             return candles
         except Exception as e:
             print(f"Failed to get historical data for {symbol}: {e}")
+            return None
+
+    def get_valuation_metrics(
+        self, symbol: str
+    ) -> Optional[USValuationMetrics]:
+        """
+        Get valuation metrics for a US stock using Yahoo Finance.
+        """
+        try:
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+
+            if not info:
+                return None
+
+            price = self._optional_float(info.get("currentPrice"))
+            if price is None:
+                return None
+
+            eps = self._optional_float(info.get("trailingEps"))
+            per = self._optional_float(info.get("trailingPE"))
+            bps = self._optional_float(info.get("bookValue"))
+            pbr = self._optional_float(info.get("priceToBook"))
+            shares_outstanding = self._optional_float(
+                info.get("sharesOutstanding")
+            )
+            market_cap = self._optional_float(info.get("marketCap"))
+
+            if per is None and eps not in (None, 0):
+                per = price / eps
+
+            if pbr is None and bps not in (None, 0):
+                pbr = price / bps
+
+            return USValuationMetrics(
+                symbol=symbol.upper(),
+                price=price,
+                eps=eps,
+                bps=bps,
+                per=per,
+                pbr=pbr,
+                shares_outstanding=shares_outstanding,
+                market_cap=market_cap,
+                as_of=datetime.now(),
+            )
+        except Exception as e:
+            print(f"Failed to get valuation metrics for {symbol}: {e}")
             return None
 
 

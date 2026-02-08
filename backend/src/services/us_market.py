@@ -3,7 +3,12 @@
 from typing import Optional, List
 from starlette.concurrency import run_in_threadpool
 from datetime import datetime
-from ..models.us import USStockQuote, USFinancialStatement, USCandleData
+from ..models.us import (
+    USStockQuote,
+    USFinancialStatement,
+    USCandleData,
+    USValuationMetrics,
+)
 from ..integrations.yfinance_client import yfinance_client
 from ..integrations.supabase_client import supabase_client
 
@@ -86,6 +91,14 @@ class USMarketService:
         return yfinance_client.get_historical_data(
             symbol, period, interval, start, end
         )
+
+    async def get_valuation_metrics(
+        self, symbol: str
+    ) -> Optional[USValuationMetrics]:
+        """
+        Get valuation metrics for a US stock using Yahoo Finance.
+        """
+        return yfinance_client.get_valuation_metrics(symbol)
 
 
 us_market_service = USMarketService()

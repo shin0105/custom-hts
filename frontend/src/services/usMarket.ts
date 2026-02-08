@@ -3,7 +3,14 @@
  */
 
 import axios from 'axios';
-import type { USStockQuote, USFinancialStatement, USCandleData, USPeriod, USInterval } from '../types/us';
+import type {
+  USStockQuote,
+  USFinancialStatement,
+  USCandleData,
+  USPeriod,
+  USInterval,
+  USValuationMetrics,
+} from '../types/us';
 
 const API_BASE_URL = '/api';
 
@@ -53,6 +60,16 @@ export const usMarketService = {
 
     const response = await axios.get<USCandleData[]>(
       `${API_BASE_URL}/us/candle/${symbol}?${params}`
+    );
+    return response.data;
+  },
+
+  /**
+   * Get valuation metrics (PER/PBR/EPS/BPS) for a US stock.
+   */
+  async getValuation(symbol: string): Promise<USValuationMetrics> {
+    const response = await axios.get<USValuationMetrics>(
+      `${API_BASE_URL}/us/valuation/${symbol}`
     );
     return response.data;
   },
