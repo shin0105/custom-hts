@@ -501,10 +501,26 @@ export const KoreanMarketPage: React.FC = () => {
                 </div>
               </div>
               <div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>EPS (12MF)</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                  {valuation.eps_12mf !== undefined && valuation.eps_12mf !== null
+                    ? `₩${valuation.eps_12mf.toFixed(2)}`
+                    : 'N/A'}
+                </div>
+              </div>
+              <div>
                 <div style={{ fontSize: '12px', color: '#6b7280' }}>BPS</div>
                 <div style={{ fontSize: '18px', fontWeight: 700 }}>
                   {valuation.bps !== undefined && valuation.bps !== null
                     ? `₩${valuation.bps.toFixed(2)}`
+                    : 'N/A'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>PER (12MF)</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                  {valuation.per_12mf !== undefined && valuation.per_12mf !== null
+                    ? valuation.per_12mf.toFixed(2)
                     : 'N/A'}
                 </div>
               </div>

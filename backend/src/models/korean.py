@@ -53,8 +53,14 @@ class KoreanValuationMetrics(BaseModel):
     symbol: str = Field(..., description="Stock symbol")
     price: float = Field(..., description="Current price in KRW")
     eps: Optional[float] = Field(None, description="Earnings per share")
+    eps_12mf: Optional[float] = Field(
+        None, description="Forward 12-month EPS (projection-weighted)"
+    )
     bps: Optional[float] = Field(None, description="Book value per share")
     per: Optional[float] = Field(None, description="Price-to-earnings ratio")
+    per_12mf: Optional[float] = Field(
+        None, description="Forward 12-month PER (projection-weighted)"
+    )
     pbr: Optional[float] = Field(None, description="Price-to-book ratio")
     shares_outstanding: Optional[float] = Field(
         None, description="Shares outstanding"

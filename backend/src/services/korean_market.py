@@ -1,7 +1,8 @@
 """Service layer for Korean market operations."""
 
 from typing import Optional, List, Dict, Any, Tuple
-from datetime import datetime
+from datetime import datetime, date, timedelta
+import re
 import logging
 from ..models.korean import (
     KoreanStockQuote,
@@ -291,6 +292,33 @@ class KoreanMarketService:
             except (ValueError, TypeError):
                 return None
 
+        def parse_estimate_year_label(label: str) -> Optional[Tuple[int, bool]]:
+            if not label:
+                return None
+            match = re.search(r"(20\d{2})", label)
+            if not match:
+                return None
+            year_value = int(match.group(1))
+            is_estimate = "E" in label.upper()
+            return year_value, is_estimate
+
+        def add_year_safe(input_date: date) -> date:
+            try:
+                return input_date.replace(year=input_date.year + 1)
+            except ValueError:
+                # Handle Feb 29 -> Feb 28 for non-leap years
+                return input_date.replace(month=2, day=28, year=input_date.year + 1)
+
+        def overlap_days(
+            period_start: date, period_end: date, year_value: int
+        ) -> int:
+            year_start = date(year_value, 1, 1)
+            year_end_exclusive = date(year_value, 12, 31) + timedelta(days=1)
+            start = max(period_start, year_start)
+            end = min(period_end, year_end_exclusive)
+            delta = (end - start).days
+            return max(delta, 0)
+
         quote = kdevelopers_client.get_quote(symbol)
         if not quote:
             return None
@@ -349,12 +377,69 @@ class KoreanMarketService:
         if shares_outstanding:
             market_cap = quote.current_price * shares_outstanding
 
+        eps_12mf = None
+        per_12mf = None
+        estimate_perform = await self.get_estimate_perform(symbol)
+        if estimate_perform:
+            output4 = estimate_perform.output4 or []
+            estimate_labels = [
+                label for label in output4 if label and "E" in str(label).upper()
+            ]
+            if len(estimate_labels) >= 2:
+                label_1, label_2 = estimate_labels[0], estimate_labels[1]
+                year_info_1 = parse_estimate_year_label(str(label_1))
+                year_info_2 = parse_estimate_year_label(str(label_2))
+                if year_info_1 and year_info_2:
+                    year_1, _ = year_info_1
+                    year_2, _ = year_info_2
+                    eps_row = next(
+                        (
+                            row
+                            for row in estimate_perform.output3
+                            if row.get("metric") == "eps"
+                        ),
+                        None,
+                    )
+                    eps_map: Dict[str, Optional[float]] = {}
+                    if eps_row:
+                        year_values = eps_row.get("year_values") or {}
+                        if not year_values and eps_row.get("values"):
+                            for idx, label in enumerate(output4):
+                                if idx < len(eps_row["values"]):
+                                    year_values[label] = eps_row["values"][idx]
+                        for label in output4:
+                            eps_map[label] = parse_number(year_values.get(label))
+
+                    eps_1 = eps_map.get(label_1)
+                    eps_2 = eps_map.get(label_2)
+                    if eps_1 is not None and eps_2 is not None:
+                        today = date.today()
+                        period_start = today
+                        period_end = add_year_safe(today)
+                        total_days = (period_end - period_start).days
+                        if total_days > 0:
+                            days_year_1 = overlap_days(
+                                period_start, period_end, year_1
+                            )
+                            days_year_2 = overlap_days(
+                                period_start, period_end, year_2
+                            )
+                            overlap_total = days_year_1 + days_year_2
+                            if overlap_total > 0:
+                                weight_1 = days_year_1 / overlap_total
+                                weight_2 = days_year_2 / overlap_total
+                                eps_12mf = (eps_1 * weight_1) + (eps_2 * weight_2)
+                                if eps_12mf != 0:
+                                    per_12mf = quote.current_price / eps_12mf
+
         return KoreanValuationMetrics(
             symbol=symbol,
             price=quote.current_price,
             eps=eps,
+            eps_12mf=eps_12mf,
             bps=bps,
             per=per,
+            per_12mf=per_12mf,
             pbr=pbr,
             shares_outstanding=shares_outstanding,
             market_cap=market_cap,
