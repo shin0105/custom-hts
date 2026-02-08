@@ -1,7 +1,8 @@
 """Service layer for Korean market operations."""
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
+import logging
 from ..models.korean import (
     KoreanStockQuote,
     KoreanFinancialStatement,
@@ -11,6 +12,8 @@ from ..models.korean import (
 from ..integrations.kdevelopers import kdevelopers_client
 from ..integrations.opendart import opendart_client
 from ..integrations.supabase_client import supabase_client
+
+logger = logging.getLogger(__name__)
 
 
 class KoreanMarketService:
@@ -181,15 +184,24 @@ class KoreanMarketService:
         if not quote:
             return None
 
-        financials = opendart_client.get_financial_statement(
-            symbol, year, quarter, fs_div=fs_div
+        financials, _, _ = self._get_latest_financials(
+            symbol, year, quarter, fs_div
         )
+        if financials is None:
+            logger.info(
+                "No financials available for %s (requested %s Q%s, fs_div=%s)",
+                symbol,
+                year,
+                quarter if quarter is not None else "annual",
+                fs_div,
+            )
 
         stock_info = kdevelopers_client.search_stock_info("300", symbol)
         info_row = stock_info[0] if stock_info else {}
 
         shares_outstanding = None
         share_keys = [
+            "listed_shares",
             "lstn_stcn",
             "lstn_stcn_cnt",
             "list_shrs",
@@ -237,6 +249,47 @@ class KoreanMarketService:
             market_cap=market_cap,
             as_of=datetime.now(),
         )
+
+    def _get_latest_financials(
+        self,
+        symbol: str,
+        year: int,
+        quarter: Optional[int],
+        fs_div: str,
+        lookback_years: int = 4,
+    ) -> Tuple[Optional[KoreanFinancialStatement], Optional[int], Optional[int]]:
+        """
+        Fetch the most recent available financials, falling back to prior years.
+
+        Returns:
+            (financials, used_year, used_quarter)
+        """
+        candidates: List[Tuple[int, Optional[int]]] = []
+
+        if quarter is not None:
+            candidates.append((year, quarter))
+            candidates.append((year, None))
+            for offset in range(1, lookback_years + 1):
+                candidates.append((year - offset, quarter))
+                candidates.append((year - offset, None))
+        else:
+            candidates.append((year, None))
+            for offset in range(1, lookback_years + 1):
+                candidates.append((year - offset, None))
+
+        seen = set()
+        for candidate_year, candidate_quarter in candidates:
+            key = (candidate_year, candidate_quarter)
+            if key in seen:
+                continue
+            seen.add(key)
+            financials = opendart_client.get_financial_statement(
+                symbol, candidate_year, candidate_quarter, fs_div=fs_div
+            )
+            if financials:
+                return financials, candidate_year, candidate_quarter
+
+        return None, None, None
 
 
 korean_market_service = KoreanMarketService()
