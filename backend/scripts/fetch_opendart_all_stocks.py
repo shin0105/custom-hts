@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import sys
 import time
 from pathlib import Path
@@ -81,6 +82,73 @@ def write_csv(path: Path, rows: List[Dict[str, Any]], columns: List[str]) -> Non
             writer.writerow(row)
 
 
+def load_json(path: Path, default: Any) -> Any:
+    if not path.exists():
+        return default
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except Exception:
+        return default
+
+
+def save_json(path: Path, payload: Any) -> None:
+    ensure_dir(path.parent)
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+
+
+def read_existing_rows(path: Path) -> List[Dict[str, Any]]:
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        return list(reader)
+
+
+def write_csv_with_schema(
+    path: Path, rows: List[Dict[str, Any]], columns: List[str]
+) -> None:
+    ensure_dir(path.parent)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=columns)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+
+def append_row_with_schema(
+    csv_path: Path,
+    schema_path: Path,
+    row: Dict[str, Any],
+    base_columns: List[str],
+) -> None:
+    schema = load_json(schema_path, {"columns": base_columns})
+    columns = schema.get("columns", base_columns)
+    columns_set = set(columns)
+
+    new_keys = [key for key in row.keys() if key not in columns_set]
+    if new_keys:
+        columns = base_columns + sorted(
+            {key for key in columns if key not in base_columns}.union(new_keys)
+        )
+        schema = {"columns": columns}
+        save_json(schema_path, schema)
+
+        existing = read_existing_rows(csv_path)
+        existing.append(row)
+        write_csv_with_schema(csv_path, existing, columns)
+        return
+
+    ensure_dir(csv_path.parent)
+    file_exists = csv_path.exists()
+    with csv_path.open("a", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=columns)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(row)
+
+
 def iter_stock_codes(
     limit: Optional[int] = None,
     symbols: Optional[List[str]] = None,
@@ -109,15 +177,25 @@ def fetch_for_stock(
     year: int,
     fs_div: str,
     sleep_sec: float,
+    retries: int,
+    retry_sleep: float,
 ) -> Tuple[Dict[int, Dict[str, Dict[str, Optional[float]]]], Optional[str]]:
     raw_by_quarter: Dict[int, Dict[str, Dict[str, Optional[float]]]] = {}
     corp_name: Optional[str] = None
     for quarter in (1, 2, 3, 4):
-        raw_list = opendart_client.get_financial_statement_raw(
-            symbol, year, quarter, fs_div
-        )
+        raw_list = None
+        for attempt in range(retries + 1):
+            raw_list = opendart_client.get_financial_statement_raw(
+                symbol, year, quarter, fs_div
+            )
+            if raw_list is not None:
+                break
+            if attempt < retries:
+                time.sleep(retry_sleep)
         if raw_list is None:
-            raw_list = []
+            raise RuntimeError(
+                f"DART API error or rate limit for {symbol} {year}Q{quarter} {fs_div}"
+            )
         if raw_list and not corp_name:
             corp_name = raw_list[0].get("corp_name")
         parsed = parse_raw_items(raw_list)
@@ -203,6 +281,8 @@ def main() -> None:
     )
     parser.add_argument("--years", nargs="+", type=int, required=True)
     parser.add_argument("--sleep", type=float, default=0.3)
+    parser.add_argument("--retries", type=int, default=2)
+    parser.add_argument("--retry-sleep", type=float, default=30.0)
     parser.add_argument(
         "--output-root",
         type=str,
@@ -224,82 +304,88 @@ def main() -> None:
     print(f"Found {total} stock codes to process.")
 
     for year in args.years:
-        # Prepare output containers
-        period_rows: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
-        period_columns: Dict[str, Dict[str, set]] = {}
+        progress_dir = output_root / "progress"
+        progress_path = progress_dir / f"opendart_{year}.json"
+        progress = load_json(progress_path, {"done": [], "failed": {}})
+        done_symbols = set(progress.get("done", []))
+        failed_map: Dict[str, str] = progress.get("failed", {})
 
         periods = [f"{year}Q{q}" for q in (1, 2, 3, 4)] + [f"{year}Y"]
-        for period in periods:
-            period_rows[period] = {
-                "balance_sheet": [],
-                "income_statement": [],
-                "cashflow_statement": [],
-            }
-            period_columns[period] = {
-                "balance_sheet": set(),
-                "income_statement": set(),
-                "cashflow_statement": set(),
-            }
 
         for idx, (symbol, corp_code) in enumerate(stock_pairs, 1):
+            if symbol in done_symbols:
+                if idx % 25 == 0 or idx == total:
+                    print(f"[{year}] Processed {idx}/{total} stocks (skipping done)")
+                continue
+
             for fs_div in ("CFS", "OFS"):
-                raw_by_quarter, corp_name = fetch_for_stock(
-                    symbol, year, fs_div, args.sleep
-                )
-                quarterly_rows, annual_rows = build_rows_for_stock(
-                    year, raw_by_quarter
-                )
+                try:
+                    raw_by_quarter, corp_name = fetch_for_stock(
+                        symbol,
+                        year,
+                        fs_div,
+                        args.sleep,
+                        args.retries,
+                        args.retry_sleep,
+                    )
+                    quarterly_rows, annual_rows = build_rows_for_stock(
+                        year, raw_by_quarter
+                    )
 
-                for period, statement_payload in quarterly_rows.items():
-                    for statement, values in statement_payload.items():
-                        row = {
-                            "symbol": symbol,
-                            "corp_code": corp_code,
-                            "corp_name": corp_name or "",
-                            "fs_div": fs_div,
-                            "period": period,
-                        }
-                        row.update(values)
-                        period_rows[period][statement].append(row)
-                        period_columns[period][statement].update(values.keys())
+                    for period, statement_payload in quarterly_rows.items():
+                        period_dir = output_root / str(year) / period
+                        for statement, values in statement_payload.items():
+                            row = {
+                                "symbol": symbol,
+                                "corp_code": corp_code,
+                                "corp_name": corp_name or "",
+                                "fs_div": fs_div,
+                                "period": period,
+                            }
+                            row.update(values)
+                            csv_path = period_dir / f"{statement}.csv"
+                            schema_path = period_dir / f"{statement}.schema.json"
+                            append_row_with_schema(
+                                csv_path,
+                                schema_path,
+                                row,
+                                ["symbol", "corp_code", "corp_name", "fs_div", "period"],
+                            )
 
-                for period, statement_payload in annual_rows.items():
-                    for statement, values in statement_payload.items():
-                        row = {
-                            "symbol": symbol,
-                            "corp_code": corp_code,
-                            "corp_name": corp_name or "",
-                            "fs_div": fs_div,
-                            "period": period,
-                        }
-                        row.update(values)
-                        period_rows[period][statement].append(row)
-                        period_columns[period][statement].update(values.keys())
+                    for period, statement_payload in annual_rows.items():
+                        period_dir = output_root / str(year) / period
+                        for statement, values in statement_payload.items():
+                            row = {
+                                "symbol": symbol,
+                                "corp_code": corp_code,
+                                "corp_name": corp_name or "",
+                                "fs_div": fs_div,
+                                "period": period,
+                            }
+                            row.update(values)
+                            csv_path = period_dir / f"{statement}.csv"
+                            schema_path = period_dir / f"{statement}.schema.json"
+                            append_row_with_schema(
+                                csv_path,
+                                schema_path,
+                                row,
+                                ["symbol", "corp_code", "corp_name", "fs_div", "period"],
+                            )
+                except Exception as exc:
+                    failed_map[symbol] = str(exc)
+                    progress["failed"] = failed_map
+                    save_json(progress_path, progress)
+                    raise
+
+            done_symbols.add(symbol)
+            if symbol in failed_map:
+                failed_map.pop(symbol, None)
+            progress["done"] = sorted(done_symbols)
+            progress["failed"] = failed_map
+            save_json(progress_path, progress)
 
             if idx % 25 == 0 or idx == total:
                 print(f"[{year}] Processed {idx}/{total} stocks")
-
-        # Write CSVs per period and statement
-        for period in periods:
-            period_dir = output_root / str(year) / period
-            ensure_dir(period_dir)
-
-            for statement in (
-                "balance_sheet",
-                "income_statement",
-                "cashflow_statement",
-            ):
-                rows = period_rows[period][statement]
-                columns = [
-                    "symbol",
-                    "corp_code",
-                    "corp_name",
-                    "fs_div",
-                    "period",
-                ] + sorted(period_columns[period][statement])
-
-                outfile = period_dir / f"{statement}.csv"
-                write_csv(outfile, rows, columns)
 
         print(f"Completed year {year}. Output in {output_root / str(year)}")
 
