@@ -329,6 +329,15 @@ class KoreanMarketService:
             is_estimate = "E" in label.upper()
             return year_value, is_estimate
 
+        def previous_quarter_safe(
+            base_year: int, base_quarter: Optional[int]
+        ) -> Tuple[int, int]:
+            if base_quarter is None:
+                return base_year, 4
+            if base_quarter == 1:
+                return base_year - 1, 4
+            return base_year, base_quarter - 1
+
         def add_year_safe(input_date: date) -> date:
             try:
                 return input_date.replace(year=input_date.year + 1)
@@ -356,20 +365,47 @@ class KoreanMarketService:
             return None
 
         notes: List[str] = []
+        requested_year = year
+        requested_quarter = quarter
+        actual_year = year
+        actual_quarter = quarter
+
         financials = opendart_client.get_financial_statement(
-            symbol, year, quarter, fs_div=fs_div
+            symbol, requested_year, requested_quarter, fs_div=fs_div
         )
         if financials is None:
             logger.info(
                 "No financials available for %s (requested %s Q%s, fs_div=%s)",
                 symbol,
-                year,
-                quarter if quarter is not None else "annual",
+                requested_year,
+                requested_quarter if requested_quarter is not None else "annual",
                 fs_div,
             )
             notes.append(
-                f"No financials available for requested period (year: {year}, quarter: {quarter})."
+                f"No financials available for requested period (year: {requested_year}, quarter: {requested_quarter})."
             )
+            fallback_year, fallback_quarter = previous_quarter_safe(
+                requested_year, requested_quarter
+            )
+            if (fallback_year, fallback_quarter) != (
+                requested_year,
+                requested_quarter,
+            ):
+                fallback_financials = opendart_client.get_financial_statement(
+                    symbol, fallback_year, fallback_quarter, fs_div=fs_div
+                )
+                if fallback_financials is not None:
+                    financials = fallback_financials
+                    actual_year, actual_quarter = fallback_year, fallback_quarter
+                    notes.append(
+                        "Safe fallback used: "
+                        f"{actual_year} Q{actual_quarter} (one quarter back)."
+                    )
+                else:
+                    notes.append(
+                        "Safe fallback failed; no financials for "
+                        f"{fallback_year} Q{fallback_quarter}."
+                    )
 
         stock_info = kdevelopers_client.search_stock_info("300", symbol)
         info_row = stock_info[0] if stock_info else {}
@@ -415,6 +451,7 @@ class KoreanMarketService:
 
         eps_12mf = None
         per_12mf = None
+        estimate_12mf_labels: Optional[List[str]] = None
         estimate_perform = await self.get_estimate_perform(symbol)
         if estimate_perform:
             output4 = estimate_perform.output4 or []
@@ -423,6 +460,7 @@ class KoreanMarketService:
             ]
             if len(estimate_labels) >= 2:
                 label_1, label_2 = estimate_labels[0], estimate_labels[1]
+                estimate_12mf_labels = [str(label_1), str(label_2)]
                 year_info_1 = parse_estimate_year_label(str(label_1))
                 year_info_2 = parse_estimate_year_label(str(label_2))
                 if year_info_1 and year_info_2:
@@ -506,13 +544,13 @@ class KoreanMarketService:
         pbr_ttm = None
 
         ttm_quarters: List[Tuple[int, int]] = []
-        if quarter is None:
-            start_year, start_quarter = year, 4
+        if actual_quarter is None:
+            start_year, start_quarter = requested_year, 4
             notes.append(
-                f"TTM window uses {year} Q4 as the latest quarter because no quarter was specified."
+                f"TTM window uses {requested_year} Q4 as the latest quarter because no quarter was specified."
             )
         else:
-            start_year, start_quarter = year, quarter
+            start_year, start_quarter = actual_year, actual_quarter
 
         current_year, current_quarter = start_year, start_quarter
         for _ in range(4):
@@ -569,6 +607,8 @@ class KoreanMarketService:
         return KoreanValuationMetrics(
             symbol=symbol,
             price=quote.current_price,
+            fiscal_year=actual_year,
+            fiscal_quarter=actual_quarter,
             eps=eps,
             eps_12mf=eps_12mf,
             bps=bps,
@@ -579,6 +619,11 @@ class KoreanMarketService:
             bps_ttm=bps_ttm,
             per_ttm=per_ttm,
             pbr_ttm=pbr_ttm,
+            ttm_quarters=[
+                {"year": year_value, "quarter": quarter_value}
+                for year_value, quarter_value in ttm_quarters
+            ],
+            estimate_12mf_labels=estimate_12mf_labels,
             shares_outstanding=shares_outstanding,
             market_cap=market_cap,
             notes=notes or None,

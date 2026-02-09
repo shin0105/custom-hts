@@ -52,6 +52,12 @@ class KoreanValuationMetrics(BaseModel):
 
     symbol: str = Field(..., description="Stock symbol")
     price: float = Field(..., description="Current price in KRW")
+    fiscal_year: Optional[int] = Field(
+        None, description="Fiscal year used for base EPS/BPS calculations"
+    )
+    fiscal_quarter: Optional[int] = Field(
+        None, description="Fiscal quarter used for base EPS/BPS calculations"
+    )
     eps: Optional[float] = Field(None, description="Earnings per share")
     eps_12mf: Optional[float] = Field(
         None, description="Forward 12-month EPS (projection-weighted)"
@@ -73,6 +79,12 @@ class KoreanValuationMetrics(BaseModel):
     )
     pbr_ttm: Optional[float] = Field(
         None, description="Trailing twelve-month PBR (price / BPS TTM)"
+    )
+    ttm_quarters: Optional[List[Dict[str, int]]] = Field(
+        None, description="Quarters used for TTM calculations"
+    )
+    estimate_12mf_labels: Optional[List[str]] = Field(
+        None, description="Estimate labels used for 12MF calculations"
     )
     shares_outstanding: Optional[float] = Field(
         None, description="Shares outstanding"

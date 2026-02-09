@@ -46,6 +46,8 @@ export interface KoreanCandleData {
 export interface KoreanValuationMetrics {
   symbol: string;
   price: number;
+  fiscal_year?: number;
+  fiscal_quarter?: number;
   eps?: number;
   eps_12mf?: number;
   bps?: number;
@@ -56,6 +58,8 @@ export interface KoreanValuationMetrics {
   bps_ttm?: number;
   per_ttm?: number;
   pbr_ttm?: number;
+  ttm_quarters?: Array<{ year: number; quarter: number }>;
+  estimate_12mf_labels?: string[];
   shares_outstanding?: number;
   market_cap?: number;
   notes?: string[];

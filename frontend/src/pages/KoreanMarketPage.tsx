@@ -327,6 +327,11 @@ export const KoreanMarketPage: React.FC = () => {
     return String(value);
   };
 
+  const formatPeriodLabel = (year?: number, quarter?: number) => {
+    if (!year) return '-';
+    return quarter ? `${year} Q${quarter}` : `${year} Annual`;
+  };
+
   const estimateOutput1Labels: Record<string, string> = {
     elw_short_code: 'ELW Short Code',
     hts_korean_name: 'HTS Korean Name',
@@ -454,6 +459,24 @@ export const KoreanMarketPage: React.FC = () => {
   };
 
   const highlights = buildHighlights();
+  const requestedQuarter = finPeriod === 'quarterly' ? finQuarter : undefined;
+  const requestedPeriodLabel =
+    finPeriod === 'quarterly' ? `${finYear} Q${finQuarter}` : `${finYear} Annual`;
+  const usedPeriodLabel = valuation
+    ? formatPeriodLabel(valuation.fiscal_year, valuation.fiscal_quarter)
+    : '-';
+  const ttmQuarterLabel = valuation?.ttm_quarters?.length
+    ? valuation.ttm_quarters
+        .map((item) => `${item.year} Q${item.quarter}`)
+        .join(', ')
+    : '-';
+  const estimateLabelText = valuation?.estimate_12mf_labels?.length
+    ? valuation.estimate_12mf_labels.join(' + ')
+    : '-';
+  const fallbackUsed =
+    valuation?.fiscal_year !== undefined &&
+    (valuation.fiscal_year !== finYear ||
+      valuation.fiscal_quarter !== requestedQuarter);
 
   return (
     <div style={containerStyle}>
@@ -512,6 +535,20 @@ export const KoreanMarketPage: React.FC = () => {
                 gap: '12px',
               }}
             >
+              <div
+                style={{
+                  gridColumn: '1 / -1',
+                  marginBottom: '4px',
+                  fontSize: '12px',
+                  color: '#6b7280',
+                }}
+              >
+                <strong>Requested:</strong> {requestedPeriodLabel} |{' '}
+                <strong>Used:</strong> {usedPeriodLabel}
+                {fallbackUsed ? ' (fallback)' : ''} |{' '}
+                <strong>TTM:</strong> {ttmQuarterLabel} |{' '}
+                <strong>12MF:</strong> {estimateLabelText}
+              </div>
               <div>
                 <div style={{ fontSize: '12px', color: '#6b7280' }}>PER</div>
                 <div style={{ fontSize: '18px', fontWeight: 700 }}>
