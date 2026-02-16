@@ -9,7 +9,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 # Ensure backend/src is importable
 ROOT = Path(__file__).resolve().parents[2]
@@ -176,13 +176,14 @@ def fetch_for_stock(
     symbol: str,
     year: int,
     fs_div: str,
+    quarters: List[int],
     sleep_sec: float,
     retries: int,
     retry_sleep: float,
 ) -> Tuple[Dict[int, Dict[str, Dict[str, Optional[float]]]], Optional[str]]:
     raw_by_quarter: Dict[int, Dict[str, Dict[str, Optional[float]]]] = {}
     corp_name: Optional[str] = None
-    for quarter in (1, 2, 3, 4):
+    for quarter in sorted(set(quarters)):
         raw_list = None
         for attempt in range(retries + 1):
             raw_list = opendart_client.get_financial_statement_raw(
@@ -207,6 +208,7 @@ def fetch_for_stock(
 def build_rows_for_stock(
     year: int,
     raw_by_quarter: Dict[int, Dict[str, Dict[str, Optional[float]]]],
+    target_periods: Set[str],
 ) -> Tuple[
     Dict[str, Dict[str, Dict[str, Optional[float]]]],
     Dict[str, Dict[str, Dict[str, Optional[float]]]],
@@ -262,17 +264,33 @@ def build_rows_for_stock(
 
     for quarter, payload in quarter_map.items():
         period = f"{year}Q{quarter}"
-        quarterly_rows[period] = payload
+        if period in target_periods:
+            quarterly_rows[period] = payload
 
     # Annual (year) uses Q4 cumulative for IS/CF and Q4 for BS
     annual_period = f"{year}Y"
-    annual_rows[annual_period] = {
-        "balance_sheet": bs_q4,
-        "income_statement": q4["IS"],
-        "cashflow_statement": q4["CF"],
-    }
+    if annual_period in target_periods:
+        annual_rows[annual_period] = {
+            "balance_sheet": bs_q4,
+            "income_statement": q4["IS"],
+            "cashflow_statement": q4["CF"],
+        }
 
     return quarterly_rows, annual_rows
+
+
+def quarter_dependencies(period: str) -> List[int]:
+    if period.endswith("Q1"):
+        return [1]
+    if period.endswith("Q2"):
+        return [1, 2]
+    if period.endswith("Q3"):
+        return [3]
+    if period.endswith("Q4"):
+        return [2, 3, 4]
+    if period.endswith("Y"):
+        return [4]
+    raise ValueError(f"Unsupported period format: {period}")
 
 
 def main() -> None:
@@ -283,6 +301,12 @@ def main() -> None:
     parser.add_argument("--sleep", type=float, default=0.3)
     parser.add_argument("--retries", type=int, default=2)
     parser.add_argument("--retry-sleep", type=float, default=30.0)
+    parser.add_argument(
+        "--periods",
+        nargs="+",
+        default=None,
+        help="Optional periods like 2025Q2 2025Q3 2025Y. If omitted, all quarters + Y for each year.",
+    )
     parser.add_argument(
         "--output-root",
         type=str,
@@ -303,17 +327,40 @@ def main() -> None:
     total = len(stock_pairs)
     print(f"Found {total} stock codes to process.")
 
+    requested_periods = args.periods or []
     for year in args.years:
         progress_dir = output_root / "progress"
         progress_path = progress_dir / f"opendart_{year}.json"
-        progress = load_json(progress_path, {"done": [], "failed": {}})
+        progress = load_json(
+            progress_path,
+            {"done": [], "failed": {}, "period_done": {}},
+        )
         done_symbols = set(progress.get("done", []))
         failed_map: Dict[str, str] = progress.get("failed", {})
+        period_done = progress.get("period_done", {})
 
-        periods = [f"{year}Q{q}" for q in (1, 2, 3, 4)] + [f"{year}Y"]
+        if requested_periods:
+            periods = [p for p in requested_periods if p.startswith(f"{year}")]
+            if not periods:
+                print(f"[{year}] No requested periods matched this year. Skipping.")
+                continue
+        else:
+            periods = [f"{year}Q{q}" for q in (1, 2, 3, 4)] + [f"{year}Y"]
+
+        period_set = set(periods)
+        required_quarters: Set[int] = set()
+        for period in periods:
+            for quarter in quarter_dependencies(period):
+                required_quarters.add(quarter)
 
         for idx, (symbol, corp_code) in enumerate(stock_pairs, 1):
-            if symbol in done_symbols:
+            done_for_all_periods = True
+            for period in periods:
+                done_list = set(period_done.get(period, []))
+                if symbol not in done_list:
+                    done_for_all_periods = False
+                    break
+            if done_for_all_periods:
                 if idx % 25 == 0 or idx == total:
                     print(f"[{year}] Processed {idx}/{total} stocks (skipping done)")
                 continue
@@ -324,12 +371,13 @@ def main() -> None:
                         symbol,
                         year,
                         fs_div,
+                        list(required_quarters),
                         args.sleep,
                         args.retries,
                         args.retry_sleep,
                     )
                     quarterly_rows, annual_rows = build_rows_for_stock(
-                        year, raw_by_quarter
+                        year, raw_by_quarter, period_set
                     )
 
                     for period, statement_payload in quarterly_rows.items():
@@ -378,10 +426,15 @@ def main() -> None:
                     raise
 
             done_symbols.add(symbol)
+            for period in periods:
+                done_list = set(period_done.get(period, []))
+                done_list.add(symbol)
+                period_done[period] = sorted(done_list)
             if symbol in failed_map:
                 failed_map.pop(symbol, None)
             progress["done"] = sorted(done_symbols)
             progress["failed"] = failed_map
+            progress["period_done"] = period_done
             save_json(progress_path, progress)
 
             if idx % 25 == 0 or idx == total:

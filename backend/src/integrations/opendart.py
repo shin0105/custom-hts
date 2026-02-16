@@ -23,7 +23,8 @@ class OpenDartClient:
     API Documentation: https://opendart.fss.or.kr/
 
     Key endpoints:
-    - fnlttSinglAcntAll.json: Get all financial statements
+    - fnlttSinglAcnt.json: Get single-company major accounts
+    - fnlttMultiAcnt.json: Get multi-company major accounts
     - company.json: Get company information
     - corpCode.xml: Download corp code mapping (requires processing)
     """
@@ -227,52 +228,11 @@ class OpenDartClient:
             return None
 
         try:
-            # Determine report code based on quarter
-            if quarter:
-                # Quarterly reports: 11013 (Q1), 11012 (Q2), 11014 (Q3), 11011 (Annual/Q4)
-                quarter_codes = {
-                    1: "11013",
-                    2: "11012",
-                    3: "11014",
-                    4: "11011",
-                }
-                reprt_code = quarter_codes.get(quarter, "11011")
-            else:
-                reprt_code = "11011"  # Annual report
-
-            # Get financial statement from DART API
-            url = f"{self.base_url}/fnlttSinglAcntAll.json"
-            params = {
-                "crtfc_key": self.api_key,
-                "corp_code": corp_code,
-                "bsns_year": str(year),
-                "reprt_code": reprt_code,
-                "fs_div": fs_div,
-            }
-
-            logger.debug(
-                f"Fetching financial data for {symbol} "
-                f"(corp_code: {corp_code}), year: {year}, quarter: {quarter}"
+            list_data = self.get_financial_statement_raw(
+                symbol=symbol, year=year, quarter=quarter, fs_div=fs_div
             )
-
-            response = requests.get(url, params=params, timeout=30)
-            response.raise_for_status()
-
-            data = response.json()
-
-            # Check API response status
-            status = data.get("status", "")
-            if status != "000":
-                error_msg = data.get("message", "Unknown error")
-                if status == "013" or "조회된 데이타가 없습니다" in error_msg:
-                    logger.info(
-                        f"DART API no data for {symbol} (year: {year}, quarter: {quarter})"
-                    )
-                    return None
-                logger.error(f"DART API error (status: {status}): {error_msg}")
+            if list_data is None:
                 return None
-
-            list_data = data.get("list", [])
             if not list_data:
                 logger.warning(
                     f"No financial data available for {symbol} "
@@ -317,10 +277,11 @@ class OpenDartClient:
         fs_div: str = "CFS",
     ) -> Optional[List[Dict[str, Any]]]:
         """
-        Get raw financial statement data from DART API.
+        Get raw major-account financial statement data from DART API.
 
-        This returns the complete, unprocessed data which includes all
-        line items from balance sheet, income statement, and cash flow.
+        This returns merged results from:
+        - fnlttSinglAcnt (API 2019016)
+        - fnlttMultiAcnt (API 2019017)
 
         Args:
             symbol: Stock code
@@ -340,30 +301,60 @@ class OpenDartClient:
             return None
 
         try:
-            # Determine report code
-            if quarter:
-                quarter_codes = {
-                    1: "11013",
-                    2: "11012",
-                    3: "11014",
-                    4: "11011",
-                }
-                reprt_code = quarter_codes.get(quarter, "11011")
-            else:
-                reprt_code = "11011"
+            reprt_code = self._get_reprt_code(quarter)
+            merged = self._fetch_financial_statement_major_accounts(
+                corp_code=corp_code,
+                year=year,
+                reprt_code=reprt_code,
+                fs_div=fs_div,
+            )
+            return merged
 
-            url = f"{self.base_url}/fnlttSinglAcntAll.json"
-            params = {
-                "crtfc_key": self.api_key,
-                "corp_code": corp_code,
-                "bsns_year": str(year),
-                "reprt_code": reprt_code,
-                "fs_div": fs_div,
+        except Exception as e:
+            logger.error(f"Failed to get raw financial data for {symbol}: {e}")
+            return None
+
+    def _get_reprt_code(self, quarter: Optional[int]) -> str:
+        """Convert quarter to DART report code."""
+        if quarter:
+            quarter_codes = {
+                1: "11013",
+                2: "11012",
+                3: "11014",
+                4: "11011",
             }
+            return quarter_codes.get(quarter, "11011")
+        return "11011"
 
-            response = requests.get(url, params=params, timeout=30)
+    def _fetch_financial_statement_major_accounts(
+        self,
+        corp_code: str,
+        year: int,
+        reprt_code: str,
+        fs_div: str = "CFS",
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        Fetch and merge major-account financial statements from both DART endpoints.
+
+        Replaces legacy fnlttSinglAcntAll usage with:
+        - fnlttSinglAcnt (API 2019016)
+        - fnlttMultiAcnt (API 2019017)
+        """
+        # According to OPENDART docs for 2019016/2019017, request params are:
+        # crtfc_key, corp_code, bsns_year, reprt_code.
+        base_params = {
+            "crtfc_key": self.api_key,
+            "corp_code": corp_code,
+            "bsns_year": str(year),
+            "reprt_code": reprt_code,
+        }
+        endpoint_names = ["fnlttSinglAcnt", "fnlttMultiAcnt"]
+        merged: List[Dict[str, Any]] = []
+
+        for endpoint in endpoint_names:
+            url = f"{self.base_url}/{endpoint}.json"
+            response = requests.get(url, params=base_params, timeout=30)
             response.raise_for_status()
-
             data = response.json()
 
             status = data.get("status", "")
@@ -371,17 +362,58 @@ class OpenDartClient:
                 error_msg = data.get("message", "Unknown error")
                 if status == "013" or "조회된 데이타가 없습니다" in error_msg:
                     logger.info(
-                        f"DART API no data for {symbol} (year: {year}, quarter: {quarter})"
+                        f"DART API no data for {corp_code} ({year}/{reprt_code}) on {endpoint}"
                     )
-                    return []
-                logger.error(f"DART API error: {error_msg}")
+                    continue
+                logger.error(
+                    f"DART API error on {endpoint} (status: {status}): {error_msg}"
+                )
                 return None
 
-            return data.get("list", [])
+            endpoint_items = data.get("list", [])
+            if not isinstance(endpoint_items, list):
+                logger.warning(
+                    f"Unexpected DART response format on {endpoint}: list is not an array"
+                )
+                continue
 
-        except Exception as e:
-            logger.error(f"Failed to get raw financial data for {symbol}: {e}")
-            return None
+            if fs_div:
+                endpoint_items = [
+                    item
+                    for item in endpoint_items
+                    if item.get("fs_div") in (None, "", fs_div)
+                ]
+
+            merged.extend(endpoint_items)
+
+        if not merged:
+            return []
+
+        # Deduplicate because some companies/periods return overlapping rows
+        # between fnlttSinglAcnt and fnlttMultiAcnt.
+        deduped: List[Dict[str, Any]] = []
+        seen = set()
+        key_fields = (
+            "rcept_no",
+            "bsns_year",
+            "reprt_code",
+            "sj_div",
+            "account_id",
+            "account_nm",
+            "ord",
+            "thstrm_amount",
+            "frmtrm_amount",
+            "bfefrmtrm_amount",
+            "fs_div",
+        )
+        for item in merged:
+            key = tuple(item.get(field) for field in key_fields)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(item)
+
+        return deduped
 
     def _parse_financial_data(
         self, dart_data: List[Dict[str, Any]]
@@ -419,9 +451,10 @@ class OpenDartClient:
             account_nm = item.get("account_nm", "")
             thstrm_amount = item.get("thstrm_amount", "0")
 
-            # Store company name from first record
-            if not result.get("company_name"):
-                result["company_name"] = item.get("corp_name", "")
+            # Some endpoints omit corp_name; only set when present.
+            corp_name = item.get("corp_name")
+            if corp_name and not result.get("company_name"):
+                result["company_name"] = corp_name
 
             # Match and store financial values
             for dart_name, field_name in account_mapping.items():
@@ -733,11 +766,10 @@ class OpenDartClient:
         fs_div: str = "CFS",
     ) -> Optional[List[Dict[str, Any]]]:
         """
-        Get all financial statement line items.
+        Get merged major-account financial statement line items.
 
-        This is an alias for get_financial_statement_raw() that returns
-        comprehensive financial data with all line items, similar to
-        OpenDartReader's finstate_all() method.
+        This is an alias for get_financial_statement_raw() using the new
+        OPENDART major-account endpoints.
 
         Args:
             symbol: Stock code

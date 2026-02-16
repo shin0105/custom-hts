@@ -1,5 +1,5 @@
 {
-  "description": "Sample structure of OPENDART fnlttSinglAcntAll API response",
+  "description": "Sample structure of OPENDART major-account API responses (fnlttSinglAcnt/fnlttMultiAcnt)",
   "reference": "Based on src/integrations/opendart.py implementation",
   "response": {
     "status": "000",
