@@ -79,6 +79,26 @@ export const HomePage: React.FC = () => {
         </Link>
 
         <Link
+          to="/bonds"
+          style={cardStyle}
+          onMouseOver={(e) => {
+            e.currentTarget.style.transform = 'translateY(-4px)';
+            e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
+          <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '12px' }}>
+            🏦 장내채권
+          </h2>
+          <p style={{ color: '#6b7280' }}>
+            장내채권 마스터 파일 기반 상장 채권 목록과 현재가/핵심 정보를 확인합니다
+          </p>
+        </Link>
+
+        <Link
           to="/account-check"
           style={cardStyle}
           onMouseOver={(e) => {

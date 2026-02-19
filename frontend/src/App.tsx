@@ -9,6 +9,7 @@ import { HomePage } from './pages/HomePage';
 import { KoreanMarketPage } from './pages/KoreanMarketPage';
 import { USMarketPage } from './pages/USMarketPage';
 import { AccountCheckPage } from './pages/AccountCheckPage';
+import { BondMarketPage } from './pages/BondMarketPage';
 
 export const App: React.FC = () => {
   return (
@@ -18,6 +19,7 @@ export const App: React.FC = () => {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/korean" element={<KoreanMarketPage />} />
+          <Route path="/bonds" element={<BondMarketPage />} />
           <Route path="/us" element={<USMarketPage />} />
           <Route path="/account-check" element={<AccountCheckPage />} />
         </Routes>

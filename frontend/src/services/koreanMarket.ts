@@ -12,6 +12,8 @@ import type {
   KoreanAccountResponse,
   KoreanValuationMetrics,
   KoreanEstimatePerform,
+  KoreanBondMasterResponse,
+  KoreanBondQuote,
 } from '../types/korean';
 
 const API_BASE_URL = '/api';
@@ -165,6 +167,41 @@ export const koreanMarketService = {
   async getEstimatePerform(symbol: string): Promise<KoreanEstimatePerform> {
     const response = await axios.get<KoreanEstimatePerform>(
       `${API_BASE_URL}/korean/estimate-perform/${symbol}`
+    );
+    return response.data;
+  },
+
+  /**
+   * Get domestic listed bond master rows.
+   */
+  async getBondMaster(params?: {
+    query?: string;
+    offset?: number;
+    limit?: number;
+    enrich?: boolean;
+    includeQuotes?: boolean;
+  }): Promise<KoreanBondMasterResponse> {
+    const search = new URLSearchParams();
+    if (params?.query) search.append('query', params.query);
+    if (params?.offset !== undefined) search.append('offset', String(params.offset));
+    if (params?.limit !== undefined) search.append('limit', String(params.limit));
+    if (params?.enrich !== undefined) search.append('enrich', String(params.enrich));
+    if (params?.includeQuotes !== undefined) {
+      search.append('include_quotes', String(params.includeQuotes));
+    }
+
+    const response = await axios.get<KoreanBondMasterResponse>(
+      `${API_BASE_URL}/korean/bonds/master?${search.toString()}`
+    );
+    return response.data;
+  },
+
+  /**
+   * Get domestic listed bond current quote.
+   */
+  async getBondPrice(pdno: string): Promise<KoreanBondQuote> {
+    const response = await axios.get<KoreanBondQuote>(
+      `${API_BASE_URL}/korean/bonds/${pdno}/price`
     );
     return response.data;
   },

@@ -4,14 +4,19 @@ from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, date, timedelta
 import re
 import logging
+import csv
+from pathlib import Path
 from ..models.korean import (
     KoreanStockQuote,
     KoreanFinancialStatement,
     KoreanCandleData,
     KoreanValuationMetrics,
     KoreanEstimatePerform,
+    KoreanBondQuote,
+    KoreanBondMasterItem,
 )
 from ..integrations.kdevelopers import kdevelopers_client
+from ..integrations.bond_master import bond_master_file_manager
 from ..integrations.opendart import opendart_client
 from ..integrations.supabase_client import supabase_client
 
@@ -23,6 +28,21 @@ ESTIMATE_AMOUNT_MULTIPLIER = 100_000_000
 
 class KoreanMarketService:
     """Service for Korean market data operations."""
+
+    _bond_master_candidates = [
+        Path(__file__).parent.parent.parent
+        / "data"
+        / "kr_bond_master"
+        / "bond_codes.csv",
+        Path(__file__).parent.parent.parent
+        / "data"
+        / "kr_bond_master"
+        / "bond_codes.tsv",
+        Path(__file__).parent.parent.parent
+        / "data"
+        / "kr_bond_master"
+        / "bond_codes.txt",
+    ]
 
     async def get_quote(self, symbol: str) -> Optional[KoreanStockQuote]:
         """
@@ -629,5 +649,227 @@ class KoreanMarketService:
             notes=notes or None,
             as_of=datetime.now(),
         )
+
+    def _find_bond_master_file(self) -> Optional[Path]:
+        for candidate in self._bond_master_candidates:
+            if candidate.exists():
+                return candidate
+        return None
+
+    def _normalize_master_row(self, row: Dict[str, str]) -> Optional[Dict[str, str]]:
+        key_candidates = [
+            "pdno",
+            "code",
+            "bond_code",
+            "stnd_iscd",
+            "표준종목코드",
+            "종목코드",
+        ]
+        name_candidates = [
+            "name",
+            "bond_name",
+            "ksd_bond_item_name",
+            "bond_isnm",
+            "종목명",
+            "채권종목명",
+        ]
+        code = ""
+        for key in key_candidates:
+            value = row.get(key)
+            if value:
+                code = value.strip()
+                break
+        if not code:
+            return None
+        if not re.fullmatch(r"KR[0-9A-Z]{10}", code):
+            return None
+
+        name = ""
+        for key in name_candidates:
+            value = row.get(key)
+            if value:
+                name = value.strip()
+                break
+        return {"pdno": code, "name": name}
+
+    def _load_bond_master_rows(
+        self,
+    ) -> Tuple[Optional[str], List[Dict[str, str]]]:
+        # Preferred path: integration-based bond master parser (same style as stock master)
+        df = bond_master_file_manager.parse_bond_master(auto_download=False)
+        if df is not None and not df.empty:
+            return (
+                str(bond_master_file_manager.get_local_master_file()),
+                df.to_dict(orient="records"),
+            )
+
+        master_file = self._find_bond_master_file()
+        if not master_file:
+            return None, []
+
+        rows: List[Dict[str, str]] = []
+        seen = set()
+
+        suffix = master_file.suffix.lower()
+        if suffix in {".csv", ".tsv"}:
+            delimiter = "," if suffix == ".csv" else "\t"
+            with open(master_file, "r", encoding="utf-8", newline="") as f:
+                reader = csv.DictReader(f, delimiter=delimiter)
+                for row in reader:
+                    normalized = self._normalize_master_row(
+                        {k.strip(): (v or "").strip() for k, v in row.items() if k}
+                    )
+                    if not normalized:
+                        continue
+                    code = normalized["pdno"]
+                    if code in seen:
+                        continue
+                    seen.add(code)
+                    rows.append(normalized)
+        else:
+            with open(master_file, "r", encoding="utf-8", errors="ignore") as f:
+                for raw_line in f:
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    match = re.search(r"(KR[0-9A-Z]{10})", line)
+                    if not match:
+                        continue
+                    code = match.group(1)
+                    if code in seen:
+                        continue
+                    name = line.replace(code, "").strip(" ,|\t-")
+                    seen.add(code)
+                    rows.append({"pdno": code, "name": name})
+
+        return str(master_file), rows
+
+    async def get_bond_price(self, pdno: str) -> Optional[KoreanBondQuote]:
+        output = kdevelopers_client.get_bond_price(pdno)
+        if not output:
+            return None
+        return KoreanBondQuote(
+            pdno=output.get("stnd_iscd", pdno),
+            name=output.get("hts_kor_isnm") or pdno,
+            current_price=self._to_float(output.get("bond_prpr")),
+            change=self._to_float(output.get("bond_prdy_vrss")),
+            change_percent=self._to_float(output.get("prdy_ctrt")),
+            volume=self._to_int(output.get("acml_vol")),
+            high=self._to_float(output.get("bond_hgpr")),
+            low=self._to_float(output.get("bond_lwpr")),
+            open=self._to_float(output.get("bond_oprc")),
+            previous_close=self._to_float(output.get("bond_prdy_clpr")),
+            earning_rate=self._to_float(output.get("ernn_rate")),
+        )
+
+    async def get_bond_basic_info(self, pdno: str) -> Optional[Dict[str, Any]]:
+        return kdevelopers_client.get_bond_basic_info(pdno)
+
+    async def get_bond_issue_info(self, pdno: str) -> Optional[Dict[str, Any]]:
+        return kdevelopers_client.get_bond_issue_info(pdno)
+
+    async def get_bond_master(
+        self,
+        query: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 100,
+        enrich: bool = True,
+        include_quotes: bool = False,
+    ) -> Dict[str, Any]:
+        source_file, rows = self._load_bond_master_rows()
+        if not rows:
+            return {
+                "source_file": source_file,
+                "total_loaded": 0,
+                "total_returned": 0,
+                "offset": offset,
+                "limit": limit,
+                "query": query,
+                "items": [],
+            }
+
+        if query:
+            q = query.strip().lower()
+            rows = [
+                row
+                for row in rows
+                if q in row["pdno"].lower() or q in (row.get("name") or "").lower()
+            ]
+
+        total_loaded = len(rows)
+        sliced = rows[offset : offset + limit]
+
+        items: List[KoreanBondMasterItem] = []
+        for row in sliced:
+            pdno = row["pdno"]
+            name = row.get("name") or None
+            info = kdevelopers_client.get_bond_basic_info(pdno) if enrich else None
+            quote = kdevelopers_client.get_bond_price(pdno) if include_quotes else None
+            item = KoreanBondMasterItem(
+                pdno=pdno,
+                name=(info or {}).get("ksd_bond_item_name") or name,
+                english_name=(info or {}).get("ksd_bond_item_eng_name"),
+                bond_class_name=(info or {}).get("bond_clsf_kor_name"),
+                issue_date=(info or {}).get("issu_dt"),
+                maturity_date=(info or {}).get("rdpt_dt"),
+                listed_date=(info or {}).get("lstg_dt"),
+                delisted_date=(info or {}).get("lstg_abol_dt"),
+                currency=(info or {}).get("iso_crcy_cd"),
+                surface_interest_rate=self._to_float(
+                    (info or {}).get("ksd_rcvg_bond_srfc_inrt")
+                ),
+                total_issue_amount=self._to_float(
+                    (info or {}).get("ksd_tot_issu_amt")
+                ),
+                current_price=self._to_float((quote or {}).get("bond_prpr")),
+                change_percent=self._to_float((quote or {}).get("prdy_ctrt")),
+                volume=self._to_int((quote or {}).get("acml_vol")),
+            )
+            items.append(item)
+
+        return {
+            "source_file": source_file,
+            "total_loaded": total_loaded,
+            "total_returned": len(items),
+            "offset": offset,
+            "limit": limit,
+            "query": query,
+            "items": items,
+        }
+
+    async def refresh_bond_master(
+        self,
+        output_format: str = "csv",
+        force: bool = False,
+        source_url: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Download latest bond master and export as csv/json."""
+        return bond_master_file_manager.refresh_and_export(
+            output_format=output_format,
+            force=force,
+            source_url=source_url,
+        )
+
+    def _to_float(self, value: Any) -> Optional[float]:
+        try:
+            if value is None:
+                return None
+            text = str(value).replace(",", "").strip()
+            if not text:
+                return None
+            return float(text)
+        except (TypeError, ValueError):
+            return None
+
+    def _to_int(self, value: Any) -> Optional[int]:
+        try:
+            if value is None:
+                return None
+            text = str(value).replace(",", "").strip()
+            if not text:
+                return None
+            return int(float(text))
+        except (TypeError, ValueError):
+            return None
 
 korean_market_service = KoreanMarketService()

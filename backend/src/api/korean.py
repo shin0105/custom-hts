@@ -10,6 +10,8 @@ from ..models.korean import (
     KoreanCandleData,
     KoreanValuationMetrics,
     KoreanEstimatePerform,
+    KoreanBondQuote,
+    KoreanBondMasterResponse,
 )
 from ..services.korean_market import korean_market_service
 from ..utils.config import settings
@@ -280,6 +282,107 @@ async def get_korean_estimate_perform(symbol: str) -> KoreanEstimatePerform:
         raise HTTPException(
             status_code=404,
             detail=f"Estimate performance not found for symbol {symbol}",
+        )
+    return result
+
+
+@router.get("/bonds/master", response_model=KoreanBondMasterResponse)
+async def get_korean_bond_master(
+    query: Optional[str] = Query(
+        None, description="Filter by bond code/name (case-insensitive)"
+    ),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    limit: int = Query(100, ge=1, le=500, description="Pagination limit"),
+    enrich: bool = Query(
+        True,
+        description="Enrich rows with search-bond-info fields",
+    ),
+    include_quotes: bool = Query(
+        False,
+        description="Include price fields via inquire-price per row",
+    ),
+) -> KoreanBondMasterResponse:
+    """
+    Get domestic listed bond master list from local bond code master file.
+
+    Master source file should exist at one of:
+    - backend/data/kr_bond_master/bond_codes.csv
+    - backend/data/kr_bond_master/bond_codes.tsv
+    - backend/data/kr_bond_master/bond_codes.txt
+    """
+    result = await korean_market_service.get_bond_master(
+        query=query,
+        offset=offset,
+        limit=limit,
+        enrich=enrich,
+        include_quotes=include_quotes,
+    )
+    return KoreanBondMasterResponse(**result)
+
+
+@router.get("/bonds/{pdno}/price", response_model=KoreanBondQuote)
+async def get_korean_bond_price(pdno: str) -> KoreanBondQuote:
+    """Get domestic listed bond current quote."""
+    quote = await korean_market_service.get_bond_price(pdno)
+    if not quote:
+        raise HTTPException(
+            status_code=404, detail=f"Bond price not found for {pdno}"
+        )
+    return quote
+
+
+@router.get("/bonds/{pdno}/info")
+async def get_korean_bond_info(pdno: str) -> Dict[str, Any]:
+    """Get domestic listed bond basic information."""
+    info = await korean_market_service.get_bond_basic_info(pdno)
+    if not info:
+        raise HTTPException(
+            status_code=404, detail=f"Bond basic info not found for {pdno}"
+        )
+    return info
+
+
+@router.get("/bonds/{pdno}/issue")
+async def get_korean_bond_issue_info(pdno: str) -> Dict[str, Any]:
+    """Get domestic listed bond issue information."""
+    info = await korean_market_service.get_bond_issue_info(pdno)
+    if not info:
+        raise HTTPException(
+            status_code=404, detail=f"Bond issue info not found for {pdno}"
+        )
+    return info
+
+
+@router.post("/bonds/master/refresh")
+async def refresh_korean_bond_master(
+    output_format: str = Query(
+        "csv", description="Export format: csv or json"
+    ),
+    force: bool = Query(
+        False, description="Force re-download from source URL"
+    ),
+    source_url: Optional[str] = Query(
+        None,
+        description=(
+            "Optional override URL for bond master zip "
+            "(defaults to KIS bond_code.mst.zip)"
+        ),
+    ),
+) -> Dict[str, Any]:
+    """Refresh/download bond master and export as CSV or JSON."""
+    fmt = output_format.lower().strip()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=400, detail="output_format must be 'csv' or 'json'"
+        )
+
+    result = await korean_market_service.refresh_bond_master(
+        output_format=fmt, force=force, source_url=source_url
+    )
+    if not result.get("ok"):
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to refresh/export bond master file",
         )
     return result
 

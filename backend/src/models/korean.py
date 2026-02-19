@@ -188,3 +188,80 @@ class KoreanStockPosition(BaseModel):
     profit_loss_percent: float = Field(
         ..., description="Profit/loss percentage"
     )
+
+
+class KoreanBondQuote(BaseModel):
+    """Domestic listed bond quote data."""
+
+    pdno: str = Field(..., description="Bond standard code (e.g., KR2033022D33)")
+    name: str = Field(..., description="Bond name")
+    current_price: Optional[float] = Field(
+        None, description="Current bond price"
+    )
+    change: Optional[float] = Field(None, description="Change vs previous close")
+    change_percent: Optional[float] = Field(
+        None, description="Change percentage vs previous close"
+    )
+    volume: Optional[int] = Field(None, description="Accumulated volume")
+    high: Optional[float] = Field(None, description="Day high")
+    low: Optional[float] = Field(None, description="Day low")
+    open: Optional[float] = Field(None, description="Day open")
+    previous_close: Optional[float] = Field(
+        None, description="Previous close price"
+    )
+    earning_rate: Optional[float] = Field(
+        None, description="Yield/earning rate from API response"
+    )
+
+
+class KoreanBondMasterItem(BaseModel):
+    """Domestic listed bond master row."""
+
+    pdno: str = Field(..., description="Bond standard code")
+    name: Optional[str] = Field(None, description="Bond name")
+    english_name: Optional[str] = Field(None, description="Bond English name")
+    bond_class_name: Optional[str] = Field(
+        None, description="Bond classification name"
+    )
+    issue_date: Optional[str] = Field(None, description="Issue date (YYYYMMDD)")
+    maturity_date: Optional[str] = Field(
+        None, description="Maturity/redemption date (YYYYMMDD)"
+    )
+    listed_date: Optional[str] = Field(None, description="Listed date (YYYYMMDD)")
+    delisted_date: Optional[str] = Field(
+        None, description="Delisted date (YYYYMMDD)"
+    )
+    currency: Optional[str] = Field(None, description="Currency code")
+    surface_interest_rate: Optional[float] = Field(
+        None, description="Surface/coupon interest rate"
+    )
+    total_issue_amount: Optional[float] = Field(
+        None, description="Total issue amount"
+    )
+    current_price: Optional[float] = Field(
+        None, description="Current bond price (optional enrichment)"
+    )
+    change_percent: Optional[float] = Field(
+        None, description="Price change percentage (optional enrichment)"
+    )
+    volume: Optional[int] = Field(
+        None, description="Accumulated volume (optional enrichment)"
+    )
+
+
+class KoreanBondMasterResponse(BaseModel):
+    """Domestic listed bond master response."""
+
+    source_file: Optional[str] = Field(
+        None, description="Local bond master file used"
+    )
+    total_loaded: int = Field(
+        ..., description="Total number of bond codes loaded from source"
+    )
+    total_returned: int = Field(..., description="Number of rows returned")
+    offset: int = Field(..., description="Applied offset")
+    limit: int = Field(..., description="Applied limit")
+    query: Optional[str] = Field(None, description="Optional search query")
+    items: List[KoreanBondMasterItem] = Field(
+        default_factory=list, description="Bond master rows"
+    )

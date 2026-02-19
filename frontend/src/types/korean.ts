@@ -110,6 +110,47 @@ export interface KoreanAccountResponse {
   positions: KoreanStockPosition[];
 }
 
+export interface KoreanBondQuote {
+  pdno: string;
+  name: string;
+  current_price?: number | null;
+  change?: number | null;
+  change_percent?: number | null;
+  volume?: number | null;
+  high?: number | null;
+  low?: number | null;
+  open?: number | null;
+  previous_close?: number | null;
+  earning_rate?: number | null;
+}
+
+export interface KoreanBondMasterItem {
+  pdno: string;
+  name?: string | null;
+  english_name?: string | null;
+  bond_class_name?: string | null;
+  issue_date?: string | null;
+  maturity_date?: string | null;
+  listed_date?: string | null;
+  delisted_date?: string | null;
+  currency?: string | null;
+  surface_interest_rate?: number | null;
+  total_issue_amount?: number | null;
+  current_price?: number | null;
+  change_percent?: number | null;
+  volume?: number | null;
+}
+
+export interface KoreanBondMasterResponse {
+  source_file?: string | null;
+  total_loaded: number;
+  total_returned: number;
+  offset: number;
+  limit: number;
+  query?: string | null;
+  items: KoreanBondMasterItem[];
+}
+
 export type ChartInterval = 'daily' | 'minute';
 export type MinuteInterval = 1 | 5 | 10 | 30 | 60;
 export type PeriodType = 'D' | 'W' | 'M';

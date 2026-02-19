@@ -491,6 +491,98 @@ class KDevelopersClient:
             logger.error(f"Exception in get_quote for {symbol}: {e}")
             return None
 
+    def get_bond_price(self, pdno: str) -> Optional[Dict[str, Any]]:
+        """
+        Get domestic listed bond current price.
+
+        API: [장내채권] 기본시세 > 장내채권현재가(시세) [국내주식-200]
+        """
+        try:
+            api_url = "/uapi/domestic-bond/v1/quotations/inquire-price"
+            tr_id = "FHKBJ773400C0"
+            params = {
+                "FID_COND_MRKT_DIV_CODE": "B",
+                "FID_INPUT_ISCD": pdno,
+            }
+            res = self._url_fetch(api_url, tr_id, "", params)
+            if not res.is_ok():
+                res.print_error(api_url)
+                return None
+
+            body = res.get_body()
+            output = getattr(body, "output", None)
+            if output is None:
+                return None
+            if hasattr(output, "_asdict"):
+                return output._asdict()
+            if isinstance(output, dict):
+                return output
+            return None
+        except Exception as e:
+            logger.error(f"Exception in get_bond_price for {pdno}: {e}")
+            return None
+
+    def get_bond_basic_info(self, pdno: str) -> Optional[Dict[str, Any]]:
+        """
+        Get domestic listed bond basic information.
+
+        API: [장내채권] 기본시세 > 장내채권 기본조회 [국내주식-129]
+        """
+        try:
+            api_url = "/uapi/domestic-bond/v1/quotations/search-bond-info"
+            tr_id = "CTPF1114R"
+            params = {
+                "PDNO": pdno,
+                "PRDT_TYPE_CD": "302",
+            }
+            res = self._url_fetch(api_url, tr_id, "", params)
+            if not res.is_ok():
+                res.print_error(api_url)
+                return None
+
+            body = res.get_body()
+            output = getattr(body, "output", None)
+            if output is None:
+                return None
+            if hasattr(output, "_asdict"):
+                return output._asdict()
+            if isinstance(output, dict):
+                return output
+            return None
+        except Exception as e:
+            logger.error(f"Exception in get_bond_basic_info for {pdno}: {e}")
+            return None
+
+    def get_bond_issue_info(self, pdno: str) -> Optional[Dict[str, Any]]:
+        """
+        Get domestic listed bond issuance information.
+
+        API: [장내채권] 기본시세 > 장내채권 발행정보 [국내주식-119]
+        """
+        try:
+            api_url = "/uapi/domestic-bond/v1/quotations/issue-info"
+            tr_id = "CTPF1101R"
+            params = {
+                "PDNO": pdno,
+            }
+            res = self._url_fetch(api_url, tr_id, "", params)
+            if not res.is_ok():
+                res.print_error(api_url)
+                return None
+
+            body = res.get_body()
+            output = getattr(body, "output", None)
+            if output is None:
+                return None
+            if hasattr(output, "_asdict"):
+                return output._asdict()
+            if isinstance(output, dict):
+                return output
+            return None
+        except Exception as e:
+            logger.error(f"Exception in get_bond_issue_info for {pdno}: {e}")
+            return None
+
     def get_daily_candle(
         self,
         symbol: str,
