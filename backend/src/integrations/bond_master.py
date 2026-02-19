@@ -286,49 +286,28 @@ class BondMasterFileManager:
 
     def _parse_bond_mst(self, file_path: Path) -> pd.DataFrame:
         """
-        Parse bond_code.mst using the correct fixed-width byte offsets.
-
-        Bond master file structure (ST_BOND_CODE, 106 bytes per record):
-          [0:2]    bond_type      – A0:장내소매채권, F9:주식관련사채/소액채권, C0:국고채권
-          [2:4]    bond_cls_code  – bond classification code
-          [4:16]   stnd_iscd      – standard ISIN code (12 bytes, e.g. KR2033022D33)
-          [16:56]  sname          – bond short name (40 bytes, Korean, variable Python chars)
-          [-50:-48] bond_int_cls_code – interest class code (2 ASCII bytes from end)
-          [-48:-40] lstn_date     – listing date YYYYMMDD
-          [-40:-32] pblc_date     – issue/publication date YYYYMMDD
-          [-32:-24] rdmp_date     – maturity/redemption date YYYYMMDD
-          [-24:-16] sale_date     – sale date YYYYMMDD
-          [-16:-8]  srfc_intrt    – surface interest rate (unused per spec)
-          [-8:]     rdmt_rate     – maturity redemption rate (unused per spec)
-
-        Reference:
-          https://github.com/koreainvestment/open-trading-api/blob/main/stocks_info/종목마스터정보(채권).h
-
-        Note: Because sname contains Korean text (CP949 2-byte chars), the Python
-        string length after decoding is shorter than the byte length.  All fields
-        after sname are ASCII, so negative indexing from the end is safe.
+        Parse bond_code.mst using the provided fixed-width slicing logic.
         """
         rows: List[Dict[str, Any]] = []
         with open(file_path, "r", encoding="cp949", errors="ignore") as f:
             for raw in f:
-                # Strip only line endings; keep internal spaces for correct offsets.
-                row = raw.rstrip("\r\n")
-                # Minimum length: 16 (head ASCII) + 50 (tail ASCII) = 66
-                if not row or len(row) < 66:
+                row = raw.strip()
+                if not row or len(row) < 26:
                     continue
+
+                # Some files contain trailing status flag (e.g. 'N') after spaces.
+                # Keep provided slicing logic, but trim that trailing flag first.
+                if (not row[-8:].isdigit()) and row[-1:].isalpha():
+                    row = row[:-1].rstrip()
 
                 bond_type = row[0:2].strip()
                 bond_cls_code = row[2:4].strip()
                 code = row[4:16].strip()
-                # Last 50 characters are all ASCII (no Korean), safe to index from end.
-                bond_int_cls_code = row[-50:-48].strip()
-                lstn_date = row[-48:-40].strip()
-                pblc_date = row[-40:-32].strip()
-                rdmp_date = row[-32:-24].strip()
-                # sale_date = row[-24:-16].strip()  # available but not stored
-                # srfc_intrt = row[-16:-8].strip()  # "unused" per spec
-                # rdmt_rate  = row[-8:].strip()     # "unused" per spec
-                sname = row[16:-50].rstrip()
+                rdmp_date = row[-8:].strip()
+                pblc_date = row[-16:-8].strip()
+                lstn_date = row[-24:-16].strip()
+                bond_int_cls_code = row[-26:-24].strip()
+                sname = row[16:-26].rstrip()
 
                 if not self._extract_code(code):
                     continue

@@ -695,9 +695,8 @@ class KoreanMarketService:
     def _load_bond_master_rows(
         self,
     ) -> Tuple[Optional[str], List[Dict[str, str]]]:
-        # Preferred path: integration-based bond master parser (same style as stock master).
-        # auto_download=True so the file is fetched automatically on first use.
-        df = bond_master_file_manager.parse_bond_master(auto_download=True)
+        # Preferred path: integration-based bond master parser (same style as stock master)
+        df = bond_master_file_manager.parse_bond_master(auto_download=False)
         if df is not None and not df.empty:
             return (
                 str(bond_master_file_manager.get_local_master_file()),

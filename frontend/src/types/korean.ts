@@ -110,6 +110,27 @@ export interface KoreanAccountResponse {
   positions: KoreanStockPosition[];
 }
 
+/** Response shape from KDevelopers search-bond-info API (장내채권 기본조회). */
+export interface KoreanBondInfo {
+  pdno: string;
+  prdt_type_cd?: string | null;
+  ksd_bond_item_name?: string | null;
+  ksd_bond_item_eng_name?: string | null;
+  bond_clsf_cd?: string | null;
+  bond_clsf_kor_name?: string | null;
+  issu_dt?: string | null;
+  rdpt_dt?: string | null;
+  lstg_dt?: string | null;
+  lstg_abol_dt?: string | null;
+  iso_crcy_cd?: string | null;
+  ksd_rcvg_bond_srfc_inrt?: string | null;
+  ksd_tot_issu_amt?: string | null;
+  bond_int_dfrm_mthd_cd?: string | null;
+  dshn_occr_yn?: string | null;
+  expd_exts_yn?: string | null;
+  [key: string]: unknown;
+}
+
 export interface KoreanBondQuote {
   pdno: string;
   name: string;
