@@ -14,6 +14,7 @@ import type {
   KoreanEstimatePerform,
   KoreanBondMasterResponse,
   KoreanBondQuote,
+  KoreanBondInfo,
 } from '../types/korean';
 
 const API_BASE_URL = '/api';
@@ -202,6 +203,17 @@ export const koreanMarketService = {
   async getBondPrice(pdno: string): Promise<KoreanBondQuote> {
     const response = await axios.get<KoreanBondQuote>(
       `${API_BASE_URL}/korean/bonds/${pdno}/price`
+    );
+    return response.data;
+  },
+
+  /**
+   * Get domestic listed bond basic info via search-bond-info API
+   * (장내채권 기본조회, CTPF1114R).
+   */
+  async getBondInfo(pdno: string): Promise<KoreanBondInfo> {
+    const response = await axios.get<KoreanBondInfo>(
+      `${API_BASE_URL}/korean/bonds/${encodeURIComponent(pdno)}/info`
     );
     return response.data;
   },
