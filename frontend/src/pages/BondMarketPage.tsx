@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { koreanMarketService } from '../services/koreanMarket';
 import type { KoreanBondMasterItem, KoreanBondMasterResponse } from '../types/korean';
 
-const PAGE_LIMIT = 30;
+const PAGE_LIMIT = 20;
 
 const formatNumber = (value?: number | null) => {
   if (value === null || value === undefined) return '-';
@@ -35,8 +35,8 @@ export const BondMarketPage: React.FC = () => {
         query: q || undefined,
         offset: nextOffset,
         limit: PAGE_LIMIT,
-        enrich: true,
-        includeQuotes: true,
+        enrich: false,
+        includeQuotes: false,
       });
       setData(response);
       setOffset(nextOffset);

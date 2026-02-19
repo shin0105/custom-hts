@@ -292,9 +292,9 @@ async def get_korean_bond_master(
         None, description="Filter by bond code/name (case-insensitive)"
     ),
     offset: int = Query(0, ge=0, description="Pagination offset"),
-    limit: int = Query(100, ge=1, le=500, description="Pagination limit"),
+    limit: int = Query(20, ge=1, le=500, description="Pagination limit"),
     enrich: bool = Query(
-        True,
+        False,
         description="Enrich rows with search-bond-info fields",
     ),
     include_quotes: bool = Query(

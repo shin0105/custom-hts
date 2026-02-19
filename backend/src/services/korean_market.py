@@ -809,10 +809,14 @@ class KoreanMarketService:
                 pdno=pdno,
                 name=(info or {}).get("ksd_bond_item_name") or name,
                 english_name=(info or {}).get("ksd_bond_item_eng_name"),
-                bond_class_name=(info or {}).get("bond_clsf_kor_name"),
-                issue_date=(info or {}).get("issu_dt"),
-                maturity_date=(info or {}).get("rdpt_dt"),
-                listed_date=(info or {}).get("lstg_dt"),
+                bond_class_name=(info or {}).get("bond_clsf_kor_name")
+                or row.get("bond_class_code"),
+                issue_date=(info or {}).get("issu_dt")
+                or row.get("issue_date"),
+                maturity_date=(info or {}).get("rdpt_dt")
+                or row.get("maturity_date"),
+                listed_date=(info or {}).get("lstg_dt")
+                or row.get("listed_date"),
                 delisted_date=(info or {}).get("lstg_abol_dt"),
                 currency=(info or {}).get("iso_crcy_cd"),
                 surface_interest_rate=self._to_float(
