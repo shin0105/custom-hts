@@ -748,6 +748,12 @@ class KoreanMarketService:
         output = kdevelopers_client.get_bond_price(pdno)
         if not output:
             return None
+        asking = kdevelopers_client.get_bond_asking_price(pdno) or {}
+        best_ask = self._to_float(asking.get("bond_askp1"))
+        best_bid = self._to_float(asking.get("bond_bidp1"))
+        middle_price = None
+        if best_ask is not None and best_bid is not None:
+            middle_price = (best_ask + best_bid) / 2
         return KoreanBondQuote(
             pdno=output.get("stnd_iscd", pdno),
             name=output.get("hts_kor_isnm") or pdno,
@@ -760,6 +766,9 @@ class KoreanMarketService:
             open=self._to_float(output.get("bond_oprc")),
             previous_close=self._to_float(output.get("bond_prdy_clpr")),
             earning_rate=self._to_float(output.get("ernn_rate")),
+            best_ask=best_ask,
+            best_bid=best_bid,
+            middle_price=middle_price,
         )
 
     async def get_bond_basic_info(self, pdno: str) -> Optional[Dict[str, Any]]:
@@ -767,6 +776,11 @@ class KoreanMarketService:
 
     async def get_bond_issue_info(self, pdno: str) -> Optional[Dict[str, Any]]:
         return kdevelopers_client.get_bond_issue_info(pdno)
+
+    async def get_bond_daily_price(
+        self, pdno: str, limit: Optional[int] = None
+    ) -> Optional[List[KoreanCandleData]]:
+        return kdevelopers_client.get_bond_daily_price(pdno, limit=limit)
 
     async def get_bond_master(
         self,

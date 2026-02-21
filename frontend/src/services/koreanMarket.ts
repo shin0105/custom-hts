@@ -217,4 +217,22 @@ export const koreanMarketService = {
     );
     return response.data;
   },
+
+  /**
+   * Get domestic listed bond daily prices (장내채권현재가(일별)).
+   */
+  async getBondDailyPrice(
+    pdno: string,
+    limit?: number
+  ): Promise<KoreanCandleData[]> {
+    const params = new URLSearchParams();
+    if (limit !== undefined) params.append('limit', String(limit));
+    const query = params.toString();
+    const response = await axios.get<KoreanCandleData[]>(
+      `${API_BASE_URL}/korean/bonds/${encodeURIComponent(pdno)}/daily-price${
+        query ? `?${query}` : ''
+      }`
+    );
+    return response.data;
+  },
 };

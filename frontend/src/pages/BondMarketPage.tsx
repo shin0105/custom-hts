@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { CandleChart } from '../components/CandleChart';
 import { koreanMarketService } from '../services/koreanMarket';
-import type { KoreanBondInfo, KoreanBondMasterItem, KoreanBondQuote } from '../types/korean';
+import type {
+  KoreanBondInfo,
+  KoreanBondMasterItem,
+  KoreanBondQuote,
+  KoreanCandleData,
+} from '../types/korean';
 
 const PAGE_SIZE = 10;
 
@@ -126,6 +132,8 @@ export const BondMarketPage: React.FC = () => {
   const [infoError, setInfoError] = useState<string | null>(null);
   const [data, setData] = useState<KoreanBondInfo | null>(null);
   const [quote, setQuote] = useState<KoreanBondQuote | null>(null);
+  const [dailyPrices, setDailyPrices] = useState<KoreanCandleData[]>([]);
+  const [dailyError, setDailyError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [items, setItems] = useState<KoreanBondMasterItem[]>([]);
@@ -142,10 +150,13 @@ export const BondMarketPage: React.FC = () => {
     setInfoError(null);
     setData(null);
     setQuote(null);
+    setDailyPrices([]);
+    setDailyError(null);
     try {
-      const [infoResult, quoteResult] = await Promise.allSettled([
+      const [infoResult, quoteResult, dailyResult] = await Promise.allSettled([
         koreanMarketService.getBondInfo(code),
         koreanMarketService.getBondPrice(code),
+        koreanMarketService.getBondDailyPrice(code, 100),
       ]);
 
       if (infoResult.status === 'fulfilled') {
@@ -156,6 +167,11 @@ export const BondMarketPage: React.FC = () => {
 
       if (quoteResult.status === 'fulfilled') {
         setQuote(quoteResult.value);
+      }
+      if (dailyResult.status === 'fulfilled') {
+        setDailyPrices(dailyResult.value);
+      } else {
+        setDailyError('일별 시세를 불러오지 못했습니다.');
       }
     } catch (err: unknown) {
       const msg =
@@ -368,11 +384,47 @@ export const BondMarketPage: React.FC = () => {
               <div>현재가: <strong>{formatNumber(quote.current_price)}</strong></div>
               <div>전일대비: <strong>{formatNumber(quote.change)}</strong></div>
               <div>등락률: <strong>{formatPct(quote.change_percent)}</strong></div>
+              <div>중간가: <strong>{formatNumber(quote.middle_price)}</strong></div>
+              <div>최우선 매도/매수: <strong>{formatNumber(quote.best_ask)} / {formatNumber(quote.best_bid)}</strong></div>
               <div>수익률: <strong>{formatPct(quote.earning_rate)}</strong></div>
               <div>시가/고가/저가: <strong>{formatNumber(quote.open)} / {formatNumber(quote.high)} / {formatNumber(quote.low)}</strong></div>
               <div>거래량: <strong>{formatNumber(quote.volume)}</strong></div>
             </div>
           )}
+          <div
+            style={{
+              padding: '12px 16px',
+              borderBottom: '1px solid #e5e7eb',
+              backgroundColor: '#ffffff',
+            }}
+          >
+            <div
+              style={{
+                fontSize: '13px',
+                color: '#374151',
+                marginBottom: '8px',
+                fontWeight: 600,
+              }}
+            >
+              장내채권현재가(일별) 바 차트
+            </div>
+            {dailyError && (
+              <div
+                style={{
+                  color: '#b91c1c',
+                  backgroundColor: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '6px',
+                  padding: '8px 10px',
+                  marginBottom: '8px',
+                  fontSize: '12px',
+                }}
+              >
+                {dailyError}
+              </div>
+            )}
+            <CandleChart data={dailyPrices} currency="KRW" height={320} />
+          </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <tbody>
               {summaryRows.map(({ label, value }) => (

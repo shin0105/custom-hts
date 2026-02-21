@@ -553,6 +553,86 @@ class KDevelopersClient:
             logger.error(f"Exception in get_bond_basic_info for {pdno}: {e}")
             return None
 
+    def get_bond_asking_price(self, pdno: str) -> Optional[Dict[str, Any]]:
+        """
+        Get domestic listed bond asking/bid quote.
+
+        API: [장내채권] 기본시세 > 장내채권현재가(호가) [국내주식-132]
+        """
+        try:
+            api_url = "/uapi/domestic-bond/v1/quotations/inquire-asking-price"
+            tr_id = "FHKBJ773401C0"
+            params = {
+                "FID_COND_MRKT_DIV_CODE": "B",
+                "FID_INPUT_ISCD": pdno,
+            }
+            res = self._url_fetch(api_url, tr_id, "", params)
+            if not res.is_ok():
+                res.print_error(api_url)
+                return None
+
+            body = res.get_body()
+            output = getattr(body, "output", None)
+            if output is None:
+                return None
+            if hasattr(output, "_asdict"):
+                return output._asdict()
+            if isinstance(output, dict):
+                return output
+            return None
+        except Exception as e:
+            logger.error(f"Exception in get_bond_asking_price for {pdno}: {e}")
+            return None
+
+    def get_bond_daily_price(
+        self,
+        pdno: str,
+        limit: Optional[int] = None,
+    ) -> Optional[List[KoreanCandleData]]:
+        """
+        Get domestic listed bond daily prices.
+
+        API: [장내채권] 기본시세 > 장내채권현재가(일별) [국내주식-202]
+        """
+        try:
+            api_url = "/uapi/domestic-bond/v1/quotations/inquire-daily-price"
+            tr_id = "FHKBJ773404C0"
+            params = {
+                "FID_COND_MRKT_DIV_CODE": "B",
+                "FID_INPUT_ISCD": pdno,
+            }
+            res = self._url_fetch(api_url, tr_id, "", params)
+            if not res.is_ok():
+                res.print_error(api_url)
+                return None
+
+            output_list = getattr(res.get_body(), "output", None)
+            if not output_list:
+                return None
+
+            candles: List[KoreanCandleData] = []
+            for i, item in enumerate(output_list):
+                if limit is not None and i >= limit:
+                    break
+
+                candles.append(
+                    KoreanCandleData(
+                        symbol=pdno,
+                        date=item.get("stck_bsop_date", ""),
+                        open=safe_float(item.get("bond_oprc")),
+                        high=safe_float(item.get("bond_hgpr")),
+                        low=safe_float(item.get("bond_lwpr")),
+                        close=safe_float(item.get("bond_prpr")),
+                        volume=safe_int(item.get("acml_vol")),
+                        change=safe_float(item.get("bond_prdy_vrss")),
+                        change_percent=safe_float(item.get("prdy_ctrt")),
+                    )
+                )
+            return candles
+        except Exception as e:
+            logger.error(f"Exception in get_bond_daily_price for {pdno}: {e}")
+            return None
+
     def get_bond_issue_info(self, pdno: str) -> Optional[Dict[str, Any]]:
         """
         Get domestic listed bond issuance information.

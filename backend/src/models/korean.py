@@ -212,6 +212,15 @@ class KoreanBondQuote(BaseModel):
     earning_rate: Optional[float] = Field(
         None, description="Yield/earning rate from API response"
     )
+    best_ask: Optional[float] = Field(
+        None, description="Best ask price from bond asking-price API"
+    )
+    best_bid: Optional[float] = Field(
+        None, description="Best bid price from bond asking-price API"
+    )
+    middle_price: Optional[float] = Field(
+        None, description="Current middle price ((best ask + best bid) / 2)"
+    )
 
 
 class KoreanBondMasterItem(BaseModel):

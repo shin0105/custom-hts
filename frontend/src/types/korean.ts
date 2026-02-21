@@ -157,6 +157,9 @@ export interface KoreanBondQuote {
   open?: number | null;
   previous_close?: number | null;
   earning_rate?: number | null;
+  best_ask?: number | null;
+  best_bid?: number | null;
+  middle_price?: number | null;
 }
 
 export interface KoreanBondMasterItem {

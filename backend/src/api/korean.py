@@ -331,6 +331,22 @@ async def get_korean_bond_price(pdno: str) -> KoreanBondQuote:
     return quote
 
 
+@router.get("/bonds/{pdno}/daily-price", response_model=List[KoreanCandleData])
+async def get_korean_bond_daily_price(
+    pdno: str,
+    limit: Optional[int] = Query(
+        None, ge=1, le=100, description="Number of daily rows to return (max 100)"
+    ),
+) -> List[KoreanCandleData]:
+    """Get domestic listed bond daily prices."""
+    rows = await korean_market_service.get_bond_daily_price(pdno, limit=limit)
+    if not rows:
+        raise HTTPException(
+            status_code=404, detail=f"Bond daily prices not found for {pdno}"
+        )
+    return rows
+
+
 @router.get("/bonds/{pdno}/info")
 async def get_korean_bond_info(pdno: str) -> Dict[str, Any]:
     """Get domestic listed bond basic information."""
