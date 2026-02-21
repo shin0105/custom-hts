@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { koreanMarketService } from '../services/koreanMarket';
-import type { KoreanBondInfo, KoreanBondMasterItem } from '../types/korean';
+import type { KoreanBondInfo, KoreanBondMasterItem, KoreanBondQuote } from '../types/korean';
 
 const PAGE_SIZE = 10;
 
@@ -46,11 +46,86 @@ const INTEREST_METHOD: Record<string, string> = {
   '29': '기타(변동금리)',
 };
 
+const INTEREST_DAY_TYPE: Record<string, string> = {
+  '01': '발행일',
+  '02': '만기일',
+  '03': '특정일',
+};
+
+const YES_NO_MAP: Record<string, string> = {
+  Y: '예',
+  N: '아니오',
+};
+
+const FIELD_LABELS: Record<string, string> = {
+  pdno: '상품번호',
+  prdt_type_cd: '상품유형코드',
+  ksd_bond_item_name: '채권명',
+  ksd_bond_item_eng_name: '채권영문명',
+  bond_clsf_cd: '채권분류코드',
+  bond_clsf_kor_name: '채권분류명',
+  iso_crcy_cd: '통화코드',
+  issu_dt: '발행일',
+  rvnu_dt: '매출일',
+  rdpt_dt: '상환일(만기)',
+  mdwy_rdpt_dt: '중도상환일',
+  lstg_dt: '상장일',
+  lstg_abol_dt: '상장폐지일',
+  frst_int_dfrm_dt: '최초이자지급일',
+  rgbf_int_dfrm_dt: '직전이자지급일',
+  nxtm_int_dfrm_dt: '차기이자지급일',
+  int_caltm_mcnt: '이자계산기간(개월)',
+  ksd_indf_frqc_uder_calc_dcnt: '이자지급주기미만(일수)',
+  bond_int_dfrm_mthd_cd: '채권이자지급방법',
+  int_dfrm_day_type_cd: '이자지급일유형',
+  ksd_rcvg_bond_srfc_inrt: '표면이율',
+  ksd_rcvg_bond_dsct_rt: '할인율',
+  frn_intr: 'FRN금리',
+  bond_expd_rdpt_rt: '채권만기상환율',
+  expd_rdpt_rt: '만기상환율',
+  bond_expd_asrc_erng_rt: '채권만기보장수익률',
+  expd_asrc_erng_rt: '만기보장수익률',
+  ksd_tot_issu_amt: '총발행금액',
+  pnia_int_calc_unpr: '원리금이자계산단가',
+  dshn_occr_yn: '부도발생여부',
+  expd_exts_yn: '만기연장여부',
+  dpsi_psbl_yn: '예탁가능여부',
+  sprx_psbl_yn: '분리과세가능여부',
+  qib_yn: 'QIB여부',
+  csbd_yn: '영구채여부',
+  elec_scty_yn: '전자증권여부',
+  pclr_ptcr_text: '특이사항',
+  tlg_rcvg_dtl_dtime: '전문수신상세일시',
+};
+
+const looksLikeDate = (value: string) =>
+  value.length === 8 && /^\d{8}$/.test(value) && value !== '00000000';
+
+const formatBondValue = (key: string, raw: unknown): string => {
+  if (raw === null || raw === undefined) return '-';
+  const value = String(raw).trim();
+  if (!value || value === '00000000') return '-';
+  if (looksLikeDate(value)) return formatDate(value);
+  if (key.endsWith('_yn')) return YES_NO_MAP[value] ?? value;
+  if (key === 'bond_int_dfrm_mthd_cd') return INTEREST_METHOD[value] ?? value;
+  if (key === 'int_dfrm_day_type_cd') return INTEREST_DAY_TYPE[value] ?? value;
+
+  const asNumber = Number(value.replace(/,/g, ''));
+  if (Number.isFinite(asNumber) && /(_amt|_unpr|_vol)$/.test(key)) {
+    return new Intl.NumberFormat('ko-KR').format(asNumber);
+  }
+  if (Number.isFinite(asNumber) && /(_rt|_inrt|_intr)$/.test(key)) {
+    return `${asNumber.toFixed(6)}%`;
+  }
+  return value;
+};
+
 export const BondMarketPage: React.FC = () => {
   const [pdno, setPdno] = useState('');
   const [loadingInfo, setLoadingInfo] = useState(false);
   const [infoError, setInfoError] = useState<string | null>(null);
   const [data, setData] = useState<KoreanBondInfo | null>(null);
+  const [quote, setQuote] = useState<KoreanBondQuote | null>(null);
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [items, setItems] = useState<KoreanBondMasterItem[]>([]);
@@ -66,9 +141,22 @@ export const BondMarketPage: React.FC = () => {
     setLoadingInfo(true);
     setInfoError(null);
     setData(null);
+    setQuote(null);
     try {
-      const result = await koreanMarketService.getBondInfo(code);
-      setData(result);
+      const [infoResult, quoteResult] = await Promise.allSettled([
+        koreanMarketService.getBondInfo(code),
+        koreanMarketService.getBondPrice(code),
+      ]);
+
+      if (infoResult.status === 'fulfilled') {
+        setData(infoResult.value);
+      } else {
+        throw infoResult.reason;
+      }
+
+      if (quoteResult.status === 'fulfilled') {
+        setQuote(quoteResult.value);
+      }
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : '채권 정보를 불러오지 못했습니다.';
@@ -128,29 +216,68 @@ export const BondMarketPage: React.FC = () => {
 
   const masterRows = useMemo(() => items, [items]);
 
-  const rows: { label: string; value: React.ReactNode }[] = data
+  const summaryRows: { label: string; value: React.ReactNode }[] = data
     ? [
         { label: '채권코드 (PDNO)', value: data.pdno },
         { label: '채권명', value: data.ksd_bond_item_name || '-' },
         { label: '채권영문명', value: data.ksd_bond_item_eng_name || '-' },
         { label: '채권분류', value: data.bond_clsf_kor_name || '-' },
+        { label: '채권분류코드', value: data.bond_clsf_cd || '-' },
+        { label: '상품유형코드', value: data.prdt_type_cd || '-' },
         { label: '통화', value: data.iso_crcy_cd || '-' },
         { label: '발행일', value: formatDate(data.issu_dt) },
+        { label: '매출일', value: formatDate(data.rvnu_dt as string | null | undefined) },
         { label: '상환일 (만기)', value: formatDate(data.rdpt_dt) },
+        { label: '중도상환일', value: formatDate(data.mdwy_rdpt_dt as string | null | undefined) },
         { label: '상장일', value: formatDate(data.lstg_dt) },
         { label: '상장폐지일', value: formatDate(data.lstg_abol_dt) },
         { label: '표면이율', value: formatRate(data.ksd_rcvg_bond_srfc_inrt) },
+        { label: '할인율', value: formatRate(data.ksd_rcvg_bond_dsct_rt as string | null | undefined) },
         { label: '총 발행금액', value: formatAmt(data.ksd_tot_issu_amt) },
+        {
+          label: '이자지급주기',
+          value:
+            data.int_caltm_mcnt && data.int_caltm_mcnt !== '0'
+              ? `${data.int_caltm_mcnt}개월`
+              : '-',
+        },
         {
           label: '이자지급방법',
           value: data.bond_int_dfrm_mthd_cd
             ? INTEREST_METHOD[data.bond_int_dfrm_mthd_cd] ?? data.bond_int_dfrm_mthd_cd
             : '-',
         },
+        {
+          label: '이자지급일유형',
+          value: data.int_dfrm_day_type_cd
+            ? INTEREST_DAY_TYPE[data.int_dfrm_day_type_cd] ?? data.int_dfrm_day_type_cd
+            : '-',
+        },
+        { label: '최초이자지급일', value: formatDate(data.frst_int_dfrm_dt as string | null | undefined) },
+        { label: '직전이자지급일', value: formatDate(data.rgbf_int_dfrm_dt as string | null | undefined) },
+        { label: '차기이자지급일', value: formatDate(data.nxtm_int_dfrm_dt as string | null | undefined) },
         { label: '부도발생여부', value: data.dshn_occr_yn || '-' },
         { label: '만기연장여부', value: data.expd_exts_yn || '-' },
+        { label: '예탁가능여부', value: data.dpsi_psbl_yn || '-' },
+        { label: '분리과세가능여부', value: data.sprx_psbl_yn || '-' },
+        { label: 'QIB여부', value: data.qib_yn || '-' },
+        { label: '영구채여부', value: data.csbd_yn || '-' },
+        { label: '전자증권여부', value: data.elec_scty_yn || '-' },
+        { label: '특이사항', value: (data.pclr_ptcr_text as string | null) || '-' },
       ]
     : [];
+
+  const allFields = useMemo(() => {
+    if (!data) return [];
+    return Object.entries(data)
+      .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '')
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, value]) => ({
+        key,
+        label: FIELD_LABELS[key] ?? key,
+        value: formatBondValue(key, value),
+      }));
+  }, [data]);
 
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '24px' }}>
@@ -226,9 +353,29 @@ export const BondMarketPage: React.FC = () => {
           >
             {data.ksd_bond_item_name || data.pdno}
           </div>
+          {quote && (
+            <div
+              style={{
+                padding: '12px 16px',
+                borderBottom: '1px solid #e5e7eb',
+                backgroundColor: '#f8fafc',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                gap: '8px',
+                fontSize: '13px',
+              }}
+            >
+              <div>현재가: <strong>{formatNumber(quote.current_price)}</strong></div>
+              <div>전일대비: <strong>{formatNumber(quote.change)}</strong></div>
+              <div>등락률: <strong>{formatPct(quote.change_percent)}</strong></div>
+              <div>수익률: <strong>{formatPct(quote.earning_rate)}</strong></div>
+              <div>시가/고가/저가: <strong>{formatNumber(quote.open)} / {formatNumber(quote.high)} / {formatNumber(quote.low)}</strong></div>
+              <div>거래량: <strong>{formatNumber(quote.volume)}</strong></div>
+            </div>
+          )}
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <tbody>
-              {rows.map(({ label, value }) => (
+              {summaryRows.map(({ label, value }) => (
                 <tr
                   key={label}
                   style={{ borderBottom: '1px solid #f3f4f6' }}
@@ -257,6 +404,44 @@ export const BondMarketPage: React.FC = () => {
               ))}
             </tbody>
           </table>
+          <div
+            style={{
+              padding: '12px 16px',
+              borderTop: '1px solid #e5e7eb',
+              backgroundColor: '#f9fafb',
+              fontSize: '13px',
+              color: '#374151',
+              fontWeight: 600,
+            }}
+          >
+            CTPF1114R 원본 필드 전체 ({allFields.length}개)
+          </div>
+          <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <tbody>
+                {allFields.map((field) => (
+                  <tr key={field.key} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td
+                      style={{
+                        padding: '8px 16px',
+                        width: '28%',
+                        color: '#6b7280',
+                        fontSize: '12px',
+                        backgroundColor: '#f9fafb',
+                        verticalAlign: 'top',
+                      }}
+                    >
+                      {field.label}
+                      <div style={{ fontFamily: 'monospace', fontSize: '11px' }}>{field.key}</div>
+                    </td>
+                    <td style={{ padding: '8px 16px', fontSize: '13px', wordBreak: 'break-all' }}>
+                      {field.value}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
