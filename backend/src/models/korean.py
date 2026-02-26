@@ -223,6 +223,65 @@ class KoreanBondQuote(BaseModel):
     )
 
 
+class KoreanBondValuation(BaseModel):
+    """Domestic listed bond valuation output."""
+
+    pdno: str = Field(..., description="Bond standard code")
+    name: str = Field(..., description="Bond name")
+    as_of: datetime = Field(..., description="Valuation timestamp")
+    raw_market_price: Optional[float] = Field(
+        None, description="Raw observed market price from quote API"
+    )
+    market_price: Optional[float] = Field(
+        None, description="Normalized market price on face=100 basis"
+    )
+    market_price_source: Optional[str] = Field(
+        None, description="Source of market price (middle/current/daily_close)"
+    )
+    theoretical_dirty_price: Optional[float] = Field(
+        None, description="Discounted dirty price from future cashflows"
+    )
+    accrued_interest: Optional[float] = Field(
+        None, description="Estimated accrued interest"
+    )
+    theoretical_clean_price: Optional[float] = Field(
+        None, description="Theoretical clean price (dirty - accrued)"
+    )
+    mispricing: Optional[float] = Field(
+        None, description="Market - theoretical clean price"
+    )
+    mispricing_percent: Optional[float] = Field(
+        None, description="Mispricing percentage vs theoretical clean price"
+    )
+    annual_coupon_rate: Optional[float] = Field(
+        None, description="Annual coupon rate used in valuation (%)"
+    )
+    annual_yield_rate: Optional[float] = Field(
+        None, description="Annual yield used in valuation (%)"
+    )
+    payment_interval_months: Optional[int] = Field(
+        None, description="Coupon payment interval in months"
+    )
+    remaining_periods: Optional[int] = Field(
+        None, description="Remaining coupon periods until maturity"
+    )
+    face_value: float = Field(
+        100.0, description="Face value assumption for valuation"
+    )
+    redemption_ratio: Optional[float] = Field(
+        None, description="Maturity redemption ratio (%)"
+    )
+    next_coupon_date: Optional[str] = Field(
+        None, description="Next coupon date (YYYYMMDD)"
+    )
+    maturity_date: Optional[str] = Field(
+        None, description="Maturity/redemption date (YYYYMMDD)"
+    )
+    notes: List[str] = Field(
+        default_factory=list, description="Assumptions or data availability notes"
+    )
+
+
 class KoreanBondMasterItem(BaseModel):
     """Domestic listed bond master row."""
 

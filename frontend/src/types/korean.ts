@@ -162,6 +162,29 @@ export interface KoreanBondQuote {
   middle_price?: number | null;
 }
 
+export interface KoreanBondValuation {
+  pdno: string;
+  name: string;
+  as_of: string;
+  raw_market_price?: number | null;
+  market_price?: number | null;
+  market_price_source?: string | null;
+  theoretical_dirty_price?: number | null;
+  accrued_interest?: number | null;
+  theoretical_clean_price?: number | null;
+  mispricing?: number | null;
+  mispricing_percent?: number | null;
+  annual_coupon_rate?: number | null;
+  annual_yield_rate?: number | null;
+  payment_interval_months?: number | null;
+  remaining_periods?: number | null;
+  face_value: number;
+  redemption_ratio?: number | null;
+  next_coupon_date?: string | null;
+  maturity_date?: string | null;
+  notes: string[];
+}
+
 export interface KoreanBondMasterItem {
   pdno: string;
   name?: string | null;

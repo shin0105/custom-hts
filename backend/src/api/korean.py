@@ -11,6 +11,7 @@ from ..models.korean import (
     KoreanValuationMetrics,
     KoreanEstimatePerform,
     KoreanBondQuote,
+    KoreanBondValuation,
     KoreanBondMasterResponse,
 )
 from ..services.korean_market import korean_market_service
@@ -329,6 +330,17 @@ async def get_korean_bond_price(pdno: str) -> KoreanBondQuote:
             status_code=404, detail=f"Bond price not found for {pdno}"
         )
     return quote
+
+
+@router.get("/bonds/{pdno}/valuation", response_model=KoreanBondValuation)
+async def get_korean_bond_valuation(pdno: str) -> KoreanBondValuation:
+    """Get domestic listed bond valuation using basic info + price data."""
+    valuation = await korean_market_service.get_bond_valuation(pdno)
+    if not valuation:
+        raise HTTPException(
+            status_code=404, detail=f"Bond valuation not found for {pdno}"
+        )
+    return valuation
 
 
 @router.get("/bonds/{pdno}/daily-price", response_model=List[KoreanCandleData])

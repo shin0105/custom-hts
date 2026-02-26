@@ -15,6 +15,7 @@ import type {
   KoreanBondMasterResponse,
   KoreanBondQuote,
   KoreanBondInfo,
+  KoreanBondValuation,
 } from '../types/korean';
 
 const API_BASE_URL = '/api';
@@ -203,6 +204,16 @@ export const koreanMarketService = {
   async getBondPrice(pdno: string): Promise<KoreanBondQuote> {
     const response = await axios.get<KoreanBondQuote>(
       `${API_BASE_URL}/korean/bonds/${pdno}/price`
+    );
+    return response.data;
+  },
+
+  /**
+   * Get domestic listed bond valuation using basic info + price data.
+   */
+  async getBondValuation(pdno: string): Promise<KoreanBondValuation> {
+    const response = await axios.get<KoreanBondValuation>(
+      `${API_BASE_URL}/korean/bonds/${encodeURIComponent(pdno)}/valuation`
     );
     return response.data;
   },

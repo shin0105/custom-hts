@@ -6,6 +6,7 @@ import type {
   KoreanBondMasterItem,
   KoreanBondQuote,
   KoreanCandleData,
+  KoreanBondValuation,
 } from '../types/korean';
 
 const PAGE_SIZE = 10;
@@ -37,6 +38,14 @@ const formatNumber = (value?: number | null) => {
 const formatPct = (value?: number | null) => {
   if (value === null || value === undefined) return '-';
   return `${value.toFixed(2)}%`;
+};
+
+const formatMarketPriceSource = (source?: string | null) => {
+  if (!source) return '-';
+  if (source === 'middle_price') return '중간가';
+  if (source === 'current_price') return '현재가';
+  if (source === 'daily_close') return '일별 종가';
+  return source;
 };
 
 const INTEREST_METHOD: Record<string, string> = {
@@ -132,6 +141,7 @@ export const BondMarketPage: React.FC = () => {
   const [infoError, setInfoError] = useState<string | null>(null);
   const [data, setData] = useState<KoreanBondInfo | null>(null);
   const [quote, setQuote] = useState<KoreanBondQuote | null>(null);
+  const [valuation, setValuation] = useState<KoreanBondValuation | null>(null);
   const [dailyPrices, setDailyPrices] = useState<KoreanCandleData[]>([]);
   const [dailyError, setDailyError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -150,12 +160,15 @@ export const BondMarketPage: React.FC = () => {
     setInfoError(null);
     setData(null);
     setQuote(null);
+    setValuation(null);
     setDailyPrices([]);
     setDailyError(null);
     try {
-      const [infoResult, quoteResult, dailyResult] = await Promise.allSettled([
+      const [infoResult, quoteResult, valuationResult, dailyResult] =
+        await Promise.allSettled([
         koreanMarketService.getBondInfo(code),
         koreanMarketService.getBondPrice(code),
+        koreanMarketService.getBondValuation(code),
         koreanMarketService.getBondDailyPrice(code, 100),
       ]);
 
@@ -167,6 +180,9 @@ export const BondMarketPage: React.FC = () => {
 
       if (quoteResult.status === 'fulfilled') {
         setQuote(quoteResult.value);
+      }
+      if (valuationResult.status === 'fulfilled') {
+        setValuation(valuationResult.value);
       }
       if (dailyResult.status === 'fulfilled') {
         setDailyPrices(dailyResult.value);
@@ -389,6 +405,35 @@ export const BondMarketPage: React.FC = () => {
               <div>수익률: <strong>{formatPct(quote.earning_rate)}</strong></div>
               <div>시가/고가/저가: <strong>{formatNumber(quote.open)} / {formatNumber(quote.high)} / {formatNumber(quote.low)}</strong></div>
               <div>거래량: <strong>{formatNumber(quote.volume)}</strong></div>
+            </div>
+          )}
+          {valuation && (
+            <div
+              style={{
+                padding: '12px 16px',
+                borderBottom: '1px solid #e5e7eb',
+                backgroundColor: '#ecfeff',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '8px',
+                fontSize: '13px',
+              }}
+            >
+              <div>시장가격: <strong>{formatNumber(valuation.market_price)}</strong></div>
+              <div>시장가격 Raw: <strong>{formatNumber(valuation.raw_market_price)}</strong></div>
+              <div>시장가격 소스: <strong>{formatMarketPriceSource(valuation.market_price_source)}</strong></div>
+              <div>이론 Dirty Price: <strong>{formatNumber(valuation.theoretical_dirty_price)}</strong></div>
+              <div>경과이자: <strong>{formatNumber(valuation.accrued_interest)}</strong></div>
+              <div>이론 Clean Price: <strong>{formatNumber(valuation.theoretical_clean_price)}</strong></div>
+              <div>괴리(시장-이론): <strong>{formatNumber(valuation.mispricing)}</strong></div>
+              <div>괴리율: <strong>{formatPct(valuation.mispricing_percent)}</strong></div>
+              <div>표면금리/할인율: <strong>{formatPct(valuation.annual_coupon_rate)} / {formatPct(valuation.annual_yield_rate)}</strong></div>
+              <div>이자주기/잔여회차: <strong>{valuation.payment_interval_months ?? '-'}개월 / {valuation.remaining_periods ?? '-'}</strong></div>
+              <div>차기이자지급일: <strong>{formatDate(valuation.next_coupon_date ?? undefined)}</strong></div>
+              <div>만기일: <strong>{formatDate(valuation.maturity_date ?? undefined)}</strong></div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                계산 메모: <strong>{valuation.notes.length ? valuation.notes.join(' | ') : '-'}</strong>
+              </div>
             </div>
           )}
           <div
