@@ -380,3 +380,52 @@ class KoreanBondMasterResponse(BaseModel):
     items: List[KoreanBondMasterItem] = Field(
         default_factory=list, description="Bond master rows"
     )
+
+
+class KoreanFuturesOptionsMasterItem(BaseModel):
+    """Domestic futures/options master row."""
+
+    market: str = Field(..., description="Master market type: index/stock/commodity")
+    commodity_type: Optional[str] = Field(
+        None, description="Commodity type code (commodity market only)"
+    )
+    info_type: Optional[str] = Field(None, description="Product/info type code")
+    short_code: Optional[str] = Field(None, description="Short code")
+    standard_code: Optional[str] = Field(None, description="Standard code")
+    name_kr: Optional[str] = Field(None, description="Korean product name")
+    atm_class_code: Optional[str] = Field(None, description="ATM class code")
+    strike_price: Optional[str] = Field(None, description="Strike price")
+    month_class_code: Optional[str] = Field(None, description="Month class code")
+    underlying_short_code: Optional[str] = Field(
+        None, description="Underlying short code"
+    )
+    underlying_name_kr: Optional[str] = Field(
+        None, description="Underlying Korean name"
+    )
+
+
+class KoreanFuturesOptionsMasterResponse(BaseModel):
+    """Domestic futures/options master response."""
+
+    market: str = Field(..., description="Requested market: all/index/stock/commodity")
+    source_files: Dict[str, Optional[str]] = Field(
+        default_factory=dict, description="Local master source file per market"
+    )
+    total_loaded: int = Field(..., description="Total loaded rows after filtering")
+    total_returned: int = Field(..., description="Number of rows returned")
+    offset: int = Field(..., description="Applied offset")
+    limit: int = Field(..., description="Applied limit")
+    query: Optional[str] = Field(None, description="Optional search query")
+    info_type: Optional[str] = Field(None, description="Info type filter")
+    underlying_short_code: Optional[str] = Field(
+        None, description="Underlying short code filter"
+    )
+    available_markets: Dict[str, int] = Field(
+        default_factory=dict, description="Available row counts by market"
+    )
+    available_info_types_by_market: Dict[str, Dict[str, int]] = Field(
+        default_factory=dict, description="Available info type counts grouped by market"
+    )
+    items: List[KoreanFuturesOptionsMasterItem] = Field(
+        default_factory=list, description="Futures/options master rows"
+    )

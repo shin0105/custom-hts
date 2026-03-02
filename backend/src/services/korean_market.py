@@ -15,9 +15,13 @@ from ..models.korean import (
     KoreanBondQuote,
     KoreanBondValuation,
     KoreanBondMasterItem,
+    KoreanFuturesOptionsMasterItem,
 )
 from ..integrations.kdevelopers import kdevelopers_client
 from ..integrations.bond_master import bond_master_file_manager
+from ..integrations.futures_options_master import (
+    futures_options_master_file_manager,
+)
 from ..integrations.opendart import opendart_client
 from ..integrations.supabase_client import supabase_client
 
@@ -1172,6 +1176,115 @@ class KoreanMarketService:
             output_format=output_format,
             force=force,
             source_url=source_url,
+        )
+
+    async def get_futures_options_master(
+        self,
+        market: str = "all",
+        query: Optional[str] = None,
+        info_type: Optional[str] = None,
+        underlying_short_code: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 100,
+        auto_download: bool = False,
+        force_download: bool = False,
+    ) -> Dict[str, Any]:
+        market_key = (market or "all").strip().lower()
+        if market_key not in {"all", "index", "stock", "commodity"}:
+            raise ValueError("market must be one of: all/index/stock/commodity")
+
+        target_markets = (
+            ["index", "stock", "commodity"]
+            if market_key == "all"
+            else [market_key]
+        )
+        source_files: Dict[str, Optional[str]] = {}
+        available_markets: Dict[str, int] = {}
+        available_info_types_by_market: Dict[str, Dict[str, int]] = {}
+        rows: List[Dict[str, Any]] = []
+
+        for one_market in target_markets:
+            local_file = futures_options_master_file_manager.get_local_master_file(
+                one_market
+            )
+            source_files[one_market] = str(local_file) if local_file else None
+
+            market_rows = futures_options_master_file_manager.get_market_rows(
+                one_market,
+                auto_download=auto_download,
+                force_download=force_download,
+            )
+            available_markets[one_market] = len(market_rows)
+            info_counts: Dict[str, int] = {}
+            for row in market_rows:
+                row_info_type = str(row.get("info_type") or "").strip().upper()
+                if row_info_type:
+                    info_counts[row_info_type] = info_counts.get(row_info_type, 0) + 1
+                row["market"] = one_market
+                rows.append(row)
+            available_info_types_by_market[one_market] = info_counts
+
+        normalized_info_type = (info_type or "").strip().upper() or None
+        normalized_underlying_code = (
+            (underlying_short_code or "").strip().upper() or None
+        )
+
+        if normalized_info_type:
+            rows = [
+                row
+                for row in rows
+                if str(row.get("info_type") or "").strip().upper()
+                == normalized_info_type
+            ]
+
+        if normalized_underlying_code:
+            rows = [
+                row
+                for row in rows
+                if str(row.get("underlying_short_code") or "").strip().upper()
+                == normalized_underlying_code
+            ]
+
+        if query:
+            needle = query.strip().lower()
+            rows = [
+                row
+                for row in rows
+                if needle in str(row.get("short_code") or "").lower()
+                or needle in str(row.get("standard_code") or "").lower()
+                or needle in str(row.get("name_kr") or "").lower()
+                or needle in str(row.get("underlying_name_kr") or "").lower()
+            ]
+
+        total_loaded = len(rows)
+        sliced = rows[offset : offset + limit]
+        items = [KoreanFuturesOptionsMasterItem(**row) for row in sliced]
+
+        return {
+            "market": market_key,
+            "source_files": source_files,
+            "total_loaded": total_loaded,
+            "total_returned": len(items),
+            "offset": offset,
+            "limit": limit,
+            "query": query,
+            "info_type": normalized_info_type,
+            "underlying_short_code": normalized_underlying_code,
+            "available_markets": available_markets,
+            "available_info_types_by_market": available_info_types_by_market,
+            "items": items,
+        }
+
+    async def refresh_futures_options_master(
+        self,
+        market: str = "all",
+        output_format: str = "csv",
+        force: bool = False,
+    ) -> Dict[str, Any]:
+        return futures_options_master_file_manager.refresh_and_export(
+            market=market,
+            output_format=output_format,
+            force=force,
         )
 
     def _to_float(self, value: Any) -> Optional[float]:

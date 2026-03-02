@@ -16,6 +16,7 @@ import type {
   KoreanBondQuote,
   KoreanBondInfo,
   KoreanBondValuation,
+  KoreanFuturesOptionsMasterResponse,
 } from '../types/korean';
 
 const API_BASE_URL = '/api';
@@ -265,6 +266,41 @@ export const koreanMarketService = {
       `${API_BASE_URL}/korean/bonds/${encodeURIComponent(pdno)}/daily-price${
         query ? `?${query}` : ''
       }`
+    );
+    return response.data;
+  },
+
+  /**
+   * Get domestic futures/options master rows.
+   */
+  async getFuturesOptionsMaster(params?: {
+    market?: 'all' | 'index' | 'stock' | 'commodity';
+    query?: string;
+    infoType?: string;
+    underlyingShortCode?: string;
+    offset?: number;
+    limit?: number;
+    autoDownload?: boolean;
+    forceDownload?: boolean;
+  }): Promise<KoreanFuturesOptionsMasterResponse> {
+    const search = new URLSearchParams();
+    if (params?.market) search.append('market', params.market);
+    if (params?.query) search.append('query', params.query);
+    if (params?.infoType) search.append('info_type', params.infoType);
+    if (params?.underlyingShortCode) {
+      search.append('underlying_short_code', params.underlyingShortCode);
+    }
+    if (params?.offset !== undefined) search.append('offset', String(params.offset));
+    if (params?.limit !== undefined) search.append('limit', String(params.limit));
+    if (params?.autoDownload !== undefined) {
+      search.append('auto_download', String(params.autoDownload));
+    }
+    if (params?.forceDownload !== undefined) {
+      search.append('force_download', String(params.forceDownload));
+    }
+
+    const response = await axios.get<KoreanFuturesOptionsMasterResponse>(
+      `${API_BASE_URL}/korean/futures-options/master?${search.toString()}`
     );
     return response.data;
   },

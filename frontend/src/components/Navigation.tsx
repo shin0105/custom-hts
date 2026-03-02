@@ -53,6 +53,12 @@ export const Navigation: React.FC = () => {
           Bonds
         </Link>
         <Link
+          to="/futures-options"
+          style={linkStyle(location.pathname === '/futures-options')}
+        >
+          Futures & Options
+        </Link>
+        <Link
           to="/us"
           style={linkStyle(location.pathname === '/us')}
         >

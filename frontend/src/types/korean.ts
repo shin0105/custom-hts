@@ -227,6 +227,35 @@ export interface KoreanBondMasterResponse {
   items: KoreanBondMasterItem[];
 }
 
+export interface KoreanFuturesOptionsMasterItem {
+  market: 'index' | 'stock' | 'commodity';
+  commodity_type?: string | null;
+  info_type?: string | null;
+  short_code?: string | null;
+  standard_code?: string | null;
+  name_kr?: string | null;
+  atm_class_code?: string | null;
+  strike_price?: string | null;
+  month_class_code?: string | null;
+  underlying_short_code?: string | null;
+  underlying_name_kr?: string | null;
+}
+
+export interface KoreanFuturesOptionsMasterResponse {
+  market: 'all' | 'index' | 'stock' | 'commodity';
+  source_files?: Record<string, string | null>;
+  total_loaded: number;
+  total_returned: number;
+  offset: number;
+  limit: number;
+  query?: string | null;
+  info_type?: string | null;
+  underlying_short_code?: string | null;
+  available_markets?: Record<string, number>;
+  available_info_types_by_market?: Record<string, Record<string, number>>;
+  items: KoreanFuturesOptionsMasterItem[];
+}
+
 export type ChartInterval = 'daily' | 'minute';
 export type MinuteInterval = 1 | 5 | 10 | 30 | 60;
 export type PeriodType = 'D' | 'W' | 'M';

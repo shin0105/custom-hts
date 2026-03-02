@@ -13,6 +13,7 @@ from ..models.korean import (
     KoreanBondQuote,
     KoreanBondValuation,
     KoreanBondMasterResponse,
+    KoreanFuturesOptionsMasterResponse,
 )
 from ..services.korean_market import korean_market_service
 from ..utils.config import settings
@@ -447,6 +448,91 @@ async def refresh_korean_bond_master(
         raise HTTPException(
             status_code=500,
             detail="Failed to refresh/export bond master file",
+    )
+    return result
+
+
+@router.get(
+    "/futures-options/master",
+    response_model=KoreanFuturesOptionsMasterResponse,
+)
+async def get_korean_futures_options_master(
+    market: str = Query(
+        "all", description="Target market: all/index/stock/commodity"
+    ),
+    query: Optional[str] = Query(
+        None, description="Filter by code/name (case-insensitive)"
+    ),
+    info_type: Optional[str] = Query(
+        None, description="Info type code filter (e.g. 1,2,5,6...)"
+    ),
+    underlying_short_code: Optional[str] = Query(
+        None, description="Underlying short code filter"
+    ),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    limit: int = Query(100, ge=1, le=2000, description="Pagination limit"),
+    auto_download: bool = Query(
+        False,
+        description="Auto-download master file if local file is missing",
+    ),
+    force_download: bool = Query(
+        False, description="Force re-download before parsing"
+    ),
+) -> KoreanFuturesOptionsMasterResponse:
+    """Get domestic futures/options master rows (index/stock/commodity)."""
+    market_normalized = market.strip().lower()
+    if market_normalized not in {"all", "index", "stock", "commodity"}:
+        raise HTTPException(
+            status_code=400,
+            detail="market must be one of: all/index/stock/commodity",
+        )
+
+    result = await korean_market_service.get_futures_options_master(
+        market=market_normalized,
+        query=query,
+        info_type=info_type,
+        underlying_short_code=underlying_short_code,
+        offset=offset,
+        limit=limit,
+        auto_download=auto_download,
+        force_download=force_download,
+    )
+    return KoreanFuturesOptionsMasterResponse(**result)
+
+
+@router.post("/futures-options/master/refresh")
+async def refresh_korean_futures_options_master(
+    market: str = Query(
+        "all", description="Target market: all/index/stock/commodity"
+    ),
+    output_format: str = Query(
+        "csv", description="Export format: csv or json"
+    ),
+    force: bool = Query(False, description="Force re-download from source URL"),
+) -> Dict[str, Any]:
+    """Refresh/download domestic futures/options master files and export."""
+    market_normalized = market.strip().lower()
+    if market_normalized not in {"all", "index", "stock", "commodity"}:
+        raise HTTPException(
+            status_code=400,
+            detail="market must be one of: all/index/stock/commodity",
+        )
+
+    fmt = output_format.lower().strip()
+    if fmt not in {"csv", "json"}:
+        raise HTTPException(
+            status_code=400, detail="output_format must be 'csv' or 'json'"
+        )
+
+    result = await korean_market_service.refresh_futures_options_master(
+        market=market_normalized,
+        output_format=fmt,
+        force=force,
+    )
+    if not result.get("ok"):
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to refresh/export futures-options master file",
         )
     return result
 

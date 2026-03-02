@@ -99,6 +99,26 @@ export const HomePage: React.FC = () => {
         </Link>
 
         <Link
+          to="/futures-options"
+          style={cardStyle}
+          onMouseOver={(e) => {
+            e.currentTarget.style.transform = 'translateY(-4px)';
+            e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
+          <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '12px' }}>
+            📈 선물옵션
+          </h2>
+          <p style={{ color: '#6b7280' }}>
+            국내 지수/주식/상품 선물옵션 마스터 파일을 검색하고 필터링합니다
+          </p>
+        </Link>
+
+        <Link
           to="/account-check"
           style={cardStyle}
           onMouseOver={(e) => {
