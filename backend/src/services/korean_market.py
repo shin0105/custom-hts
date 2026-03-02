@@ -955,12 +955,62 @@ class KoreanMarketService:
     async def get_bond_master(
         self,
         query: Optional[str] = None,
+        bond_type: Optional[str] = None,
+        bond_class_code: Optional[str] = None,
+        bond_interest_class_code: Optional[str] = None,
+        listed_date_from: Optional[str] = None,
+        listed_date_to: Optional[str] = None,
+        issue_date_from: Optional[str] = None,
+        issue_date_to: Optional[str] = None,
+        maturity_date_from: Optional[str] = None,
+        maturity_date_to: Optional[str] = None,
         offset: int = 0,
         limit: int = 100,
         enrich: bool = True,
         include_quotes: bool = False,
     ) -> Dict[str, Any]:
+        bond_type = (bond_type or "").strip().upper() or None
+        bond_class_code = (bond_class_code or "").strip().upper() or None
+        bond_interest_class_code = (
+            (bond_interest_class_code or "").strip().upper() or None
+        )
+        listed_date_from = self._normalize_yyyymmdd(listed_date_from)
+        listed_date_to = self._normalize_yyyymmdd(listed_date_to)
+        issue_date_from = self._normalize_yyyymmdd(issue_date_from)
+        issue_date_to = self._normalize_yyyymmdd(issue_date_to)
+        maturity_date_from = self._normalize_yyyymmdd(maturity_date_from)
+        maturity_date_to = self._normalize_yyyymmdd(maturity_date_to)
+
         source_file, rows = self._load_bond_master_rows()
+        available_bond_types: Dict[str, int] = {}
+        available_bond_class_codes_by_type: Dict[str, Dict[str, int]] = {}
+        available_bond_interest_class_codes_by_type: Dict[str, Dict[str, int]] = {}
+
+        for row in rows:
+            row_type = str(row.get("bond_type") or "").strip().upper()
+            row_class = str(row.get("bond_class_code") or "").strip().upper()
+            row_interest = (
+                str(row.get("bond_interest_class_code") or "").strip().upper()
+            )
+            if row_type:
+                available_bond_types[row_type] = (
+                    available_bond_types.get(row_type, 0) + 1
+                )
+                if row_class:
+                    class_counts = available_bond_class_codes_by_type.setdefault(
+                        row_type, {}
+                    )
+                    class_counts[row_class] = class_counts.get(row_class, 0) + 1
+                if row_interest:
+                    interest_counts = (
+                        available_bond_interest_class_codes_by_type.setdefault(
+                            row_type, {}
+                        )
+                    )
+                    interest_counts[row_interest] = (
+                        interest_counts.get(row_interest, 0) + 1
+                    )
+
         if not rows:
             return {
                 "source_file": source_file,
@@ -969,8 +1019,75 @@ class KoreanMarketService:
                 "offset": offset,
                 "limit": limit,
                 "query": query,
+                "bond_type": bond_type,
+                "bond_class_code": bond_class_code,
+                "bond_interest_class_code": bond_interest_class_code,
+                "listed_date_from": listed_date_from,
+                "listed_date_to": listed_date_to,
+                "issue_date_from": issue_date_from,
+                "issue_date_to": issue_date_to,
+                "maturity_date_from": maturity_date_from,
+                "maturity_date_to": maturity_date_to,
+                "available_bond_types": available_bond_types,
+                "available_bond_class_codes_by_type": (
+                    available_bond_class_codes_by_type
+                ),
+                "available_bond_interest_class_codes_by_type": (
+                    available_bond_interest_class_codes_by_type
+                ),
                 "items": [],
             }
+
+        if bond_type:
+            rows = [
+                row
+                for row in rows
+                if (str(row.get("bond_type") or "").strip().upper() == bond_type)
+            ]
+
+        if bond_class_code:
+            rows = [
+                row
+                for row in rows
+                if (
+                    str(row.get("bond_class_code") or "").strip().upper()
+                    == bond_class_code
+                )
+            ]
+
+        if bond_interest_class_code:
+            rows = [
+                row
+                for row in rows
+                if (
+                    str(row.get("bond_interest_class_code") or "")
+                    .strip()
+                    .upper()
+                    == bond_interest_class_code
+                )
+            ]
+
+        rows = [
+            row
+            for row in rows
+            if self._is_in_yyyymmdd_range(
+                row.get("listed_date"), listed_date_from, listed_date_to
+            )
+        ]
+        rows = [
+            row
+            for row in rows
+            if self._is_in_yyyymmdd_range(
+                row.get("issue_date"), issue_date_from, issue_date_to
+            )
+        ]
+        rows = [
+            row
+            for row in rows
+            if self._is_in_yyyymmdd_range(
+                row.get("maturity_date"), maturity_date_from, maturity_date_to
+            )
+        ]
 
         if query:
             q = query.strip().lower()
@@ -991,6 +1108,9 @@ class KoreanMarketService:
             quote = kdevelopers_client.get_bond_price(pdno) if include_quotes else None
             item = KoreanBondMasterItem(
                 pdno=pdno,
+                bond_type=row.get("bond_type"),
+                bond_class_code=row.get("bond_class_code"),
+                bond_interest_class_code=row.get("bond_interest_class_code"),
                 name=(info or {}).get("ksd_bond_item_name") or name,
                 english_name=(info or {}).get("ksd_bond_item_eng_name"),
                 bond_class_name=(info or {}).get("bond_clsf_kor_name")
@@ -1022,6 +1142,22 @@ class KoreanMarketService:
             "offset": offset,
             "limit": limit,
             "query": query,
+            "bond_type": bond_type,
+            "bond_class_code": bond_class_code,
+            "bond_interest_class_code": bond_interest_class_code,
+            "listed_date_from": listed_date_from,
+            "listed_date_to": listed_date_to,
+            "issue_date_from": issue_date_from,
+            "issue_date_to": issue_date_to,
+            "maturity_date_from": maturity_date_from,
+            "maturity_date_to": maturity_date_to,
+            "available_bond_types": available_bond_types,
+            "available_bond_class_codes_by_type": (
+                available_bond_class_codes_by_type
+            ),
+            "available_bond_interest_class_codes_by_type": (
+                available_bond_interest_class_codes_by_type
+            ),
             "items": items,
         }
 
@@ -1059,6 +1195,33 @@ class KoreanMarketService:
             return int(float(text))
         except (TypeError, ValueError):
             return None
+
+    def _normalize_yyyymmdd(self, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        if re.fullmatch(r"\d{8}", text):
+            return text
+        return None
+
+    def _is_in_yyyymmdd_range(
+        self,
+        value: Any,
+        start: Optional[str],
+        end: Optional[str],
+    ) -> bool:
+        if not start and not end:
+            return True
+        raw = str(value or "").strip()
+        if not re.fullmatch(r"\d{8}", raw):
+            return False
+        if start and raw < start:
+            return False
+        if end and raw > end:
+            return False
+        return True
 
     def _pick_bond_market_price(
         self,

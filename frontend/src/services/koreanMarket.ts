@@ -178,6 +178,15 @@ export const koreanMarketService = {
    */
   async getBondMaster(params?: {
     query?: string;
+    bondType?: string;
+    bondClassCode?: string;
+    bondInterestClassCode?: string;
+    listedDateFrom?: string;
+    listedDateTo?: string;
+    issueDateFrom?: string;
+    issueDateTo?: string;
+    maturityDateFrom?: string;
+    maturityDateTo?: string;
     offset?: number;
     limit?: number;
     enrich?: boolean;
@@ -185,6 +194,19 @@ export const koreanMarketService = {
   }): Promise<KoreanBondMasterResponse> {
     const search = new URLSearchParams();
     if (params?.query) search.append('query', params.query);
+    if (params?.bondType) search.append('type', params.bondType);
+    if (params?.bondClassCode) search.append('bond_class_code', params.bondClassCode);
+    if (params?.bondInterestClassCode) {
+      search.append('bond_interest_class_code', params.bondInterestClassCode);
+    }
+    if (params?.listedDateFrom) search.append('listed_date_from', params.listedDateFrom);
+    if (params?.listedDateTo) search.append('listed_date_to', params.listedDateTo);
+    if (params?.issueDateFrom) search.append('issue_date_from', params.issueDateFrom);
+    if (params?.issueDateTo) search.append('issue_date_to', params.issueDateTo);
+    if (params?.maturityDateFrom) {
+      search.append('maturity_date_from', params.maturityDateFrom);
+    }
+    if (params?.maturityDateTo) search.append('maturity_date_to', params.maturityDateTo);
     if (params?.offset !== undefined) search.append('offset', String(params.offset));
     if (params?.limit !== undefined) search.append('limit', String(params.limit));
     if (params?.enrich !== undefined) search.append('enrich', String(params.enrich));

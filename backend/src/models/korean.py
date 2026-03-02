@@ -286,6 +286,15 @@ class KoreanBondMasterItem(BaseModel):
     """Domestic listed bond master row."""
 
     pdno: str = Field(..., description="Bond standard code")
+    bond_type: Optional[str] = Field(
+        None, description="Bond type code (A0/F9/C0)"
+    )
+    bond_class_code: Optional[str] = Field(
+        None, description="Bond class code"
+    )
+    bond_interest_class_code: Optional[str] = Field(
+        None, description="Bond interest class code"
+    )
     name: Optional[str] = Field(None, description="Bond name")
     english_name: Optional[str] = Field(None, description="Bond English name")
     bond_class_name: Optional[str] = Field(
@@ -330,6 +339,44 @@ class KoreanBondMasterResponse(BaseModel):
     offset: int = Field(..., description="Applied offset")
     limit: int = Field(..., description="Applied limit")
     query: Optional[str] = Field(None, description="Optional search query")
+    bond_type: Optional[str] = Field(None, description="Bond type filter")
+    bond_class_code: Optional[str] = Field(
+        None, description="Bond class code filter"
+    )
+    bond_interest_class_code: Optional[str] = Field(
+        None, description="Bond interest class code filter"
+    )
+    listed_date_from: Optional[str] = Field(
+        None, description="Listed date from (YYYYMMDD)"
+    )
+    listed_date_to: Optional[str] = Field(
+        None, description="Listed date to (YYYYMMDD)"
+    )
+    issue_date_from: Optional[str] = Field(
+        None, description="Issue date from (YYYYMMDD)"
+    )
+    issue_date_to: Optional[str] = Field(
+        None, description="Issue date to (YYYYMMDD)"
+    )
+    maturity_date_from: Optional[str] = Field(
+        None, description="Maturity date from (YYYYMMDD)"
+    )
+    maturity_date_to: Optional[str] = Field(
+        None, description="Maturity date to (YYYYMMDD)"
+    )
+    available_bond_types: Dict[str, int] = Field(
+        default_factory=dict, description="Available bond type counts from source file"
+    )
+    available_bond_class_codes_by_type: Dict[str, Dict[str, int]] = Field(
+        default_factory=dict,
+        description="Available bond class code counts grouped by bond type",
+    )
+    available_bond_interest_class_codes_by_type: Dict[str, Dict[str, int]] = Field(
+        default_factory=dict,
+        description=(
+            "Available bond interest class code counts grouped by bond type"
+        ),
+    )
     items: List[KoreanBondMasterItem] = Field(
         default_factory=list, description="Bond master rows"
     )

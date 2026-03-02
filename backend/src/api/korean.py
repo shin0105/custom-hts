@@ -292,6 +292,33 @@ async def get_korean_bond_master(
     query: Optional[str] = Query(
         None, description="Filter by bond code/name (case-insensitive)"
     ),
+    bond_type: Optional[str] = Query(
+        None, alias="type", description="Bond type code (A0/F9/C0)"
+    ),
+    bond_class_code: Optional[str] = Query(
+        None, description="Bond class code"
+    ),
+    bond_interest_class_code: Optional[str] = Query(
+        None, description="Bond interest class code"
+    ),
+    listed_date_from: Optional[str] = Query(
+        None, description="Listed date from (YYYYMMDD)"
+    ),
+    listed_date_to: Optional[str] = Query(
+        None, description="Listed date to (YYYYMMDD)"
+    ),
+    issue_date_from: Optional[str] = Query(
+        None, description="Issue date from (YYYYMMDD)"
+    ),
+    issue_date_to: Optional[str] = Query(
+        None, description="Issue date to (YYYYMMDD)"
+    ),
+    maturity_date_from: Optional[str] = Query(
+        None, description="Maturity date from (YYYYMMDD)"
+    ),
+    maturity_date_to: Optional[str] = Query(
+        None, description="Maturity date to (YYYYMMDD)"
+    ),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     limit: int = Query(20, ge=1, le=500, description="Pagination limit"),
     enrich: bool = Query(
@@ -313,6 +340,15 @@ async def get_korean_bond_master(
     """
     result = await korean_market_service.get_bond_master(
         query=query,
+        bond_type=bond_type,
+        bond_class_code=bond_class_code,
+        bond_interest_class_code=bond_interest_class_code,
+        listed_date_from=listed_date_from,
+        listed_date_to=listed_date_to,
+        issue_date_from=issue_date_from,
+        issue_date_to=issue_date_to,
+        maturity_date_from=maturity_date_from,
+        maturity_date_to=maturity_date_to,
         offset=offset,
         limit=limit,
         enrich=enrich,

@@ -187,6 +187,9 @@ export interface KoreanBondValuation {
 
 export interface KoreanBondMasterItem {
   pdno: string;
+  bond_type?: string | null;
+  bond_class_code?: string | null;
+  bond_interest_class_code?: string | null;
   name?: string | null;
   english_name?: string | null;
   bond_class_name?: string | null;
@@ -209,6 +212,18 @@ export interface KoreanBondMasterResponse {
   offset: number;
   limit: number;
   query?: string | null;
+  bond_type?: string | null;
+  bond_class_code?: string | null;
+  bond_interest_class_code?: string | null;
+  listed_date_from?: string | null;
+  listed_date_to?: string | null;
+  issue_date_from?: string | null;
+  issue_date_to?: string | null;
+  maturity_date_from?: string | null;
+  maturity_date_to?: string | null;
+  available_bond_types?: Record<string, number>;
+  available_bond_class_codes_by_type?: Record<string, Record<string, number>>;
+  available_bond_interest_class_codes_by_type?: Record<string, Record<string, number>>;
   items: KoreanBondMasterItem[];
 }
 

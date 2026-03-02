@@ -16,6 +16,12 @@ const formatDate = (value?: string | null) => {
   return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
 };
 
+const dateInputToYyyymmdd = (value: string) => value.split('-').join('');
+const yyyymmddToDateInput = (value: string) => {
+  if (!value || value.length !== 8) return '';
+  return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
+};
+
 const formatRate = (value?: string | null) => {
   if (!value) return '-';
   const n = parseFloat(value);
@@ -65,6 +71,83 @@ const INTEREST_DAY_TYPE: Record<string, string> = {
   '01': '발행일',
   '02': '만기일',
   '03': '특정일',
+};
+
+const BOND_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'A0', label: 'A0: 장내소매채권' },
+  { value: 'F9', label: 'F9: 주식관련사채/소액채권' },
+  { value: 'C0', label: 'C0: 국고채권' },
+];
+
+const BOND_CLASS_OPTIONS_BY_TYPE: Record<string, Array<{ value: string; label: string }>> = {
+  A0: [
+    { value: 'GA', label: 'GA: 국고채' },
+    { value: 'MA', label: 'MA: 통안채' },
+    { value: 'BA', label: 'BA: 금융채' },
+    { value: 'SA', label: 'SA: 비금융특수채' },
+    { value: 'CA', label: 'CA: 회사채' },
+  ],
+  F9: [
+    { value: '03', label: '03: 장내소액채권' },
+    { value: '02', label: '02: 기타채권' },
+    { value: '04', label: '04: 장내주식관련사채' },
+    { value: 'MM', label: 'MM: 매매종류별' },
+  ],
+  C0: [
+    { value: 'GA', label: 'GA: 국고채' },
+    { value: 'MA', label: 'MA: 통안채' },
+    { value: 'BA', label: 'BA: 금융채' },
+    { value: 'SA', label: 'SA: 비금융특수채' },
+    { value: 'MB', label: 'MB: 지방채' },
+    { value: '99', label: '99: 기타' },
+  ],
+};
+
+const BOND_INTEREST_CLASS_OPTIONS_BY_TYPE: Record<
+  string,
+  Array<{ value: string; label: string }>
+> = {
+  A0: [
+    { value: '11', label: '11: 할인채(고정)' },
+    { value: '12', label: '12: 복리채(고정)' },
+    { value: '13', label: '13: 이표채(고정)' },
+    { value: '14', label: '14: 단리채(고정)' },
+    { value: '15', label: '15: 복5단2(고정)' },
+    { value: '19', label: '19: 기타(고정)' },
+    { value: '21', label: '21: 이표채(변동)' },
+    { value: '22', label: '22: 복리채(변동)' },
+    { value: '23', label: '23: 단리채(변동)' },
+    { value: '29', label: '29: 기타(변동)' },
+  ],
+  F9: [
+    { value: '01', label: '01: 할인' },
+    { value: '02', label: '02: 복리' },
+    { value: '03', label: '03: 이표' },
+    { value: '04', label: '04: 금리연동' },
+    { value: '05', label: '05: 분할상환(거치복리)' },
+    { value: '06', label: '06: 분할(거치단리)' },
+    { value: '07', label: '07: 단리' },
+    { value: '08', label: '08: FRN' },
+    { value: '09', label: '09: 복5단2' },
+    { value: '11', label: '11: 할인채' },
+    { value: '12', label: '12: 복리채' },
+    { value: '13', label: '13: 이표채' },
+    { value: '14', label: '14: 단리채' },
+    { value: '15', label: '15: 복5단2' },
+    { value: '21', label: '21: 이표채(변동)' },
+    { value: '23', label: '23: 단리채(변동)' },
+  ],
+  C0: [
+    { value: '01', label: '01: 할인' },
+    { value: '02', label: '02: 복리' },
+    { value: '03', label: '03: 이표' },
+    { value: '04', label: '04: 금리연동' },
+    { value: '05', label: '05: 분할상환(거치복리)' },
+    { value: '06', label: '06: 분할(거치단리)' },
+    { value: '07', label: '07: 단리' },
+    { value: '08', label: '08: FRN' },
+    { value: '09', label: '09: 복5단2' },
+  ],
 };
 
 const YES_NO_MAP: Record<string, string> = {
@@ -136,6 +219,18 @@ const formatBondValue = (key: string, raw: unknown): string => {
 };
 
 export const BondMarketPage: React.FC = () => {
+  type BondMasterFilters = {
+    bondType?: string;
+    bondClassCode?: string;
+    bondInterestClassCode?: string;
+    listedDateFrom?: string;
+    listedDateTo?: string;
+    issueDateFrom?: string;
+    issueDateTo?: string;
+    maturityDateFrom?: string;
+    maturityDateTo?: string;
+  };
+
   const [pdno, setPdno] = useState('');
   const [loadingInfo, setLoadingInfo] = useState(false);
   const [infoError, setInfoError] = useState<string | null>(null);
@@ -146,10 +241,25 @@ export const BondMarketPage: React.FC = () => {
   const [dailyError, setDailyError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
+  const [bondTypeFilter, setBondTypeFilter] = useState('F9');
+  const [bondClassCodeFilter, setBondClassCodeFilter] = useState('');
+  const [bondInterestClassCodeFilter, setBondInterestClassCodeFilter] = useState('');
+  const [listedDateFrom, setListedDateFrom] = useState('');
+  const [listedDateTo, setListedDateTo] = useState('');
+  const [issueDateFrom, setIssueDateFrom] = useState('');
+  const [issueDateTo, setIssueDateTo] = useState('');
+  const [maturityDate, setMaturityDate] = useState('');
   const [items, setItems] = useState<KoreanBondMasterItem[]>([]);
   const [offset, setOffset] = useState(0);
   const [totalLoaded, setTotalLoaded] = useState(0);
   const [sourceFile, setSourceFile] = useState<string | null>(null);
+  const [availableBondTypes, setAvailableBondTypes] = useState<Record<string, number>>({});
+  const [availableBondClassCodesByType, setAvailableBondClassCodesByType] = useState<
+    Record<string, Record<string, number>>
+  >({});
+  const [availableBondInterestCodesByType, setAvailableBondInterestCodesByType] = useState<
+    Record<string, Record<string, number>>
+  >({});
   const [loadingMaster, setLoadingMaster] = useState(false);
   const [masterError, setMasterError] = useState<string | null>(null);
 
@@ -200,12 +310,42 @@ export const BondMarketPage: React.FC = () => {
 
   const hasMore = items.length < totalLoaded;
 
-  const loadBondMaster = async (nextOffset: number, q: string, reset: boolean) => {
+  const activeFilters: BondMasterFilters = useMemo(
+    () => ({
+      bondType: bondTypeFilter || undefined,
+      bondClassCode: bondClassCodeFilter || undefined,
+      bondInterestClassCode: bondInterestClassCodeFilter || undefined,
+      listedDateFrom: listedDateFrom ? dateInputToYyyymmdd(listedDateFrom) : undefined,
+      listedDateTo: listedDateTo ? dateInputToYyyymmdd(listedDateTo) : undefined,
+      issueDateFrom: issueDateFrom ? dateInputToYyyymmdd(issueDateFrom) : undefined,
+      issueDateTo: issueDateTo ? dateInputToYyyymmdd(issueDateTo) : undefined,
+      maturityDateFrom: maturityDate ? dateInputToYyyymmdd(maturityDate) : undefined,
+      maturityDateTo: maturityDate ? dateInputToYyyymmdd(maturityDate) : undefined,
+    }),
+    [
+      bondTypeFilter,
+      bondClassCodeFilter,
+      bondInterestClassCodeFilter,
+      listedDateFrom,
+      listedDateTo,
+      issueDateFrom,
+      issueDateTo,
+      maturityDate,
+    ]
+  );
+
+  const loadBondMaster = async (
+    nextOffset: number,
+    q: string,
+    reset: boolean,
+    filters: BondMasterFilters = activeFilters
+  ) => {
     setLoadingMaster(true);
     setMasterError(null);
     try {
       const response = await koreanMarketService.getBondMaster({
         query: q || undefined,
+        ...filters,
         offset: nextOffset,
         limit: PAGE_SIZE,
         enrich: false,
@@ -214,6 +354,11 @@ export const BondMarketPage: React.FC = () => {
 
       setTotalLoaded(response.total_loaded);
       setSourceFile(response.source_file ?? null);
+      setAvailableBondTypes(response.available_bond_types ?? {});
+      setAvailableBondClassCodesByType(response.available_bond_class_codes_by_type ?? {});
+      setAvailableBondInterestCodesByType(
+        response.available_bond_interest_class_codes_by_type ?? {}
+      );
       setOffset(nextOffset);
 
       if (reset) {
@@ -243,10 +388,36 @@ export const BondMarketPage: React.FC = () => {
   };
 
   useEffect(() => {
-    loadBondMaster(0, '', true);
+    loadBondMaster(0, '', true, { bondType: 'F9' });
   }, []);
 
+  useEffect(() => {
+    const validClassSet = new Set(
+      (BOND_CLASS_OPTIONS_BY_TYPE[bondTypeFilter] ?? []).map((it) => it.value)
+    );
+    if (bondClassCodeFilter && !validClassSet.has(bondClassCodeFilter)) {
+      setBondClassCodeFilter('');
+    }
+    const validInterestSet = new Set(
+      (BOND_INTEREST_CLASS_OPTIONS_BY_TYPE[bondTypeFilter] ?? []).map((it) => it.value)
+    );
+    if (
+      bondInterestClassCodeFilter &&
+      !validInterestSet.has(bondInterestClassCodeFilter)
+    ) {
+      setBondInterestClassCodeFilter('');
+    }
+  }, [bondTypeFilter, bondClassCodeFilter, bondInterestClassCodeFilter]);
+
   const masterRows = useMemo(() => items, [items]);
+  const classOptions = useMemo(
+    () => BOND_CLASS_OPTIONS_BY_TYPE[bondTypeFilter] ?? [],
+    [bondTypeFilter]
+  );
+  const interestOptions = useMemo(
+    () => BOND_INTEREST_CLASS_OPTIONS_BY_TYPE[bondTypeFilter] ?? [],
+    [bondTypeFilter]
+  );
 
   const summaryRows: { label: string; value: React.ReactNode }[] = data
     ? [
@@ -570,7 +741,7 @@ export const BondMarketPage: React.FC = () => {
               if (e.key === 'Enter') {
                 const q = query.trim();
                 setSubmittedQuery(q);
-                loadBondMaster(0, q, true);
+                loadBondMaster(0, q, true, activeFilters);
               }
             }}
             placeholder="채권코드 또는 채권명 검색"
@@ -586,7 +757,7 @@ export const BondMarketPage: React.FC = () => {
             onClick={() => {
               const q = query.trim();
               setSubmittedQuery(q);
-              loadBondMaster(0, q, true);
+              loadBondMaster(0, q, true, activeFilters);
             }}
             disabled={loadingMaster}
             style={{
@@ -601,12 +772,182 @@ export const BondMarketPage: React.FC = () => {
           >
             검색
           </button>
+          <button
+            onClick={() => {
+              setQuery('');
+              setSubmittedQuery('');
+              setBondTypeFilter('F9');
+              setBondClassCodeFilter('');
+              setBondInterestClassCodeFilter('');
+              setListedDateFrom('');
+              setListedDateTo('');
+              setIssueDateFrom('');
+              setIssueDateTo('');
+              setMaturityDate('');
+              loadBondMaster(0, '', true, { bondType: 'F9' });
+            }}
+            disabled={loadingMaster}
+            style={{
+              border: '1px solid #d1d5db',
+              borderRadius: '6px',
+              padding: '10px 16px',
+              backgroundColor: 'white',
+              color: '#111827',
+              cursor: loadingMaster ? 'not-allowed' : 'pointer',
+              fontSize: '14px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            필터 초기화
+          </button>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: '10px',
+            marginBottom: '12px',
+          }}
+        >
+          <select
+            value={bondTypeFilter}
+            onChange={(e) => setBondTypeFilter(e.target.value)}
+            style={{ border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '13px' }}
+          >
+            <option value="">유형 전체</option>
+            {BOND_TYPE_OPTIONS.map((option) => (
+              <option
+                key={option.value}
+                value={option.value}
+                disabled={(availableBondTypes[option.value] ?? 0) === 0}
+              >
+                {option.label} ({formatNumber(availableBondTypes[option.value] ?? 0)}건)
+              </option>
+            ))}
+          </select>
+          <select
+            value={bondClassCodeFilter}
+            onChange={(e) => setBondClassCodeFilter(e.target.value)}
+            style={{ border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '13px' }}
+          >
+            <option value="">분류코드 전체</option>
+            {classOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label} (
+                {formatNumber(
+                  (availableBondClassCodesByType[bondTypeFilter] ?? {})[option.value] ?? 0
+                )}
+                건)
+              </option>
+            ))}
+          </select>
+          <select
+            value={bondInterestClassCodeFilter}
+            onChange={(e) => setBondInterestClassCodeFilter(e.target.value)}
+            style={{ border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '13px' }}
+          >
+            <option value="">이자유형 전체</option>
+            {interestOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label} (
+                {formatNumber(
+                  (availableBondInterestCodesByType[bondTypeFilter] ?? {})[option.value] ?? 0
+                )}
+                건)
+              </option>
+            ))}
+          </select>
+          <div>
+            <div style={{ fontSize: '12px', color: '#4b5563', marginBottom: '4px' }}>상장일 시작</div>
+            <input
+              type="date"
+              value={listedDateFrom}
+              onChange={(e) => setListedDateFrom(e.target.value)}
+              style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '13px' }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: '12px', color: '#4b5563', marginBottom: '4px' }}>상장일 종료</div>
+            <input
+              type="date"
+              value={listedDateTo}
+              onChange={(e) => setListedDateTo(e.target.value)}
+              style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '13px' }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: '12px', color: '#4b5563', marginBottom: '4px' }}>발행일 시작</div>
+            <input
+              type="date"
+              value={issueDateFrom}
+              onChange={(e) => setIssueDateFrom(e.target.value)}
+              style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '13px' }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: '12px', color: '#4b5563', marginBottom: '4px' }}>발행일 종료</div>
+            <input
+              type="date"
+              value={issueDateTo}
+              onChange={(e) => setIssueDateTo(e.target.value)}
+              style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '13px' }}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: '12px', color: '#4b5563', marginBottom: '4px' }}>상환일(만기일)</div>
+            <input
+              type="date"
+              value={maturityDate}
+              onChange={(e) => setMaturityDate(e.target.value)}
+              style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '13px' }}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+          <button
+            onClick={() => {
+              const q = query.trim();
+              setSubmittedQuery(q);
+              loadBondMaster(0, q, true, activeFilters);
+            }}
+            disabled={loadingMaster}
+            style={{
+              border: 'none',
+              borderRadius: '6px',
+              padding: '8px 16px',
+              backgroundColor: loadingMaster ? '#9ca3af' : '#0f766e',
+              color: 'white',
+              cursor: loadingMaster ? 'not-allowed' : 'pointer',
+              fontSize: '13px',
+            }}
+          >
+            필터 적용
+          </button>
         </div>
 
         <div style={{ color: '#374151', fontSize: '14px', marginBottom: '8px' }}>
           총 {formatNumber(totalLoaded)}건
           {submittedQuery ? ` | 검색어: ${submittedQuery}` : ''}
+          {bondTypeFilter ? ` | 유형: ${bondTypeFilter}` : ''}
+          {bondClassCodeFilter ? ` | 분류코드: ${bondClassCodeFilter}` : ''}
+          {bondInterestClassCodeFilter ? ` | 이자유형: ${bondInterestClassCodeFilter}` : ''}
+          {listedDateFrom ? ` | 상장일 시작: ${yyyymmddToDateInput(dateInputToYyyymmdd(listedDateFrom))}` : ''}
+          {listedDateTo ? ` | 상장일 종료: ${yyyymmddToDateInput(dateInputToYyyymmdd(listedDateTo))}` : ''}
+          {issueDateFrom ? ` | 발행일 시작: ${yyyymmddToDateInput(dateInputToYyyymmdd(issueDateFrom))}` : ''}
+          {issueDateTo ? ` | 발행일 종료: ${yyyymmddToDateInput(dateInputToYyyymmdd(issueDateTo))}` : ''}
+          {maturityDate ? ` | 상환일: ${yyyymmddToDateInput(dateInputToYyyymmdd(maturityDate))}` : ''}
           {sourceFile ? ` | source: ${sourceFile}` : ''}
+        </div>
+        <div style={{ color: '#6b7280', fontSize: '12px', marginBottom: '10px' }}>
+          소스 유형 현황:
+          {' '}
+          {Object.keys(availableBondTypes).length === 0
+            ? '-'
+            : Object.entries(availableBondTypes)
+                .map(([code, count]) => `${code} ${formatNumber(count)}건`)
+                .join(' / ')}
         </div>
 
         {masterError && (
@@ -625,12 +966,16 @@ export const BondMarketPage: React.FC = () => {
         )}
 
         <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '860px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1120px' }}>
             <thead>
               <tr style={{ backgroundColor: '#f9fafb' }}>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>코드</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>채권명</th>
+                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>유형</th>
+                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>분류코드</th>
+                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>이자유형코드</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>분류</th>
+                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>상장일</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>발행일</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>만기일</th>
                 <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>표면금리</th>
@@ -642,7 +987,11 @@ export const BondMarketPage: React.FC = () => {
                 <tr key={item.pdno}>
                   <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{item.pdno}</td>
                   <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{item.name || '-'}</td>
+                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{item.bond_type || '-'}</td>
+                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{item.bond_class_code || '-'}</td>
+                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{item.bond_interest_class_code || '-'}</td>
                   <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{item.bond_class_name || '-'}</td>
+                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{formatDate(item.listed_date)}</td>
                   <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{formatDate(item.issue_date)}</td>
                   <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{formatDate(item.maturity_date)}</td>
                   <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>
@@ -656,7 +1005,7 @@ export const BondMarketPage: React.FC = () => {
               {!loadingMaster && masterRows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={11}
                     style={{
                       padding: '16px',
                       textAlign: 'center',
@@ -673,7 +1022,9 @@ export const BondMarketPage: React.FC = () => {
 
         <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center' }}>
           <button
-            onClick={() => loadBondMaster(offset + PAGE_SIZE, submittedQuery, false)}
+            onClick={() =>
+              loadBondMaster(offset + PAGE_SIZE, submittedQuery, false, activeFilters)
+            }
             disabled={loadingMaster || !hasMore}
             style={{
               border: '1px solid #d1d5db',
