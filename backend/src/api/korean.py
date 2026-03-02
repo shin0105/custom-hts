@@ -14,6 +14,10 @@ from ..models.korean import (
     KoreanBondValuation,
     KoreanBondMasterResponse,
     KoreanFuturesOptionsMasterResponse,
+    KoreanFuturesOptionQuote,
+    KoreanFuturesOptionOrderbook,
+    KoreanFuturesOptionMinuteCandleResponse,
+    KoreanFuturesOptionChainResponse,
 )
 from ..services.korean_market import korean_market_service
 from ..utils.config import settings
@@ -36,6 +40,14 @@ class MinuteInterval(int, Enum):
     TEN = 10
     THIRTY = 30
     SIXTY = 60
+
+
+class FuturesMinuteInterval(int, Enum):
+    """Valid futures/options timeframe in seconds."""
+
+    THIRTY_SEC = 30
+    ONE_MIN = 60
+    ONE_HOUR = 3600
 
 
 router = APIRouter(prefix="/korean", tags=["Korean Market"])
@@ -535,6 +547,158 @@ async def refresh_korean_futures_options_master(
             detail="Failed to refresh/export futures-options master file",
         )
     return result
+
+
+@router.get(
+    "/futures-options/quote",
+    response_model=KoreanFuturesOptionQuote,
+)
+async def get_korean_futures_options_quote(
+    symbol: str = Query(..., min_length=3, max_length=12),
+    market_div_code: str = Query(
+        "F",
+        description="F: 지수선물, O: 지수옵션, JF: 주식선물, JO: 주식옵션",
+    ),
+) -> KoreanFuturesOptionQuote:
+    """Get domestic futures/options normalized quote."""
+    market_code = market_div_code.strip().upper()
+    if market_code not in {"F", "O", "JF", "JO", "CF", "CM", "EU"}:
+        raise HTTPException(
+            status_code=400,
+            detail="market_div_code must be one of F/O/JF/JO/CF/CM/EU",
+        )
+    quote = await korean_market_service.get_futures_option_quote(
+        symbol=symbol.strip().upper(),
+        market_div_code=market_code,
+    )
+    if not quote:
+        raise HTTPException(
+            status_code=404, detail=f"Futures/options quote not found for {symbol}"
+        )
+    return quote
+
+
+@router.get(
+    "/futures-options/orderbook",
+    response_model=KoreanFuturesOptionOrderbook,
+)
+async def get_korean_futures_options_orderbook(
+    symbol: str = Query(..., min_length=3, max_length=12),
+    market_div_code: str = Query(
+        "F",
+        description="F: 지수선물, O: 지수옵션, JF: 주식선물, JO: 주식옵션",
+    ),
+) -> KoreanFuturesOptionOrderbook:
+    """Get domestic futures/options normalized 5-level orderbook."""
+    market_code = market_div_code.strip().upper()
+    if market_code not in {"F", "O", "JF", "JO", "CF", "CM", "EU"}:
+        raise HTTPException(
+            status_code=400,
+            detail="market_div_code must be one of F/O/JF/JO/CF/CM/EU",
+        )
+    orderbook = await korean_market_service.get_futures_option_orderbook(
+        symbol=symbol.strip().upper(),
+        market_div_code=market_code,
+    )
+    if not orderbook:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Futures/options orderbook not found for {symbol}",
+        )
+    return orderbook
+
+
+@router.get(
+    "/futures-options/minute-candles",
+    response_model=KoreanFuturesOptionMinuteCandleResponse,
+)
+async def get_korean_futures_options_minute_candles(
+    symbol: str = Query(..., min_length=3, max_length=12),
+    market_div_code: str = Query(
+        "F",
+        description="F: 지수선물, O: 지수옵션, JF: 주식선물, JO: 주식옵션",
+    ),
+    timeframe_sec: FuturesMinuteInterval = Query(
+        FuturesMinuteInterval.ONE_MIN,
+        description="Timeframe in seconds (30, 60, 3600)",
+    ),
+    date: Optional[str] = Query(
+        None, description="Cursor date in YYYYMMDD"
+    ),
+    time: Optional[str] = Query(
+        None, description="Cursor time in HHMMSS"
+    ),
+    include_previous: bool = Query(
+        True, description="Include previous-day data"
+    ),
+    include_fake_tick: bool = Query(
+        False, description="Include fake tick candles"
+    ),
+    limit: Optional[int] = Query(
+        None, ge=1, le=200, description="Max candle rows to return"
+    ),
+) -> KoreanFuturesOptionMinuteCandleResponse:
+    """Get domestic futures/options normalized intraday candles."""
+    market_code = market_div_code.strip().upper()
+    if market_code not in {"F", "O", "JF", "JO", "CF", "CM", "EU"}:
+        raise HTTPException(
+            status_code=400,
+            detail="market_div_code must be one of F/O/JF/JO/CF/CM/EU",
+        )
+    if date and (len(date) != 8 or not date.isdigit()):
+        raise HTTPException(status_code=400, detail="date must be YYYYMMDD")
+    if time and (len(time) != 6 or not time.isdigit()):
+        raise HTTPException(status_code=400, detail="time must be HHMMSS")
+
+    candles = await korean_market_service.get_futures_option_minute_candles(
+        symbol=symbol.strip().upper(),
+        market_div_code=market_code,
+        timeframe_sec=timeframe_sec.value,
+        date_value=date,
+        time_value=time,
+        include_previous=include_previous,
+        include_fake_tick=include_fake_tick,
+        limit=limit,
+    )
+    if not candles:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Futures/options minute candles not found for {symbol}",
+        )
+    return candles
+
+
+@router.get(
+    "/futures-options/option-chain",
+    response_model=KoreanFuturesOptionChainResponse,
+)
+async def get_korean_futures_options_option_chain(
+    expiry: str = Query(..., min_length=6, max_length=6, description="YYYYMM"),
+    market_class: str = Query(
+        "",
+        description="KOSPI200: '' (blank), MKI: 미니, KQI: 코스닥150, WKM/WKI: 위클리",
+    ),
+) -> KoreanFuturesOptionChainResponse:
+    """Get domestic futures/options normalized option chain (call/put)."""
+    if len(expiry) != 6 or not expiry.isdigit():
+        raise HTTPException(status_code=400, detail="expiry must be YYYYMM")
+    market_class_normalized = market_class.strip().upper()
+    if market_class_normalized not in {"", "MKI", "KQI", "WKM", "WKI"}:
+        raise HTTPException(
+            status_code=400,
+            detail="market_class must be one of: '', MKI, KQI, WKM, WKI",
+        )
+
+    chain = await korean_market_service.get_futures_option_chain(
+        expiry=expiry,
+        market_class=market_class_normalized,
+    )
+    if not chain:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Futures/options option-chain not found for expiry {expiry}",
+        )
+    return chain
 
 
 @router.get("/financials/{symbol}/balance-sheet")

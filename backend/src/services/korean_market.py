@@ -16,6 +16,14 @@ from ..models.korean import (
     KoreanBondValuation,
     KoreanBondMasterItem,
     KoreanFuturesOptionsMasterItem,
+    KoreanFuturesOptionQuote,
+    KoreanFuturesOptionReferenceIndex,
+    KoreanFuturesOptionOrderbook,
+    KoreanFuturesOptionOrderbookLevel,
+    KoreanFuturesOptionMinuteCandle,
+    KoreanFuturesOptionMinuteCandleResponse,
+    KoreanFuturesOptionChainRow,
+    KoreanFuturesOptionChainResponse,
 )
 from ..integrations.kdevelopers import kdevelopers_client
 from ..integrations.bond_master import bond_master_file_manager
@@ -48,6 +56,8 @@ class KoreanMarketService:
         / "kr_bond_master"
         / "bond_codes.txt",
     ]
+    _option_chain_min_interval_sec = 1.0
+    _option_chain_cache: Dict[str, Tuple[datetime, KoreanFuturesOptionChainResponse]] = {}
 
     async def get_quote(self, symbol: str) -> Optional[KoreanStockQuote]:
         """
@@ -1286,6 +1296,253 @@ class KoreanMarketService:
             output_format=output_format,
             force=force,
         )
+
+    async def get_futures_option_quote(
+        self,
+        symbol: str,
+        market_div_code: str = "F",
+    ) -> Optional[KoreanFuturesOptionQuote]:
+        """Get normalized domestic futures/options quote."""
+        raw = kdevelopers_client.get_future_option_quote(
+            symbol=symbol, market_div_code=market_div_code
+        )
+        if not raw:
+            return None
+
+        output1 = raw.get("output1") or {}
+        reference_indices: List[KoreanFuturesOptionReferenceIndex] = []
+        for output_key in ("output2", "output3"):
+            index_raw = raw.get(output_key) or {}
+            if not index_raw:
+                continue
+            reference_indices.append(
+                KoreanFuturesOptionReferenceIndex(
+                    code=index_raw.get("bstp_cls_code"),
+                    name=index_raw.get("hts_kor_isnm"),
+                    current_price=self._to_float(index_raw.get("bstp_nmix_prpr")),
+                    change_sign=index_raw.get("prdy_vrss_sign"),
+                    change=self._to_float(index_raw.get("bstp_nmix_prdy_vrss")),
+                    change_percent=self._to_float(
+                        index_raw.get("bstp_nmix_prdy_ctrt")
+                    ),
+                )
+            )
+
+        return KoreanFuturesOptionQuote(
+            symbol=symbol,
+            market_div_code=market_div_code,
+            name=output1.get("hts_kor_isnm"),
+            current_price=self._to_float(output1.get("futs_prpr")),
+            change_sign=output1.get("prdy_vrss_sign"),
+            change=self._to_float(output1.get("futs_prdy_vrss")),
+            change_percent=self._to_float(output1.get("futs_prdy_ctrt")),
+            previous_close=self._to_float(output1.get("futs_prdy_clpr")),
+            volume=self._to_int(output1.get("acml_vol")),
+            trading_value=self._to_float(output1.get("acml_tr_pbmn")),
+            open_interest=self._to_int(output1.get("hts_otst_stpl_qty")),
+            open_interest_change=self._to_int(output1.get("otst_stpl_qty_icdc")),
+            open=self._to_float(output1.get("futs_oprc")),
+            high=self._to_float(output1.get("futs_hgpr")),
+            low=self._to_float(output1.get("futs_lwpr")),
+            upper_limit=self._to_float(output1.get("futs_mxpr")),
+            lower_limit=self._to_float(output1.get("futs_llam")),
+            theoretical_price=self._to_float(output1.get("hts_thpr")),
+            basis=self._to_float(output1.get("basis")),
+            market_basis=self._to_float(output1.get("mrkt_basis")),
+            discrepancy_rate=self._to_float(output1.get("dprt")),
+            strike_price=self._to_float(output1.get("acpr")),
+            delta=self._to_float(output1.get("delta_val")),
+            gamma=self._to_float(output1.get("gama")),
+            theta=self._to_float(output1.get("theta")),
+            vega=self._to_float(output1.get("vega")),
+            rho=self._to_float(output1.get("rho")),
+            historical_volatility=self._to_float(output1.get("hist_vltl")),
+            implied_volatility=self._to_float(output1.get("hts_ints_vltl")),
+            last_trade_date=output1.get("futs_last_tr_date"),
+            remaining_days=self._to_int(output1.get("hts_rmnn_dynu")),
+            reference_indices=reference_indices,
+        )
+
+    async def get_futures_option_orderbook(
+        self,
+        symbol: str,
+        market_div_code: str = "F",
+    ) -> Optional[KoreanFuturesOptionOrderbook]:
+        """Get normalized domestic futures/options orderbook (5 levels)."""
+        raw = kdevelopers_client.get_future_option_orderbook(
+            symbol=symbol, market_div_code=market_div_code
+        )
+        if not raw:
+            return None
+
+        output1 = raw.get("output1") or {}
+        output2 = raw.get("output2") or {}
+        levels: List[KoreanFuturesOptionOrderbookLevel] = []
+        for level in range(1, 6):
+            levels.append(
+                KoreanFuturesOptionOrderbookLevel(
+                    level=level,
+                    ask_price=self._to_float(output2.get(f"futs_askp{level}")),
+                    ask_quantity=self._to_int(output2.get(f"askp_rsqn{level}")),
+                    ask_orders=self._to_int(output2.get(f"askp_csnu{level}")),
+                    bid_price=self._to_float(output2.get(f"futs_bidp{level}")),
+                    bid_quantity=self._to_int(output2.get(f"bidp_rsqn{level}")),
+                    bid_orders=self._to_int(output2.get(f"bidp_csnu{level}")),
+                )
+            )
+
+        return KoreanFuturesOptionOrderbook(
+            symbol=symbol,
+            market_div_code=market_div_code,
+            name=output1.get("hts_kor_isnm"),
+            current_price=self._to_float(output1.get("futs_prpr")),
+            change_sign=output1.get("prdy_vrss_sign"),
+            change=self._to_float(output1.get("futs_prdy_vrss")),
+            change_percent=self._to_float(output1.get("futs_prdy_ctrt")),
+            previous_close=self._to_float(output1.get("futs_prdy_clpr")),
+            volume=self._to_int(output1.get("acml_vol")),
+            as_of_time=output2.get("aspr_acpt_hour"),
+            total_ask_quantity=self._to_int(output2.get("total_askp_rsqn")),
+            total_bid_quantity=self._to_int(output2.get("total_bidp_rsqn")),
+            total_ask_orders=self._to_int(output2.get("total_askp_csnu")),
+            total_bid_orders=self._to_int(output2.get("total_bidp_csnu")),
+            levels=levels,
+        )
+
+    async def get_futures_option_minute_candles(
+        self,
+        symbol: str,
+        market_div_code: str = "F",
+        timeframe_sec: int = 60,
+        date_value: Optional[str] = None,
+        time_value: Optional[str] = None,
+        include_previous: bool = True,
+        include_fake_tick: bool = False,
+        limit: Optional[int] = None,
+    ) -> Optional[KoreanFuturesOptionMinuteCandleResponse]:
+        """Get normalized domestic futures/options intraday candle data."""
+        raw = kdevelopers_client.get_future_option_minute_candles(
+            symbol=symbol,
+            market_div_code=market_div_code,
+            timeframe_sec=timeframe_sec,
+            include_previous=include_previous,
+            include_fake_tick=include_fake_tick,
+            date=date_value,
+            time_str=time_value,
+        )
+        if not raw:
+            return None
+
+        output1 = raw.get("output1") or {}
+        rows = raw.get("output2") or []
+        if limit is not None:
+            rows = rows[:limit]
+
+        candles: List[KoreanFuturesOptionMinuteCandle] = []
+        for row in rows:
+            row_date = str(row.get("stck_bsop_date") or "").strip() or None
+            row_time = str(row.get("stck_cntg_hour") or "").strip() or None
+            timestamp = f"{row_date}{row_time}" if row_date and row_time else None
+            candles.append(
+                KoreanFuturesOptionMinuteCandle(
+                    symbol=symbol,
+                    market_div_code=market_div_code,
+                    date=row_date,
+                    time=row_time,
+                    timestamp=timestamp,
+                    open=self._to_float(row.get("futs_oprc")),
+                    high=self._to_float(row.get("futs_hgpr")),
+                    low=self._to_float(row.get("futs_lwpr")),
+                    close=self._to_float(row.get("futs_prpr")),
+                    volume=self._to_int(row.get("cntg_vol")),
+                    cumulative_trading_value=self._to_float(
+                        row.get("acml_tr_pbmn")
+                    ),
+                )
+            )
+
+        return KoreanFuturesOptionMinuteCandleResponse(
+            symbol=symbol,
+            market_div_code=market_div_code,
+            timeframe_sec=timeframe_sec,
+            date=date_value,
+            time=time_value,
+            name=output1.get("hts_kor_isnm"),
+            current_price=self._to_float(output1.get("futs_prpr")),
+            change=self._to_float(output1.get("futs_prdy_vrss")),
+            change_sign=output1.get("prdy_vrss_sign"),
+            change_percent=self._to_float(output1.get("futs_prdy_ctrt")),
+            volume=self._to_int(output1.get("acml_vol")),
+            open_interest=self._to_int(output1.get("hts_otst_stpl_qty")),
+            open_interest_change=self._to_int(output1.get("otst_stpl_qty_icdc")),
+            candles=candles,
+        )
+
+    async def get_futures_option_chain(
+        self,
+        expiry: str,
+        market_class: str = "",
+    ) -> Optional[KoreanFuturesOptionChainResponse]:
+        """Get normalized domestic option chain (call/put), with light throttling."""
+        normalized_market_class = (market_class or "").strip().upper()
+        cache_key = f"{expiry}|{normalized_market_class}"
+        now = datetime.now()
+        cached = self._option_chain_cache.get(cache_key)
+        if cached:
+            cached_at, cached_resp = cached
+            if (now - cached_at).total_seconds() < self._option_chain_min_interval_sec:
+                return cached_resp
+
+        raw = kdevelopers_client.get_future_option_callput(
+            expiry=expiry,
+            market_class=normalized_market_class,
+        )
+        if not raw:
+            return None
+
+        def to_chain_rows(rows: List[Dict[str, Any]]) -> List[KoreanFuturesOptionChainRow]:
+            return [
+                KoreanFuturesOptionChainRow(
+                    option_code=row.get("optn_shrn_iscd"),
+                    strike_price=self._to_float(row.get("acpr")),
+                    current_price=self._to_float(row.get("optn_prpr")),
+                    change_sign=row.get("prdy_vrss_sign"),
+                    change=self._to_float(row.get("optn_prdy_vrss")),
+                    change_percent=self._to_float(row.get("optn_prdy_ctrt")),
+                    bid_price=self._to_float(row.get("optn_bidp")),
+                    ask_price=self._to_float(row.get("optn_askp")),
+                    volume=self._to_int(row.get("acml_vol")),
+                    trading_value=self._to_float(row.get("acml_tr_pbmn")),
+                    open_interest=self._to_int(row.get("hts_otst_stpl_qty")),
+                    open_interest_change=self._to_int(row.get("otst_stpl_qty_icdc")),
+                    delta=self._to_float(row.get("delta_val")),
+                    gamma=self._to_float(row.get("gama")),
+                    theta=self._to_float(row.get("theta")),
+                    vega=self._to_float(row.get("vega")),
+                    rho=self._to_float(row.get("rho")),
+                    implied_volatility=self._to_float(row.get("hts_ints_vltl")),
+                    historical_volatility=self._to_float(row.get("hist_vltl")),
+                    theoretical_price=self._to_float(row.get("hts_thpr")),
+                    intrinsic_value=self._to_float(row.get("invl_val")),
+                    time_value=self._to_float(row.get("tmvl_val")),
+                    moneyness=row.get("atm_cls_name"),
+                )
+                for row in rows
+            ]
+
+        calls = to_chain_rows(raw.get("output1") or [])
+        puts = to_chain_rows(raw.get("output2") or [])
+        resp = KoreanFuturesOptionChainResponse(
+            expiry=expiry,
+            market_class=normalized_market_class,
+            fetched_at=now,
+            total_calls=len(calls),
+            total_puts=len(puts),
+            calls=calls,
+            puts=puts,
+        )
+        self._option_chain_cache[cache_key] = (now, resp)
+        return resp
 
     def _to_float(self, value: Any) -> Optional[float]:
         try:

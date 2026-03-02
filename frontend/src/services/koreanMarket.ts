@@ -17,6 +17,10 @@ import type {
   KoreanBondInfo,
   KoreanBondValuation,
   KoreanFuturesOptionsMasterResponse,
+  KoreanFuturesOptionQuote,
+  KoreanFuturesOptionOrderbook,
+  KoreanFuturesOptionMinuteCandleResponse,
+  KoreanFuturesOptionChainResponse,
 } from '../types/korean';
 
 const API_BASE_URL = '/api';
@@ -301,6 +305,95 @@ export const koreanMarketService = {
 
     const response = await axios.get<KoreanFuturesOptionsMasterResponse>(
       `${API_BASE_URL}/korean/futures-options/master?${search.toString()}`
+    );
+    return response.data;
+  },
+
+  /**
+   * Get domestic futures/options quote.
+   */
+  async getFuturesOptionQuote(params: {
+    symbol: string;
+    marketDivCode?: 'F' | 'O' | 'JF' | 'JO' | 'CF' | 'CM' | 'EU';
+  }): Promise<KoreanFuturesOptionQuote> {
+    const search = new URLSearchParams();
+    search.append('symbol', params.symbol);
+    if (params.marketDivCode) {
+      search.append('market_div_code', params.marketDivCode);
+    }
+    const response = await axios.get<KoreanFuturesOptionQuote>(
+      `${API_BASE_URL}/korean/futures-options/quote?${search.toString()}`
+    );
+    return response.data;
+  },
+
+  /**
+   * Get domestic futures/options 5-level orderbook.
+   */
+  async getFuturesOptionOrderbook(params: {
+    symbol: string;
+    marketDivCode?: 'F' | 'O' | 'JF' | 'JO' | 'CF' | 'CM' | 'EU';
+  }): Promise<KoreanFuturesOptionOrderbook> {
+    const search = new URLSearchParams();
+    search.append('symbol', params.symbol);
+    if (params.marketDivCode) {
+      search.append('market_div_code', params.marketDivCode);
+    }
+    const response = await axios.get<KoreanFuturesOptionOrderbook>(
+      `${API_BASE_URL}/korean/futures-options/orderbook?${search.toString()}`
+    );
+    return response.data;
+  },
+
+  /**
+   * Get domestic futures/options minute candles.
+   */
+  async getFuturesOptionMinuteCandles(params: {
+    symbol: string;
+    marketDivCode?: 'F' | 'O' | 'JF' | 'JO' | 'CF' | 'CM' | 'EU';
+    timeframeSec?: 30 | 60 | 3600;
+    date?: string;
+    time?: string;
+    includePrevious?: boolean;
+    includeFakeTick?: boolean;
+    limit?: number;
+  }): Promise<KoreanFuturesOptionMinuteCandleResponse> {
+    const search = new URLSearchParams();
+    search.append('symbol', params.symbol);
+    search.append('timeframe_sec', String(params.timeframeSec ?? 60));
+    if (params.marketDivCode) {
+      search.append('market_div_code', params.marketDivCode);
+    }
+    if (params.date) search.append('date', params.date);
+    if (params.time) search.append('time', params.time);
+    if (params.includePrevious !== undefined) {
+      search.append('include_previous', String(params.includePrevious));
+    }
+    if (params.includeFakeTick !== undefined) {
+      search.append('include_fake_tick', String(params.includeFakeTick));
+    }
+    if (params.limit !== undefined) search.append('limit', String(params.limit));
+
+    const response = await axios.get<KoreanFuturesOptionMinuteCandleResponse>(
+      `${API_BASE_URL}/korean/futures-options/minute-candles?${search.toString()}`
+    );
+    return response.data;
+  },
+
+  /**
+   * Get domestic futures/options option chain (call/put).
+   */
+  async getFuturesOptionChain(params: {
+    expiry: string;
+    marketClass?: '' | 'MKI' | 'KQI' | 'WKM' | 'WKI';
+  }): Promise<KoreanFuturesOptionChainResponse> {
+    const search = new URLSearchParams();
+    search.append('expiry', params.expiry);
+    if (params.marketClass !== undefined) {
+      search.append('market_class', params.marketClass);
+    }
+    const response = await axios.get<KoreanFuturesOptionChainResponse>(
+      `${API_BASE_URL}/korean/futures-options/option-chain?${search.toString()}`
     );
     return response.data;
   },

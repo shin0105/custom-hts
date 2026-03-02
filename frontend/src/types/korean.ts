@@ -256,6 +256,145 @@ export interface KoreanFuturesOptionsMasterResponse {
   items: KoreanFuturesOptionsMasterItem[];
 }
 
+export interface KoreanFuturesOptionReferenceIndex {
+  code?: string | null;
+  name?: string | null;
+  current_price?: number | null;
+  change_sign?: string | null;
+  change?: number | null;
+  change_percent?: number | null;
+}
+
+export interface KoreanFuturesOptionQuote {
+  symbol: string;
+  market_div_code: string;
+  name?: string | null;
+  current_price?: number | null;
+  change_sign?: string | null;
+  change?: number | null;
+  change_percent?: number | null;
+  previous_close?: number | null;
+  volume?: number | null;
+  trading_value?: number | null;
+  open_interest?: number | null;
+  open_interest_change?: number | null;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+  upper_limit?: number | null;
+  lower_limit?: number | null;
+  theoretical_price?: number | null;
+  basis?: number | null;
+  market_basis?: number | null;
+  discrepancy_rate?: number | null;
+  strike_price?: number | null;
+  delta?: number | null;
+  gamma?: number | null;
+  theta?: number | null;
+  vega?: number | null;
+  rho?: number | null;
+  historical_volatility?: number | null;
+  implied_volatility?: number | null;
+  last_trade_date?: string | null;
+  remaining_days?: number | null;
+  reference_indices?: KoreanFuturesOptionReferenceIndex[];
+}
+
+export interface KoreanFuturesOptionOrderbookLevel {
+  level: number;
+  ask_price?: number | null;
+  ask_quantity?: number | null;
+  ask_orders?: number | null;
+  bid_price?: number | null;
+  bid_quantity?: number | null;
+  bid_orders?: number | null;
+}
+
+export interface KoreanFuturesOptionOrderbook {
+  symbol: string;
+  market_div_code: string;
+  name?: string | null;
+  current_price?: number | null;
+  change_sign?: string | null;
+  change?: number | null;
+  change_percent?: number | null;
+  previous_close?: number | null;
+  volume?: number | null;
+  as_of_time?: string | null;
+  total_ask_quantity?: number | null;
+  total_bid_quantity?: number | null;
+  total_ask_orders?: number | null;
+  total_bid_orders?: number | null;
+  levels: KoreanFuturesOptionOrderbookLevel[];
+}
+
+export interface KoreanFuturesOptionMinuteCandle {
+  symbol: string;
+  market_div_code: string;
+  date?: string | null;
+  time?: string | null;
+  timestamp?: string | null;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+  close?: number | null;
+  volume?: number | null;
+  cumulative_trading_value?: number | null;
+}
+
+export interface KoreanFuturesOptionMinuteCandleResponse {
+  symbol: string;
+  market_div_code: string;
+  timeframe_sec: number;
+  date?: string | null;
+  time?: string | null;
+  name?: string | null;
+  current_price?: number | null;
+  change?: number | null;
+  change_sign?: string | null;
+  change_percent?: number | null;
+  volume?: number | null;
+  open_interest?: number | null;
+  open_interest_change?: number | null;
+  candles: KoreanFuturesOptionMinuteCandle[];
+}
+
+export interface KoreanFuturesOptionChainRow {
+  option_code?: string | null;
+  strike_price?: number | null;
+  current_price?: number | null;
+  change_sign?: string | null;
+  change?: number | null;
+  change_percent?: number | null;
+  bid_price?: number | null;
+  ask_price?: number | null;
+  volume?: number | null;
+  trading_value?: number | null;
+  open_interest?: number | null;
+  open_interest_change?: number | null;
+  delta?: number | null;
+  gamma?: number | null;
+  theta?: number | null;
+  vega?: number | null;
+  rho?: number | null;
+  implied_volatility?: number | null;
+  historical_volatility?: number | null;
+  theoretical_price?: number | null;
+  intrinsic_value?: number | null;
+  time_value?: number | null;
+  moneyness?: string | null;
+}
+
+export interface KoreanFuturesOptionChainResponse {
+  expiry: string;
+  market_class: string;
+  fetched_at: string;
+  total_calls: number;
+  total_puts: number;
+  calls: KoreanFuturesOptionChainRow[];
+  puts: KoreanFuturesOptionChainRow[];
+}
+
 export type ChartInterval = 'daily' | 'minute';
 export type MinuteInterval = 1 | 5 | 10 | 30 | 60;
 export type PeriodType = 'D' | 'W' | 'M';

@@ -422,6 +422,31 @@ class KDevelopersClient:
         if api_key_hash and supabase_client.client:
             supabase_client.delete_kdevelopers_token(api_key_hash)
 
+    def _output_to_dict(self, output: Any) -> Optional[Dict[str, Any]]:
+        """Normalize single API output payload to dict."""
+        if output is None:
+            return None
+        if hasattr(output, "_asdict"):
+            return output._asdict()
+        if isinstance(output, dict):
+            return output
+        return None
+
+    def _output_to_list(self, output: Any) -> List[Dict[str, Any]]:
+        """Normalize API output payload to list[dict]."""
+        if output is None:
+            return []
+        if isinstance(output, list):
+            normalized: List[Dict[str, Any]] = []
+            for item in output:
+                if hasattr(item, "_asdict"):
+                    normalized.append(item._asdict())
+                elif isinstance(item, dict):
+                    normalized.append(item)
+            return normalized
+        one = self._output_to_dict(output)
+        return [one] if one else []
+
     def get_quote(self, symbol: str) -> Optional[KoreanStockQuote]:
         """
         Get real-time quote for a Korean stock.
@@ -996,6 +1021,177 @@ class KDevelopersClient:
 
         except Exception as e:
             logger.error(f"Exception in get_minute_candle for {symbol}: {e}")
+            return None
+
+    def get_future_option_quote(
+        self,
+        symbol: str,
+        market_div_code: str = "F",
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get domestic futures/options quote.
+
+        API: [국내선물옵션] 기본시세 > 선물옵션 시세 [v1_국내선물-006]
+        """
+        try:
+            api_url = "/uapi/domestic-futureoption/v1/quotations/inquire-price"
+            tr_id = "FHMIF10000000"
+            params = {
+                "FID_COND_MRKT_DIV_CODE": market_div_code,
+                "FID_INPUT_ISCD": symbol,
+            }
+            res = self._url_fetch(api_url, tr_id, "", params)
+            if not res.is_ok():
+                res.print_error(api_url)
+                return None
+
+            body = res.get_body()
+            return {
+                "output1": self._output_to_dict(getattr(body, "output1", None))
+                or {},
+                "output2": self._output_to_dict(getattr(body, "output2", None))
+                or {},
+                "output3": self._output_to_dict(getattr(body, "output3", None))
+                or {},
+            }
+        except Exception as e:
+            logger.error(f"Exception in get_future_option_quote for {symbol}: {e}")
+            return None
+
+    def get_future_option_orderbook(
+        self,
+        symbol: str,
+        market_div_code: str = "F",
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get domestic futures/options asking price (orderbook).
+
+        API: [국내선물옵션] 기본시세 > 선물옵션 시세호가 [v1_국내선물-007]
+        """
+        try:
+            api_url = "/uapi/domestic-futureoption/v1/quotations/inquire-asking-price"
+            tr_id = "FHMIF10010000"
+            params = {
+                "FID_COND_MRKT_DIV_CODE": market_div_code,
+                "FID_INPUT_ISCD": symbol,
+            }
+            res = self._url_fetch(api_url, tr_id, "", params)
+            if not res.is_ok():
+                res.print_error(api_url)
+                return None
+
+            body = res.get_body()
+            return {
+                "output1": self._output_to_dict(getattr(body, "output1", None))
+                or {},
+                "output2": self._output_to_dict(getattr(body, "output2", None))
+                or {},
+            }
+        except Exception as e:
+            logger.error(
+                f"Exception in get_future_option_orderbook for {symbol}: {e}"
+            )
+            return None
+
+    def get_future_option_minute_candles(
+        self,
+        symbol: str,
+        market_div_code: str = "F",
+        timeframe_sec: int = 60,
+        include_previous: bool = True,
+        include_fake_tick: bool = False,
+        date: Optional[str] = None,
+        time_str: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get domestic futures/options minute/intraday candles.
+
+        API: [국내선물옵션] 기본시세 > 선물옵션 분봉조회 [v1_국내선물-012]
+        """
+        try:
+            if timeframe_sec not in {30, 60, 3600}:
+                raise ValueError("timeframe_sec must be one of 30, 60, 3600")
+
+            if date is None:
+                kst_now = datetime.now(timezone.utc).astimezone(
+                    timezone(timedelta(hours=9))
+                )
+                date = kst_now.strftime("%Y%m%d")
+
+            if len(date) != 8 or not date.isdigit():
+                raise ValueError("date must be in YYYYMMDD format")
+
+            if time_str and (len(time_str) != 6 or not time_str.isdigit()):
+                raise ValueError("time must be in HHMMSS format")
+
+            api_url = (
+                "/uapi/domestic-futureoption/v1/quotations/"
+                "inquire-time-fuopchartprice"
+            )
+            tr_id = "FHKIF03020200"
+            params = {
+                "FID_COND_MRKT_DIV_CODE": market_div_code,
+                "FID_INPUT_ISCD": symbol,
+                "FID_HOUR_CLS_CODE": str(timeframe_sec),
+                "FID_PW_DATA_INCU_YN": "Y" if include_previous else "N",
+                "FID_FAKE_TICK_INCU_YN": "Y" if include_fake_tick else "N",
+                "FID_INPUT_DATE_1": date,
+                "FID_INPUT_HOUR_1": time_str or "",
+            }
+            res = self._url_fetch(api_url, tr_id, "", params)
+            if not res.is_ok():
+                res.print_error(api_url)
+                return None
+
+            body = res.get_body()
+            return {
+                "output1": self._output_to_dict(getattr(body, "output1", None))
+                or {},
+                "output2": self._output_to_list(getattr(body, "output2", None)),
+            }
+        except Exception as e:
+            logger.error(
+                f"Exception in get_future_option_minute_candles for {symbol}: {e}"
+            )
+            return None
+
+    def get_future_option_callput(
+        self,
+        expiry: str,
+        market_class: str = "",
+        screen_div_code: str = "20503",
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get domestic option chain (call/put board).
+
+        API: [국내선물옵션] 기본시세 > 국내옵션전광판_콜풋 [국내선물-022]
+        """
+        try:
+            if len(expiry) != 6 or not expiry.isdigit():
+                raise ValueError("expiry must be in YYYYMM format")
+
+            api_url = "/uapi/domestic-futureoption/v1/quotations/display-board-callput"
+            tr_id = "FHPIF05030100"
+            params = {
+                "FID_COND_MRKT_DIV_CODE": "O",
+                "FID_COND_SCR_DIV_CODE": screen_div_code,
+                "FID_MRKT_CLS_CODE": "CO",
+                "FID_MTRT_CNT": expiry,
+                "FID_COND_MRKT_CLS_CODE": market_class,
+                "FID_MRKT_CLS_CODE1": "PO",
+            }
+            res = self._url_fetch(api_url, tr_id, "", params)
+            if not res.is_ok():
+                res.print_error(api_url)
+                return None
+
+            body = res.get_body()
+            return {
+                "output1": self._output_to_list(getattr(body, "output1", None)),
+                "output2": self._output_to_list(getattr(body, "output2", None)),
+            }
+        except Exception as e:
+            logger.error(f"Exception in get_future_option_callput for {expiry}: {e}")
             return None
 
     def get_account_balance(

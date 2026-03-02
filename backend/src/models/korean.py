@@ -429,3 +429,196 @@ class KoreanFuturesOptionsMasterResponse(BaseModel):
     items: List[KoreanFuturesOptionsMasterItem] = Field(
         default_factory=list, description="Futures/options master rows"
     )
+
+
+class KoreanFuturesOptionReferenceIndex(BaseModel):
+    """Reference index data bundled with futures/options quote."""
+
+    code: Optional[str] = Field(None, description="Index classification code")
+    name: Optional[str] = Field(None, description="Index name")
+    current_price: Optional[float] = Field(None, description="Current index value")
+    change_sign: Optional[str] = Field(None, description="Change sign code")
+    change: Optional[float] = Field(None, description="Change vs previous close")
+    change_percent: Optional[float] = Field(None, description="Change percentage")
+
+
+class KoreanFuturesOptionQuote(BaseModel):
+    """Normalized domestic futures/options quote."""
+
+    symbol: str = Field(..., description="Futures/options short code")
+    market_div_code: str = Field(..., description="Market division code")
+    name: Optional[str] = Field(None, description="Korean instrument name")
+    current_price: Optional[float] = Field(None, description="Current price")
+    change_sign: Optional[str] = Field(None, description="Change sign code")
+    change: Optional[float] = Field(None, description="Change vs previous close")
+    change_percent: Optional[float] = Field(None, description="Change percentage")
+    previous_close: Optional[float] = Field(None, description="Previous close")
+    volume: Optional[int] = Field(None, description="Accumulated volume")
+    trading_value: Optional[float] = Field(None, description="Accumulated trading value")
+    open_interest: Optional[int] = Field(None, description="Open interest")
+    open_interest_change: Optional[int] = Field(
+        None, description="Open interest change"
+    )
+    open: Optional[float] = Field(None, description="Open price")
+    high: Optional[float] = Field(None, description="High price")
+    low: Optional[float] = Field(None, description="Low price")
+    upper_limit: Optional[float] = Field(None, description="Price upper limit")
+    lower_limit: Optional[float] = Field(None, description="Price lower limit")
+    theoretical_price: Optional[float] = Field(
+        None, description="Theoretical price"
+    )
+    basis: Optional[float] = Field(None, description="Theoretical basis")
+    market_basis: Optional[float] = Field(None, description="Market basis")
+    discrepancy_rate: Optional[float] = Field(None, description="Discrepancy rate")
+    strike_price: Optional[float] = Field(None, description="Strike price")
+    delta: Optional[float] = Field(None, description="Option delta")
+    gamma: Optional[float] = Field(None, description="Option gamma")
+    theta: Optional[float] = Field(None, description="Option theta")
+    vega: Optional[float] = Field(None, description="Option vega")
+    rho: Optional[float] = Field(None, description="Option rho")
+    historical_volatility: Optional[float] = Field(
+        None, description="Historical volatility"
+    )
+    implied_volatility: Optional[float] = Field(None, description="Implied volatility")
+    last_trade_date: Optional[str] = Field(
+        None, description="Last trade date (YYYYMMDD)"
+    )
+    remaining_days: Optional[int] = Field(None, description="Remaining days")
+    reference_indices: List[KoreanFuturesOptionReferenceIndex] = Field(
+        default_factory=list, description="Related reference indices"
+    )
+
+
+class KoreanFuturesOptionOrderbookLevel(BaseModel):
+    """Single futures/options orderbook level."""
+
+    level: int = Field(..., description="Orderbook level (1~5)")
+    ask_price: Optional[float] = Field(None, description="Ask price")
+    ask_quantity: Optional[int] = Field(None, description="Ask quantity")
+    ask_orders: Optional[int] = Field(None, description="Ask order count")
+    bid_price: Optional[float] = Field(None, description="Bid price")
+    bid_quantity: Optional[int] = Field(None, description="Bid quantity")
+    bid_orders: Optional[int] = Field(None, description="Bid order count")
+
+
+class KoreanFuturesOptionOrderbook(BaseModel):
+    """Normalized domestic futures/options orderbook."""
+
+    symbol: str = Field(..., description="Futures/options short code")
+    market_div_code: str = Field(..., description="Market division code")
+    name: Optional[str] = Field(None, description="Korean instrument name")
+    current_price: Optional[float] = Field(None, description="Current price")
+    change_sign: Optional[str] = Field(None, description="Change sign code")
+    change: Optional[float] = Field(None, description="Change vs previous close")
+    change_percent: Optional[float] = Field(None, description="Change percentage")
+    previous_close: Optional[float] = Field(None, description="Previous close")
+    volume: Optional[int] = Field(None, description="Accumulated volume")
+    as_of_time: Optional[str] = Field(None, description="Orderbook as-of time (HHMMSS)")
+    total_ask_quantity: Optional[int] = Field(
+        None, description="Total ask quantity (L1~L5)"
+    )
+    total_bid_quantity: Optional[int] = Field(
+        None, description="Total bid quantity (L1~L5)"
+    )
+    total_ask_orders: Optional[int] = Field(
+        None, description="Total ask order count (L1~L5)"
+    )
+    total_bid_orders: Optional[int] = Field(
+        None, description="Total bid order count (L1~L5)"
+    )
+    levels: List[KoreanFuturesOptionOrderbookLevel] = Field(
+        default_factory=list, description="5-level orderbook"
+    )
+
+
+class KoreanFuturesOptionMinuteCandle(BaseModel):
+    """Single domestic futures/options intraday candle."""
+
+    symbol: str = Field(..., description="Futures/options short code")
+    market_div_code: str = Field(..., description="Market division code")
+    date: Optional[str] = Field(None, description="Trading date (YYYYMMDD)")
+    time: Optional[str] = Field(None, description="Trading time (HHMMSS)")
+    timestamp: Optional[str] = Field(
+        None, description="Combined timestamp (YYYYMMDDHHMMSS)"
+    )
+    open: Optional[float] = Field(None, description="Open")
+    high: Optional[float] = Field(None, description="High")
+    low: Optional[float] = Field(None, description="Low")
+    close: Optional[float] = Field(None, description="Close")
+    volume: Optional[int] = Field(None, description="Executed volume")
+    cumulative_trading_value: Optional[float] = Field(
+        None, description="Accumulated trading value"
+    )
+
+
+class KoreanFuturesOptionMinuteCandleResponse(BaseModel):
+    """Normalized domestic futures/options intraday candle response."""
+
+    symbol: str = Field(..., description="Futures/options short code")
+    market_div_code: str = Field(..., description="Market division code")
+    timeframe_sec: int = Field(..., description="Candle timeframe in seconds")
+    date: Optional[str] = Field(None, description="Cursor date (YYYYMMDD)")
+    time: Optional[str] = Field(None, description="Cursor time (HHMMSS)")
+    name: Optional[str] = Field(None, description="Korean instrument name")
+    current_price: Optional[float] = Field(None, description="Current price")
+    change: Optional[float] = Field(None, description="Change vs previous close")
+    change_sign: Optional[str] = Field(None, description="Change sign code")
+    change_percent: Optional[float] = Field(None, description="Change percentage")
+    volume: Optional[int] = Field(None, description="Accumulated volume")
+    open_interest: Optional[int] = Field(None, description="Open interest")
+    open_interest_change: Optional[int] = Field(
+        None, description="Open interest change"
+    )
+    candles: List[KoreanFuturesOptionMinuteCandle] = Field(
+        default_factory=list, description="Intraday candles"
+    )
+
+
+class KoreanFuturesOptionChainRow(BaseModel):
+    """Single option chain row for call/put side."""
+
+    option_code: Optional[str] = Field(None, description="Option short code")
+    strike_price: Optional[float] = Field(None, description="Strike price")
+    current_price: Optional[float] = Field(None, description="Current price")
+    change_sign: Optional[str] = Field(None, description="Change sign code")
+    change: Optional[float] = Field(None, description="Change vs previous close")
+    change_percent: Optional[float] = Field(None, description="Change percentage")
+    bid_price: Optional[float] = Field(None, description="Best bid")
+    ask_price: Optional[float] = Field(None, description="Best ask")
+    volume: Optional[int] = Field(None, description="Accumulated volume")
+    trading_value: Optional[float] = Field(None, description="Accumulated trading value")
+    open_interest: Optional[int] = Field(None, description="Open interest")
+    open_interest_change: Optional[int] = Field(
+        None, description="Open interest change"
+    )
+    delta: Optional[float] = Field(None, description="Delta")
+    gamma: Optional[float] = Field(None, description="Gamma")
+    theta: Optional[float] = Field(None, description="Theta")
+    vega: Optional[float] = Field(None, description="Vega")
+    rho: Optional[float] = Field(None, description="Rho")
+    implied_volatility: Optional[float] = Field(None, description="Implied volatility")
+    historical_volatility: Optional[float] = Field(
+        None, description="Historical volatility"
+    )
+    theoretical_price: Optional[float] = Field(
+        None, description="Theoretical price"
+    )
+    intrinsic_value: Optional[float] = Field(None, description="Intrinsic value")
+    time_value: Optional[float] = Field(None, description="Time value")
+    moneyness: Optional[str] = Field(None, description="Moneyness classification")
+
+
+class KoreanFuturesOptionChainResponse(BaseModel):
+    """Normalized domestic option chain response."""
+
+    expiry: str = Field(..., description="Expiry in YYYYMM")
+    market_class: str = Field(..., description="Market class code")
+    fetched_at: datetime = Field(..., description="Fetch timestamp")
+    total_calls: int = Field(..., description="Number of call rows")
+    total_puts: int = Field(..., description="Number of put rows")
+    calls: List[KoreanFuturesOptionChainRow] = Field(
+        default_factory=list, description="Call option rows"
+    )
+    puts: List[KoreanFuturesOptionChainRow] = Field(
+        default_factory=list, description="Put option rows"
+    )
