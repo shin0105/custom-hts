@@ -1155,6 +1155,78 @@ class KDevelopersClient:
             )
             return None
 
+    def get_future_option_daily_candles(
+        self,
+        symbol: str,
+        market_div_code: str = "F",
+        period_code: str = "D",
+        input_date: Optional[str] = None,
+        input_date_to: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get domestic futures/options daily/period candles.
+
+        API: [국내선물옵션] 기본시세 > 선물옵션기간별시세(일/주/월/년) [v1_국내선물-008]
+        """
+        try:
+            normalized_period = str(period_code or "D").strip().upper()
+            if normalized_period not in {"D", "W", "M", "Y"}:
+                raise ValueError("period_code must be one of D, W, M, Y")
+            normalized_input_date = str(input_date or "").strip()
+            if not normalized_input_date:
+                kst_now = datetime.now(timezone.utc).astimezone(
+                    timezone(timedelta(hours=9))
+                )
+                normalized_input_date = kst_now.strftime("%Y%m%d")
+            if (
+                len(normalized_input_date) != 8
+                or not normalized_input_date.isdigit()
+            ):
+                raise ValueError("input_date must be in YYYYMMDD format")
+            normalized_input_date_to = str(input_date_to or "").strip()
+            if not normalized_input_date_to:
+                normalized_input_date_to = normalized_input_date
+            if (
+                len(normalized_input_date_to) != 8
+                or not normalized_input_date_to.isdigit()
+            ):
+                raise ValueError("input_date_to must be in YYYYMMDD format")
+            if normalized_input_date > normalized_input_date_to:
+                raise ValueError(
+                    "input_date must be earlier than or equal to input_date_to"
+                )
+
+            api_url = (
+                "/uapi/domestic-futureoption/v1/quotations/"
+                "inquire-daily-fuopchartprice"
+            )
+            tr_id = "FHKIF03020100"
+            params = {
+                "FID_COND_MRKT_DIV_CODE": market_div_code,
+                "FID_INPUT_ISCD": symbol,
+                "FID_PERIOD_DIV_CODE": normalized_period,
+                "FID_INPUT_DATE_1": normalized_input_date,
+                "FID_INPUT_DATE_2": normalized_input_date_to,
+            }
+
+            res = self._url_fetch(api_url, tr_id, "", params)
+            if not res.is_ok():
+                res.print_error(api_url)
+                return None
+
+            body = res.get_body()
+            return {
+                "output": self._output_to_list(getattr(body, "output", None)),
+                "output1": self._output_to_dict(getattr(body, "output1", None))
+                or {},
+                "output2": self._output_to_list(getattr(body, "output2", None)),
+            }
+        except Exception as e:
+            logger.error(
+                f"Exception in get_future_option_daily_candles for {symbol}: {e}"
+            )
+            return None
+
     def get_future_option_callput(
         self,
         expiry: str,

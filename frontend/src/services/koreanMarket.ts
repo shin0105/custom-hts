@@ -346,6 +346,34 @@ export const koreanMarketService = {
   },
 
   /**
+   * Get domestic futures/options daily candles.
+   */
+  async getFuturesOptionDailyCandles(params: {
+    symbol: string;
+    marketDivCode?: 'F' | 'O' | 'JF' | 'JO' | 'CF' | 'CM' | 'EU';
+    period?: 'D' | 'W' | 'M' | 'Y';
+    limit?: number;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<KoreanCandleData[]> {
+    const search = new URLSearchParams();
+    search.append('symbol', params.symbol);
+    if (params.marketDivCode) {
+      search.append('market_div_code', params.marketDivCode);
+    }
+    if (params.period) {
+      search.append('period', params.period);
+    }
+    if (params.limit !== undefined) search.append('limit', String(params.limit));
+    if (params.startDate) search.append('start_date', params.startDate);
+    if (params.endDate) search.append('end_date', params.endDate);
+    const response = await axios.get<KoreanCandleData[]>(
+      `${API_BASE_URL}/korean/futures-options/daily-candles?${search.toString()}`
+    );
+    return response.data;
+  },
+
+  /**
    * Get domestic futures/options minute candles.
    */
   async getFuturesOptionMinuteCandles(params: {

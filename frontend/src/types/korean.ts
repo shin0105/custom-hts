@@ -359,6 +359,8 @@ export interface KoreanFuturesOptionMinuteCandleResponse {
   candles: KoreanFuturesOptionMinuteCandle[];
 }
 
+export type KoreanFuturesChartInterval = 'daily' | 'minute';
+
 export interface KoreanFuturesOptionChainRow {
   option_code?: string | null;
   strike_price?: number | null;

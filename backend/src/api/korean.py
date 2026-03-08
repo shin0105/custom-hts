@@ -50,6 +50,15 @@ class FuturesMinuteInterval(int, Enum):
     ONE_HOUR = 3600
 
 
+class FuturesPeriodType(str, Enum):
+    """Valid futures/options period types."""
+
+    DAILY = "D"
+    WEEKLY = "W"
+    MONTHLY = "M"
+    YEARLY = "Y"
+
+
 router = APIRouter(prefix="/korean", tags=["Korean Market"])
 
 
@@ -606,6 +615,62 @@ async def get_korean_futures_options_orderbook(
             detail=f"Futures/options orderbook not found for {symbol}",
         )
     return orderbook
+
+
+@router.get(
+    "/futures-options/daily-candles",
+    response_model=List[KoreanCandleData],
+)
+async def get_korean_futures_options_daily_candles(
+    symbol: str = Query(..., min_length=3, max_length=12),
+    market_div_code: str = Query(
+        "F",
+        description="F: 지수선물, O: 지수옵션, JF: 주식선물, JO: 주식옵션",
+    ),
+    period: FuturesPeriodType = Query(
+        FuturesPeriodType.DAILY,
+        description="Period type (D/W/M/Y)",
+    ),
+    limit: Optional[int] = Query(
+        None, ge=1, le=500, description="Max candle rows to return"
+    ),
+    start_date: Optional[str] = Query(
+        None, description="Start date in YYYYMMDD"
+    ),
+    end_date: Optional[str] = Query(
+        None, description="End date in YYYYMMDD"
+    ),
+) -> List[KoreanCandleData]:
+    """Get domestic futures/options normalized daily/period candles."""
+    market_code = market_div_code.strip().upper()
+    if market_code not in {"F", "O", "JF", "JO", "CF", "CM", "EU"}:
+        raise HTTPException(
+            status_code=400,
+            detail="market_div_code must be one of F/O/JF/JO/CF/CM/EU",
+        )
+    if start_date and (len(start_date) != 8 or not start_date.isdigit()):
+        raise HTTPException(status_code=400, detail="start_date must be YYYYMMDD")
+    if end_date and (len(end_date) != 8 or not end_date.isdigit()):
+        raise HTTPException(status_code=400, detail="end_date must be YYYYMMDD")
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(
+            status_code=400, detail="start_date must be earlier than or equal to end_date"
+        )
+
+    candles = await korean_market_service.get_futures_option_daily_candles(
+        symbol=symbol.strip().upper(),
+        market_div_code=market_code,
+        period_code=period.value,
+        limit=limit,
+        input_date=start_date,
+        input_date_to=end_date,
+    )
+    if not candles:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Futures/options daily candles not found for {symbol}",
+        )
+    return candles
 
 
 @router.get(

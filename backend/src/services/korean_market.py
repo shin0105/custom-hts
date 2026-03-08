@@ -1478,6 +1478,97 @@ class KoreanMarketService:
             candles=candles,
         )
 
+    async def get_futures_option_daily_candles(
+        self,
+        symbol: str,
+        market_div_code: str = "F",
+        period_code: str = "D",
+        limit: Optional[int] = None,
+        input_date: Optional[str] = None,
+        input_date_to: Optional[str] = None,
+    ) -> Optional[List[KoreanCandleData]]:
+        """Get normalized domestic futures/options daily/period candle data."""
+        raw = kdevelopers_client.get_future_option_daily_candles(
+            symbol=symbol,
+            market_div_code=market_div_code,
+            period_code=period_code,
+            input_date=input_date,
+            input_date_to=input_date_to,
+        )
+        if not raw:
+            return None
+
+        rows = raw.get("output2") or raw.get("output") or []
+        if not rows:
+            output1 = raw.get("output1") or {}
+            one_row = self._output_to_daily_candle_row(output1)
+            rows = [one_row] if one_row else []
+
+        candles: List[KoreanCandleData] = []
+        for row in rows:
+            row_date = self._extract_daily_candle_date(row)
+            if not row_date:
+                continue
+
+            candles.append(
+                KoreanCandleData(
+                    symbol=symbol,
+                    date=row_date,
+                    open=self._to_float(
+                        row.get("futs_oprc")
+                        or row.get("optn_oprc")
+                        or row.get("stck_oprc")
+                        or row.get("open")
+                    )
+                    or 0.0,
+                    high=self._to_float(
+                        row.get("futs_hgpr")
+                        or row.get("optn_hgpr")
+                        or row.get("stck_hgpr")
+                        or row.get("high")
+                    )
+                    or 0.0,
+                    low=self._to_float(
+                        row.get("futs_lwpr")
+                        or row.get("optn_lwpr")
+                        or row.get("stck_lwpr")
+                        or row.get("low")
+                    )
+                    or 0.0,
+                    close=self._to_float(
+                        row.get("futs_prpr")
+                        or row.get("optn_prpr")
+                        or row.get("stck_clpr")
+                        or row.get("stck_prpr")
+                        or row.get("close")
+                    )
+                    or 0.0,
+                    volume=self._to_int(
+                        row.get("acml_vol")
+                        or row.get("cntg_vol")
+                        or row.get("volume")
+                    )
+                    or 0,
+                    change=self._to_float(
+                        row.get("futs_prdy_vrss")
+                        or row.get("optn_prdy_vrss")
+                        or row.get("prdy_vrss")
+                        or row.get("change")
+                    ),
+                    change_percent=self._to_float(
+                        row.get("futs_prdy_ctrt")
+                        or row.get("optn_prdy_ctrt")
+                        or row.get("prdy_ctrt")
+                        or row.get("change_percent")
+                    ),
+                )
+            )
+
+        candles.sort(key=lambda candle: candle.date, reverse=True)
+        if limit is not None:
+            candles = candles[:limit]
+        return candles or None
+
     async def get_futures_option_chain(
         self,
         expiry: str,
@@ -1565,6 +1656,28 @@ class KoreanMarketService:
             return int(float(text))
         except (TypeError, ValueError):
             return None
+
+    def _extract_daily_candle_date(self, row: Dict[str, Any]) -> Optional[str]:
+        for key in (
+            "stck_bsop_date",
+            "futs_bsop_date",
+            "optn_bsop_date",
+            "bass_dt",
+            "date",
+        ):
+            value = str(row.get(key) or "").strip()
+            if re.fullmatch(r"\d{8}", value):
+                return value
+        return None
+
+    def _output_to_daily_candle_row(
+        self, row: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        if not row:
+            return None
+        if not self._extract_daily_candle_date(row):
+            return None
+        return row
 
     def _normalize_yyyymmdd(self, value: Optional[str]) -> Optional[str]:
         if value is None:

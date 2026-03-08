@@ -94,6 +94,26 @@ Note: These master files (.mst) contain stock codes, names, and other metadata. 
 - **Example**: `curl "http://localhost:8000/api/korean/account?account_product_code=01"`
 - **Response**: Account balance information and list of stock positions
 
+### 4. Domestic Futures/Options Period Candles (Daily/Weekly/Monthly/Yearly)
+
+#### Get Domestic Futures/Options Period Candle Data
+- **KIS API Endpoint**: `/uapi/domestic-futureoption/v1/quotations/inquire-daily-fuopchartprice`
+- **Backend Endpoint**: `GET /api/korean/futures-options/daily-candles`
+- **Method**: GET
+- **Transaction ID**: `FHKIF03020100` (real/mock)
+- **Description**: Fetch futures/options candles for period `D/W/M/Y`
+- **Per-call limit**: KIS returns up to 100 rows per call
+- **Key Parameters**:
+  - `FID_COND_MRKT_DIV_CODE` (`market_div_code`): `F`, `O`, `JF`, `JO`, `CF`, `CM`, `EU`
+  - `FID_INPUT_ISCD` (`symbol`): instrument code
+  - `FID_INPUT_DATE_1` (`start_date`): range start (`YYYYMMDD`)
+  - `FID_INPUT_DATE_2` (`end_date`): range end (`YYYYMMDD`)
+  - `FID_PERIOD_DIV_CODE` (`period`): `D`, `W`, `M`, `Y`
+- **Important**:
+  - `FID_INPUT_DATE_1` and `FID_INPUT_DATE_2` must both be valid `YYYYMMDD`
+  - `start_date <= end_date`
+  - Use repeated calls with adjusted date windows for ranges larger than one call can return
+
 
 **Response Structure**:
 ```json
