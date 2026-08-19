@@ -10,8 +10,9 @@ Reference: https://github.com/koreainvestment/open-trading-api/tree/main/stocks_
 import urllib.request
 import zipfile
 import logging
+import time
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,25 @@ class StockMasterFileManager:
         "konex": "konex_code.mst.zip",
     }
 
+    # Column names differ per market file, so each normalized field lists the
+    # candidate source columns in priority order.
+    NORMALIZED_COLUMNS = {
+        "symbol": ["단축코드"],
+        "standard_code": ["표준코드"],
+        "name": ["한글명", "한글종목명", "종목명"],
+        "security_group_code": ["그룹코드", "증권그룹구분코드"],
+        "market_cap_100m": [
+            "시가총액",
+            "전일기준 시가총액 (억)",
+            "전일기준 시가총액(억)",
+        ],
+        "listing_date": ["상장일자"],
+    }
+
+    # Rows are cached in memory because parsing all three master files is slow
+    # and the files only change once per trading day.
+    CACHE_TTL_SECONDS = 6 * 60 * 60
+
     def __init__(self, data_dir: Optional[str] = None):
         """
         Initialize the master file manager.
@@ -54,6 +74,9 @@ class StockMasterFileManager:
         # Create directory if it doesn't exist
         self.data_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Master file directory: {self.data_dir}")
+
+        # market -> (cached_at_epoch, rows)
+        self._rows_cache: Dict[str, tuple] = {}
 
     def download_market_file(self, market: str, force: bool = False) -> bool:
         """
@@ -739,6 +762,160 @@ class StockMasterFileManager:
             return None
 
         return result.iloc[0].to_dict()
+
+    def get_market_rows(
+        self,
+        market: str,
+        auto_download: bool = True,
+        force_download: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get normalized, cached rows for one market.
+
+        Normalizes the per-market column names (한글명/한글종목명/종목명 etc.)
+        into a single shape so callers do not need to know which market a row
+        came from.
+
+        Args:
+            market: Market name ("kospi", "kosdaq", or "konex")
+            auto_download: Download the master file when it is missing
+            force_download: Re-download and re-parse even when cached
+
+        Returns:
+            List of normalized row dictionaries (empty when unavailable)
+        """
+        market = (market or "").strip().lower()
+        if market not in self.MARKETS:
+            logger.error(f"Unknown market: {market}")
+            return []
+
+        if force_download:
+            self._rows_cache.pop(market, None)
+        else:
+            cached = self._rows_cache.get(market)
+            if cached and (time.time() - cached[0]) < self.CACHE_TTL_SECONDS:
+                return cached[1]
+
+        mst_path = self.data_dir / self.MARKETS[market].replace(".zip", "")
+        if force_download or not mst_path.exists():
+            if not (auto_download or force_download):
+                logger.warning(
+                    f"{market} master file missing and auto_download is off"
+                )
+                return []
+            if not self.download_market_file(market, force=force_download):
+                return []
+
+        df = self._parse_master_file(market)
+        if df is None or df.empty:
+            return []
+
+        rows = self._normalize_rows(df, market)
+        self._rows_cache[market] = (time.time(), rows)
+        logger.info(f"Cached {len(rows)} normalized {market} rows")
+        return rows
+
+    def _normalize_rows(
+        self, df: pd.DataFrame, market: str
+    ) -> List[Dict[str, Any]]:
+        """Map market-specific columns onto the shared normalized shape."""
+        resolved = {}
+        for field, candidates in self.NORMALIZED_COLUMNS.items():
+            for candidate in candidates:
+                if candidate in df.columns:
+                    resolved[field] = candidate
+                    break
+
+        rows: List[Dict[str, Any]] = []
+        for record in df.to_dict(orient="records"):
+            row: Dict[str, Any] = {"market": market}
+            for field, column in resolved.items():
+                value = record.get(column)
+                if value is None or (isinstance(value, float) and pd.isna(value)):
+                    row[field] = None
+                else:
+                    row[field] = str(value).strip()
+            for field in self.NORMALIZED_COLUMNS:
+                row.setdefault(field, None)
+
+            row["market_cap_100m"] = self._to_number(row.get("market_cap_100m"))
+            if not row.get("symbol"):
+                continue
+            rows.append(row)
+        return rows
+
+    @staticmethod
+    def _to_number(value: Any) -> Optional[float]:
+        """Parse a master-file numeric string, returning None when unusable."""
+        if value is None or value == "":
+            return None
+        try:
+            return float(str(value).replace(",", "").strip())
+        except (TypeError, ValueError):
+            return None
+
+    def search_stocks(
+        self,
+        query: Optional[str] = None,
+        markets: Optional[List[str]] = None,
+        auto_download: bool = True,
+        force_download: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Search stocks across markets by 6-digit code or Korean name.
+
+        Exact code matches rank first, then prefix name matches, then
+        substring matches. Within a rank, larger companies come first, so
+        typing "삼성" surfaces 삼성전자 ahead of smaller 삼성-prefixed names.
+
+        Args:
+            query: Code or name fragment. Empty returns all rows.
+            markets: Markets to search. Defaults to all markets.
+            auto_download: Download missing master files
+            force_download: Re-download and re-parse master files
+
+        Returns:
+            Ranked list of normalized rows
+        """
+        target_markets = markets or list(self.MARKETS.keys())
+        rows: List[Dict[str, Any]] = []
+        for market in target_markets:
+            rows.extend(
+                self.get_market_rows(
+                    market,
+                    auto_download=auto_download,
+                    force_download=force_download,
+                )
+            )
+
+        normalized_query = (query or "").strip().lower()
+        if not normalized_query:
+            return rows
+
+        matches: List[tuple] = []
+        for row in rows:
+            symbol = str(row.get("symbol") or "").lower()
+            name = str(row.get("name") or "").lower()
+
+            if symbol == normalized_query:
+                rank = 0
+            elif name == normalized_query:
+                rank = 1
+            elif symbol.startswith(normalized_query):
+                rank = 2
+            elif name.startswith(normalized_query):
+                rank = 3
+            elif normalized_query in name:
+                rank = 4
+            else:
+                continue
+            # Negative market cap sorts the largest company first within a
+            # rank; name length breaks the remaining ties.
+            market_cap = row.get("market_cap_100m") or 0
+            matches.append((rank, -market_cap, len(name), row))
+
+        matches.sort(key=lambda item: (item[0], item[1], item[2]))
+        return [item[3] for item in matches]
 
     def save_to_csv_full(
         self, market: str, output_dir: Optional[Path] = None

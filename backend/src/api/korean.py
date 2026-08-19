@@ -18,6 +18,7 @@ from ..models.korean import (
     KoreanFuturesOptionOrderbook,
     KoreanFuturesOptionMinuteCandleResponse,
     KoreanFuturesOptionChainResponse,
+    KoreanStockMasterResponse,
 )
 from ..services.korean_market import korean_market_service
 from ..utils.config import settings
@@ -307,6 +308,44 @@ async def get_korean_estimate_perform(symbol: str) -> KoreanEstimatePerform:
             detail=f"Estimate performance not found for symbol {symbol}",
         )
     return result
+
+
+@router.get("/stocks/master", response_model=KoreanStockMasterResponse)
+async def get_korean_stock_master(
+    query: Optional[str] = Query(
+        None,
+        description="6-digit stock code or Korean company name fragment",
+    ),
+    market: str = Query(
+        "all", description="Market filter: all/kospi/kosdaq/konex"
+    ),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
+    limit: int = Query(20, ge=1, le=500, description="Pagination limit"),
+    auto_download: bool = Query(
+        True, description="Download missing master files on first use"
+    ),
+    force_download: bool = Query(
+        False, description="Re-download and re-parse master files"
+    ),
+) -> KoreanStockMasterResponse:
+    """
+    Search KOSPI/KOSDAQ/KONEX stock master files by code or Korean name.
+
+    Powers symbol typeahead so users do not need to memorise 6-digit codes.
+    Master files are downloaded on first use and cached in memory.
+    """
+    try:
+        result = await korean_market_service.get_stock_master(
+            query=query,
+            market=market,
+            offset=offset,
+            limit=limit,
+            auto_download=auto_download,
+            force_download=force_download,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return KoreanStockMasterResponse(**result)
 
 
 @router.get("/bonds/master", response_model=KoreanBondMasterResponse)

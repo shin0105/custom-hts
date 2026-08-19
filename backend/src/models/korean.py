@@ -326,6 +326,45 @@ class KoreanBondMasterItem(BaseModel):
     )
 
 
+class KoreanStockMasterItem(BaseModel):
+    """One row of the Korean stock master file (KOSPI/KOSDAQ/KONEX)."""
+
+    symbol: str = Field(..., description="Short code (단축코드, 6 digits)")
+    name: Optional[str] = Field(None, description="Korean company name")
+    market: str = Field(..., description="Market: kospi/kosdaq/konex")
+    standard_code: Optional[str] = Field(
+        None, description="Standard code (표준코드)"
+    )
+    security_group_code: Optional[str] = Field(
+        None, description="Security group code (증권그룹구분코드)"
+    )
+    market_cap_100m: Optional[float] = Field(
+        None, description="Market capitalisation in 억 KRW"
+    )
+    listing_date: Optional[str] = Field(
+        None, description="Listing date (상장일자, YYYYMMDD)"
+    )
+
+
+class KoreanStockMasterResponse(BaseModel):
+    """Korean stock master search response."""
+
+    items: List[KoreanStockMasterItem] = Field(
+        ..., description="Matched stock master rows"
+    )
+    total_loaded: int = Field(
+        ..., description="Total rows loaded from the searched markets"
+    )
+    total_matched: int = Field(
+        ..., description="Number of rows matching the query"
+    )
+    total_returned: int = Field(..., description="Number of rows returned")
+    offset: int = Field(..., description="Applied offset")
+    limit: int = Field(..., description="Applied limit")
+    query: Optional[str] = Field(None, description="Applied search query")
+    markets: List[str] = Field(..., description="Markets that were searched")
+
+
 class KoreanBondMasterResponse(BaseModel):
     """Domestic listed bond master response."""
 

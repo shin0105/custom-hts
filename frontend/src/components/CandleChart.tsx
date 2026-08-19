@@ -16,6 +16,11 @@ import {
   Cell,
   Customized,
 } from 'recharts';
+import {
+  conventionForCurrency,
+  getMarketColors,
+  type MarketConvention,
+} from '../utils/format';
 
 export interface CandleData {
   date: string;
@@ -32,6 +37,11 @@ interface CandleChartProps {
   height?: number;
   primaryTimeZone?: string;
   secondaryTimeZone?: string;
+  /**
+   * Up/down colour convention. Defaults to the currency's home market
+   * (KRW -> Korean red-up/blue-down, USD -> green-up/red-down).
+   */
+  convention?: MarketConvention;
 }
 
 const KST_TIMEZONE = 'Asia/Seoul';
@@ -99,7 +109,12 @@ const formatTooltipLabel = (
 };
 
 // Custom tooltip
-const CustomTooltip: React.FC<any> = ({ active, payload, currency = 'USD' }) => {
+const CustomTooltip: React.FC<any> = ({
+  active,
+  payload,
+  currency = 'USD',
+  colors,
+}) => {
   if (!active || !payload || !payload.length) return null;
 
   const data = payload[0].payload;
@@ -156,7 +171,7 @@ const CustomTooltip: React.FC<any> = ({ active, payload, currency = 'USD' }) => 
         style={{
           margin: '4px 0',
           fontSize: '14px',
-          color: isPositive ? '#10b981' : '#ef4444',
+          color: isPositive ? colors.up : colors.down,
         }}
       >
         Change: {formatPrice(Math.abs(change))} ({isPositive ? '+' : '-'}
@@ -173,7 +188,11 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   height = 500,
   primaryTimeZone,
   secondaryTimeZone,
+  convention,
 }) => {
+  const activeConvention = convention ?? conventionForCurrency(currency);
+  const colors = getMarketColors(activeConvention);
+
   if (!data || data.length === 0) {
     return (
       <div
@@ -295,7 +314,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
           const lowY = yScale(entry.low);
 
           const isUp = entry.close >= entry.open;
-          const color = isUp ? '#16a34a' : '#dc2626';
+          const color = isUp ? colors.up : colors.down;
           const bodyY = Math.min(openY, closeY);
           const bodyHeight = Math.max(1, Math.abs(openY - closeY));
 
@@ -355,11 +374,19 @@ export const CandleChart: React.FC<CandleChartProps> = ({
                 : `$${value.toFixed(2)}`
             }
           />
-          <Tooltip content={<CustomTooltip currency={currency} />} />
+          <Tooltip content={<CustomTooltip currency={currency} colors={colors} />} />
           <Legend
             payload={[
-              { value: 'Up', type: 'square', color: '#16a34a' },
-              { value: 'Down', type: 'square', color: '#dc2626' },
+              {
+                value: activeConvention === 'KR' ? 'Up (상승)' : 'Up',
+                type: 'square',
+                color: colors.up,
+              },
+              {
+                value: activeConvention === 'KR' ? 'Down (하락)' : 'Down',
+                type: 'square',
+                color: colors.down,
+              },
             ]}
           />
           <Line
@@ -425,7 +452,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
             {chartData.map((entry, index) => (
               <Cell
                 key={`cell-${index}`}
-                fill={entry.close >= entry.open ? '#10b981' : '#ef4444'}
+                fill={entry.close >= entry.open ? colors.up : colors.down}
                 opacity={0.6}
               />
             ))}
