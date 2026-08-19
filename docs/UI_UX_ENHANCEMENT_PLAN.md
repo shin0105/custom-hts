@@ -9,6 +9,17 @@ names the file it lives in so it can be picked up independently.
 
 ---
 
+## 구현 현황
+
+**1차 (기반) — 구현 완료.** C-01, C-02, C-04, C-05, C-06, X-01, X-02, X-03 이 반영되었고,
+`frontend/src` 아래에 `theme/`(토큰·색상 관행 컨텍스트), `i18n/ko.ts`(한국어 라벨),
+`components/ui/`(프리미티브), `utils/marketColors.ts`, `utils/apiError.ts` 가 추가되었다.
+`npm run lint` 는 이번 작업에서 21건 → 0건으로 정리되어 이제 게이트로 쓸 수 있다.
+
+나머지 항목은 아래 순서 그대로 남아 있다.
+
+---
+
 ## 0. The one-line summary
 
 The backend is well ahead of the frontend. Three of the richest Korean endpoints —
@@ -313,9 +324,9 @@ overlay — see S-06. These are the baseline for a chart Korean users will take 
 
 ## 6. 제안 실행 순서
 
-**1차 (기반, ~1주)** — C-01 색상 관행, C-02 한국어 통일, C-04 토큰/프리미티브,
-C-05 숫자 조판, X-01 차트 버그. Nothing user-visible is added, but every later change
-lands on a stable base and C-01 alone fixes the most serious defect.
+**1차 (기반, ~1주) — 완료** — C-01 색상 관행, C-02 한국어 통일, C-04 토큰/프리미티브,
+C-05 숫자 조판, C-06 로딩·에러 상태, X-01/X-02/X-03 차트. Nothing user-visible is added,
+but every later change lands on a stable base and C-01 alone fixes the most serious defect.
 
 **2차 (검색·탐색, ~1주)** — C-03 전 자산군 통합 검색 + 마스터 행 클릭 (B-04, D-02) +
 Ctrl+K 팔레트. This removes the product's biggest friction point on all three pages at once.

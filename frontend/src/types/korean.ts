@@ -66,9 +66,28 @@ export interface KoreanValuationMetrics {
   as_of: string;
 }
 
+/** One line item from the DART full financial statement response. */
+export interface KoreanFinancialItem {
+  sj_nm?: string;
+  sj_div?: string;
+  account_nm?: string;
+  thstrm_amount?: string;
+}
+
+export interface KoreanAllFinancialsResponse {
+  symbol: string;
+  year: number;
+  requested_year?: number;
+  quarter?: number;
+  fs_div: 'CFS' | 'OFS';
+  count: number;
+  data: KoreanFinancialItem[];
+  note?: string;
+}
+
 export interface KoreanEstimatePerform {
   symbol: string;
-  output1: Record<string, any>[];
+  output1: Record<string, unknown>[];
   output2: Array<{
     metric: string;
     values: Array<string | number | null>;
@@ -80,7 +99,7 @@ export interface KoreanEstimatePerform {
     year_values: Record<string, string | number | null>;
   }>;
   output4: string[];
-  units?: Record<string, any>;
+  units?: Record<string, unknown>;
   unit_notes?: string;
 }
 

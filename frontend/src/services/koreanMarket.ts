@@ -12,6 +12,7 @@ import type {
   KoreanAccountResponse,
   KoreanValuationMetrics,
   KoreanEstimatePerform,
+  KoreanAllFinancialsResponse,
   KoreanBondMasterResponse,
   KoreanBondQuote,
   KoreanBondInfo,
@@ -145,13 +146,13 @@ export const koreanMarketService = {
     year?: number,
     quarter?: number,
     fsDivision: 'CFS' | 'OFS' = 'CFS'
-  ): Promise<any> {
+  ): Promise<KoreanAllFinancialsResponse> {
     const params = new URLSearchParams();
     if (year) params.append('year', year.toString());
     if (quarter) params.append('quarter', quarter.toString());
     params.append('fs_div', fsDivision);
 
-    const response = await axios.get(
+    const response = await axios.get<KoreanAllFinancialsResponse>(
       `${API_BASE_URL}/korean/financials/${symbol}/all?${params}`
     );
     return response.data;
