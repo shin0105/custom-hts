@@ -1,19 +1,33 @@
 /**
  * Typeahead search for Korean stocks by 6-digit code or Korean company name.
+ *
+ * Users do not memorise 6-digit codes, so the field resolves 종목명 against the
+ * KOSPI/KOSDAQ/KONEX master files rather than requiring an exact code.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { koreanMarketService } from '../services/koreanMarket';
 import type { KoreanStockMasterItem } from '../types/korean';
 import { formatMarketCapFrom100m } from '../utils/format';
+import { toUserMessage } from '../utils/apiError';
+import { ko } from '../i18n/ko';
+import { TextInput } from './ui';
+import {
+  color,
+  fontSize,
+  fontWeight,
+  radius,
+  shadow,
+  space,
+  zIndex,
+} from '../theme/tokens';
 
 interface SymbolSearchProps {
   /** Currently selected symbol. */
   value: string;
   /** Called with the chosen 6-digit code. */
   onSelect: (symbol: string, item?: KoreanStockMasterItem) => void;
-  placeholder?: string;
   disabled?: boolean;
 }
 
@@ -24,11 +38,11 @@ const MARKET_LABELS: Record<string, string> = {
 };
 
 const DEBOUNCE_MS = 200;
+const LISTBOX_ID = 'symbol-search-listbox';
 
 export const SymbolSearch: React.FC<SymbolSearchProps> = ({
   value,
   onSelect,
-  placeholder = '종목명 또는 코드 검색 (e.g. 삼성전자, 005930)',
   disabled = false,
 }) => {
   const [query, setQuery] = useState(value);
@@ -40,14 +54,13 @@ export const SymbolSearch: React.FC<SymbolSearchProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const listboxId = 'symbol-search-listbox';
 
   // Keep the field in sync when the symbol changes elsewhere (URL, chips).
   useEffect(() => {
     setQuery(value);
   }, [value]);
 
-  // Debounced search. The abort controller keeps a slow earlier response from
+  // Debounced search. The abort controller stops a slow earlier response from
   // overwriting the results of a newer keystroke.
   useEffect(() => {
     const trimmed = query.trim();
@@ -72,7 +85,7 @@ export const SymbolSearch: React.FC<SymbolSearchProps> = ({
       } catch (err) {
         if (axios.isCancel(err)) return;
         setResults([]);
-        setError('종목 검색에 실패했습니다. Stock search failed.');
+        setError(toUserMessage(err, ko.stock.searchFailed));
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
@@ -84,7 +97,7 @@ export const SymbolSearch: React.FC<SymbolSearchProps> = ({
     };
   }, [query, open]);
 
-  // Close on outside click.
+  // Close when focus moves outside the field.
   useEffect(() => {
     const handleClick = (event: MouseEvent) => {
       if (
@@ -127,47 +140,40 @@ export const SymbolSearch: React.FC<SymbolSearchProps> = ({
       const choice = results[highlighted];
       if (open && choice) {
         commit(choice);
-      } else {
-        // Allow a raw code to be submitted without picking from the list.
-        const trimmed = query.trim();
-        if (trimmed) {
-          setOpen(false);
-          onSelect(trimmed);
-        }
+        return;
+      }
+      // A raw code can still be submitted without picking from the list.
+      const trimmed = query.trim();
+      if (trimmed) {
+        setOpen(false);
+        onSelect(trimmed);
       }
     }
   };
 
   const showDropdown = open && query.trim() !== '';
+  const activeOption = showDropdown ? results[highlighted] : undefined;
 
-  const inputStyle: React.CSSProperties = useMemo(
-    () => ({
-      width: '100%',
-      padding: '12px',
-      fontSize: '16px',
-      border: '1px solid #d1d5db',
-      borderRadius: '6px',
-      backgroundColor: disabled ? '#f3f4f6' : 'white',
-    }),
-    [disabled]
-  );
+  const messageStyle: React.CSSProperties = {
+    padding: space.md,
+    color: color.inkDim,
+    fontSize: fontSize.md,
+  };
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', flex: 1 }}>
-      <input
+    <div ref={containerRef} style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+      <TextInput
         ref={inputRef}
         type="text"
         role="combobox"
         aria-expanded={showDropdown}
-        aria-controls={listboxId}
+        aria-controls={LISTBOX_ID}
         aria-autocomplete="list"
-        aria-label="Korean stock symbol search"
+        aria-label={ko.stock.searchPlaceholder}
         aria-activedescendant={
-          showDropdown && results[highlighted]
-            ? `symbol-option-${results[highlighted].symbol}`
-            : undefined
+          activeOption ? `symbol-option-${activeOption.symbol}` : undefined
         }
-        placeholder={placeholder}
+        placeholder={ko.stock.searchPlaceholder}
         value={query}
         disabled={disabled}
         onChange={(event) => {
@@ -176,47 +182,41 @@ export const SymbolSearch: React.FC<SymbolSearchProps> = ({
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={handleKeyDown}
-        style={inputStyle}
+        style={{ width: '100%' }}
       />
 
       {showDropdown && (
         <ul
-          id={listboxId}
+          id={LISTBOX_ID}
           role="listbox"
-          aria-label="Search results"
+          aria-label={ko.stock.title}
           style={{
             position: 'absolute',
             top: 'calc(100% + 4px)',
             left: 0,
             right: 0,
-            zIndex: 30,
+            zIndex: zIndex.dropdown,
             margin: 0,
             padding: 0,
             listStyle: 'none',
             maxHeight: '320px',
             overflowY: 'auto',
-            backgroundColor: 'white',
-            border: '1px solid #e5e7eb',
-            borderRadius: '8px',
-            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)',
+            backgroundColor: color.surface,
+            border: `1px solid ${color.border}`,
+            borderRadius: radius.md,
+            boxShadow: shadow.overlay,
           }}
         >
           {loading && results.length === 0 && (
-            <li style={{ padding: '12px', color: '#6b7280', fontSize: '14px' }}>
-              검색 중… Searching…
-            </li>
+            <li style={messageStyle}>{ko.stock.searchInProgress}</li>
           )}
 
           {!loading && error && (
-            <li style={{ padding: '12px', color: '#b91c1c', fontSize: '14px' }}>
-              {error}
-            </li>
+            <li style={{ ...messageStyle, color: color.dangerInk }}>{error}</li>
           )}
 
           {!loading && !error && results.length === 0 && (
-            <li style={{ padding: '12px', color: '#6b7280', fontSize: '14px' }}>
-              검색 결과가 없습니다. No matching stocks.
-            </li>
+            <li style={messageStyle}>{ko.stock.searchNoResults}</li>
           )}
 
           {results.map((item, index) => {
@@ -237,23 +237,28 @@ export const SymbolSearch: React.FC<SymbolSearchProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  gap: '12px',
-                  padding: '10px 12px',
+                  gap: space.md,
+                  padding: `${space.sm} ${space.md}`,
                   cursor: 'pointer',
-                  backgroundColor: isActive ? '#eff6ff' : 'white',
-                  borderBottom: '1px solid #f3f4f6',
+                  backgroundColor: isActive ? color.accentSoft : color.surface,
+                  borderBottom: `1px solid ${color.borderSoft}`,
                 }}
               >
                 <span style={{ minWidth: 0 }}>
-                  <span style={{ fontWeight: 600, fontSize: '14px' }}>
+                  <span
+                    style={{
+                      fontWeight: fontWeight.semibold,
+                      fontSize: fontSize.md,
+                    }}
+                  >
                     {item.name || item.symbol}
                   </span>
                   <span
+                    className="hts-mono"
                     style={{
-                      marginLeft: '8px',
-                      fontSize: '13px',
-                      color: '#6b7280',
-                      fontFamily: 'monospace',
+                      marginLeft: space.sm,
+                      fontSize: fontSize.sm,
+                      color: color.inkDim,
                     }}
                   >
                     {item.symbol}
@@ -263,21 +268,21 @@ export const SymbolSearch: React.FC<SymbolSearchProps> = ({
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px',
+                    gap: space.sm,
                     flexShrink: 0,
                   }}
                 >
-                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                  <span style={{ fontSize: fontSize.sm, color: color.inkDim }}>
                     {formatMarketCapFrom100m(item.market_cap_100m)}
                   </span>
                   <span
                     style={{
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      color: '#475569',
-                      backgroundColor: '#f1f5f9',
-                      borderRadius: '999px',
-                      padding: '2px 8px',
+                      fontSize: fontSize.xs,
+                      fontWeight: fontWeight.semibold,
+                      color: color.inkMid,
+                      backgroundColor: color.surfaceSunken,
+                      borderRadius: radius.pill,
+                      padding: `2px ${space.sm}`,
                     }}
                   >
                     {MARKET_LABELS[item.market] ?? item.market.toUpperCase()}

@@ -1,16 +1,18 @@
 /**
  * React Query hooks for Korean market data.
  *
- * Each section of the Korean market page owns its own query, so a failure or
- * refetch in one section (e.g. estimates) never blanks the others, and a
- * symbol change fetches each resource exactly once.
+ * Each panel on the Korean market page owns its own query, so a failure or a
+ * refetch in one panel never blanks the others, and changing symbol fetches
+ * each resource exactly once — the hand-rolled version loaded valuation,
+ * financials and estimates twice per search (once eagerly, once from an effect
+ * keyed on the arriving quote).
  */
 
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
 import { koreanMarketService } from '../services/koreanMarket';
 import type {
   ChartInterval,
+  KoreanAllFinancialsResponse,
   KoreanCandleData,
   KoreanEstimatePerform,
   KoreanStockQuote,
@@ -18,24 +20,6 @@ import type {
   MinuteInterval,
   PeriodType,
 } from '../types/korean';
-
-export interface FinancialItem {
-  sj_nm?: string;
-  sj_div?: string;
-  account_nm?: string;
-  thstrm_amount?: string;
-}
-
-export interface FinancialsResponse {
-  symbol: string;
-  year: number;
-  requested_year?: number;
-  quarter?: number;
-  fs_div: 'CFS' | 'OFS';
-  count: number;
-  data: FinancialItem[];
-  note?: string;
-}
 
 export interface FinancialParams {
   year: number;
@@ -51,19 +35,6 @@ export interface ChartParams {
   time: string;
   startDate: string;
   endDate: string;
-}
-
-/**
- * Pull a human-readable message out of an API error.
- */
-export function getApiErrorMessage(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err)) {
-    const detail = err.response?.data?.detail;
-    if (typeof detail === 'string' && detail.trim() !== '') {
-      return detail;
-    }
-  }
-  return fallback;
 }
 
 /** Today's date in KST as YYYYMMDD. */
@@ -111,7 +82,7 @@ export function useKoreanFinancials(
   params: FinancialParams,
   enabled: boolean
 ) {
-  return useQuery<FinancialsResponse>({
+  return useQuery<KoreanAllFinancialsResponse>({
     queryKey: [
       'korean',
       'financials',

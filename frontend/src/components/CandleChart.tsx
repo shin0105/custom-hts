@@ -16,11 +16,10 @@ import {
   Cell,
   Customized,
 } from 'recharts';
-import {
-  conventionForCurrency,
-  getMarketColors,
-  type MarketConvention,
-} from '../utils/format';
+import { color, fontSize, radius, shadow, space, tabularNums } from '../theme/tokens';
+import { useMarketColors } from '../theme/marketColorContext';
+import type { ColorConvention } from '../utils/marketColors';
+import { ko } from '../i18n/ko';
 
 export interface CandleData {
   date: string;
@@ -31,17 +30,28 @@ export interface CandleData {
   volume: number;
 }
 
+/** A candle plus the presentation fields the chart derives from it. */
+interface ChartRow extends CandleData {
+  timestamp: number;
+  hasTime: boolean;
+  timeZone?: string;
+  secondaryTimeZone?: string;
+  locale: string;
+}
+
 interface CandleChartProps {
   data: CandleData[];
   currency?: 'USD' | 'KRW';
   height?: number;
+  /** Height of the volume pane below the price pane. */
+  volumeHeight?: number;
   primaryTimeZone?: string;
   secondaryTimeZone?: string;
   /**
-   * Up/down colour convention. Defaults to the currency's home market
-   * (KRW -> Korean red-up/blue-down, USD -> green-up/red-down).
+   * Pins the up/down colors instead of following the user's preference.
+   * The US market page pins `'global'`.
    */
-  convention?: MarketConvention;
+  colorConvention?: ColorConvention;
 }
 
 const KST_TIMEZONE = 'Asia/Seoul';
@@ -79,7 +89,8 @@ const parseTimestamp = (dateStr: string): number => {
 const formatDateLabel = (
   timestamp: number,
   withTime: boolean,
-  timeZone?: string
+  timeZone: string | undefined,
+  locale: string
 ) => {
   const options: Intl.DateTimeFormatOptions = withTime
     ? {
@@ -90,95 +101,243 @@ const formatDateLabel = (
         minute: '2-digit',
       }
     : { timeZone, month: '2-digit', day: '2-digit' };
-  return new Intl.DateTimeFormat('en-US', options).format(
-    new Date(timestamp)
-  );
+  return new Intl.DateTimeFormat(locale, options).format(new Date(timestamp));
 };
 
 const formatTooltipLabel = (
   timestamp: number,
   withTime: boolean,
-  timeZone?: string
+  timeZone: string | undefined,
+  locale: string
 ) => {
   const options: Intl.DateTimeFormatOptions = withTime
     ? { timeZone, dateStyle: 'medium', timeStyle: 'short' }
     : { timeZone, dateStyle: 'medium' };
-  return new Intl.DateTimeFormat('en-US', options).format(
-    new Date(timestamp)
-  );
+  return new Intl.DateTimeFormat(locale, options).format(new Date(timestamp));
 };
 
+const formatVolume = (value: number) => {
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(1)}M`;
+  }
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(1)}K`;
+  }
+  return value.toLocaleString();
+};
+
+interface CandleTooltipProps {
+  active?: boolean;
+  payload?: Array<{ payload: ChartRow }>;
+  currency?: 'USD' | 'KRW';
+  upColor: string;
+  downColor: string;
+  flatColor: string;
+}
+
 // Custom tooltip
-const CustomTooltip: React.FC<any> = ({
+const CustomTooltip: React.FC<CandleTooltipProps> = ({
   active,
   payload,
   currency = 'USD',
-  colors,
+  upColor,
+  downColor,
+  flatColor,
 }) => {
   if (!active || !payload || !payload.length) return null;
 
   const data = payload[0].payload;
   const hasTime = data.hasTime;
+  const locale = data.locale ?? 'en-US';
   const dateLabel = formatTooltipLabel(
     data.timestamp,
     hasTime,
-    data.timeZone
+    data.timeZone,
+    locale
   );
   const secondaryLabel = data.secondaryTimeZone
-    ? formatTooltipLabel(data.timestamp, hasTime, data.secondaryTimeZone)
+    ? formatTooltipLabel(data.timestamp, hasTime, data.secondaryTimeZone, locale)
     : null;
-  const isPositive = data.close >= data.open;
   const change = data.close - data.open;
-  const changePercent = data.open !== 0 ? ((change / data.open) * 100).toFixed(2) : '0.00';
+  const changePercent =
+    data.open !== 0 ? ((change / data.open) * 100).toFixed(2) : '0.00';
+  const changeColor =
+    change > 0 ? upColor : change < 0 ? downColor : flatColor;
 
   const formatPrice = (value: number) => {
     if (currency === 'KRW') {
-      return `₩${value.toLocaleString()}`;
+      return `₩${value.toLocaleString('ko-KR')}`;
     }
     return `$${value.toFixed(2)}`;
   };
 
-  const formatVolume = (value: number) => {
-    if (value >= 1_000_000) {
-      return `${(value / 1_000_000).toFixed(2)}M`;
-    } else if (value >= 1_000) {
-      return `${(value / 1_000).toFixed(2)}K`;
-    }
-    return value.toLocaleString();
-  };
+  const rows: Array<[string, string]> = [
+    [ko.quote.open, formatPrice(data.open)],
+    [ko.quote.high, formatPrice(data.high)],
+    [ko.quote.low, formatPrice(data.low)],
+    ['종가', formatPrice(data.close)],
+  ];
 
   return (
     <div
       style={{
-        backgroundColor: 'white',
-        border: '1px solid #e5e7eb',
-        borderRadius: '6px',
-        padding: '12px',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        backgroundColor: color.surface,
+        border: `1px solid ${color.border}`,
+        borderRadius: radius.md,
+        padding: space.md,
+        boxShadow: shadow.raised,
+        fontSize: fontSize.md,
+        ...tabularNums,
       }}
     >
-      <p style={{ margin: '0 0 4px 0', fontWeight: 'bold' }}>{dateLabel}</p>
+      <p style={{ margin: 0, fontWeight: 600 }}>{dateLabel}</p>
       {secondaryLabel && (
-        <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#6b7280' }}>
+        <p style={{ margin: '2px 0 0', fontSize: fontSize.sm, color: color.inkDim }}>
           {secondaryLabel}
         </p>
       )}
-      <p style={{ margin: '4px 0', fontSize: '14px' }}>Open: {formatPrice(data.open)}</p>
-      <p style={{ margin: '4px 0', fontSize: '14px' }}>High: {formatPrice(data.high)}</p>
-      <p style={{ margin: '4px 0', fontSize: '14px' }}>Low: {formatPrice(data.low)}</p>
-      <p style={{ margin: '4px 0', fontSize: '14px' }}>Close: {formatPrice(data.close)}</p>
-      <p
+      <div
         style={{
-          margin: '4px 0',
-          fontSize: '14px',
-          color: isPositive ? colors.up : colors.down,
+          display: 'grid',
+          gridTemplateColumns: 'auto auto',
+          columnGap: space.md,
+          rowGap: '2px',
+          marginTop: space.sm,
         }}
       >
-        Change: {formatPrice(Math.abs(change))} ({isPositive ? '+' : '-'}
-        {Math.abs(parseFloat(changePercent))}%)
-      </p>
-      <p style={{ margin: '4px 0', fontSize: '14px' }}>Volume: {formatVolume(data.volume)}</p>
+        {rows.map(([label, value]) => (
+          <React.Fragment key={label}>
+            <span style={{ color: color.inkDim }}>{label}</span>
+            <span style={{ textAlign: 'right' }}>{value}</span>
+          </React.Fragment>
+        ))}
+        <span style={{ color: color.inkDim }}>{ko.quote.changePercent}</span>
+        <span style={{ textAlign: 'right', color: changeColor }}>
+          {formatPrice(Math.abs(change))} ({change >= 0 ? '+' : '-'}
+          {Math.abs(parseFloat(changePercent))}%)
+        </span>
+        <span style={{ color: color.inkDim }}>{ko.chart.volume}</span>
+        <span style={{ textAlign: 'right' }}>{formatVolume(data.volume)}</span>
+      </div>
     </div>
+  );
+};
+
+/**
+ * Draws the candle bodies and wicks over the chart's own scales.
+ *
+ * Defined at module scope on purpose: a component declared inside the parent's
+ * render body gets a new identity on every render, which unmounts and remounts
+ * the whole layer each time the parent's state changes.
+ */
+interface ChartAxis {
+  scale?: (value: number) => number;
+  bandSize?: number;
+}
+
+interface CandlesLayerProps {
+  /** Injected by recharts' `Customized`. */
+  xAxisMap?: Record<string, ChartAxis>;
+  yAxisMap?: Record<string, ChartAxis>;
+  data?: ChartRow[];
+  offset?: { left?: number; top?: number; width?: number; height?: number };
+  width?: number;
+  height?: number;
+  upColor: string;
+  downColor: string;
+}
+
+const CandlesLayer: React.FC<CandlesLayerProps> = ({
+  xAxisMap,
+  yAxisMap,
+  data: layerData,
+  offset,
+  width,
+  height,
+  upColor,
+  downColor,
+}) => {
+  const clipId = React.useId();
+
+  const xAxis = Object.values(xAxisMap || {})[0];
+  const yAxis = Object.values(yAxisMap || {})[0];
+  if (!xAxis || !yAxis) return null;
+
+  const xScale = xAxis.scale;
+  const yScale = yAxis.scale;
+  if (!xScale || !yScale) return null;
+
+  const clipX = offset?.left ?? 0;
+  const clipY = offset?.top ?? 0;
+  const clipWidth = offset?.width ?? width ?? 0;
+  const clipHeight = offset?.height ?? height ?? 0;
+
+  if (!layerData || layerData.length === 0) return null;
+
+  let candleWidth = 6;
+  if (layerData.length >= 2) {
+    let minDiff = Number.POSITIVE_INFINITY;
+    const maxSamples = Math.min(layerData.length - 1, 40);
+    for (let i = 1; i <= maxSamples; i += 1) {
+      const prev = xScale(layerData[i - 1].timestamp);
+      const next = xScale(layerData[i].timestamp);
+      const diff = Math.abs(next - prev);
+      if (Number.isFinite(diff) && diff > 0) {
+        minDiff = Math.min(minDiff, diff);
+      }
+    }
+    if (Number.isFinite(minDiff) && minDiff > 0) {
+      candleWidth = Math.min(18, Math.max(2, minDiff * 0.6));
+    }
+  } else if (xAxis.bandSize) {
+    candleWidth = Math.min(18, Math.max(2, xAxis.bandSize * 0.6));
+  }
+
+  return (
+    <g clipPath={`url(#${clipId})`}>
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={clipX} y={clipY} width={clipWidth} height={clipHeight} />
+        </clipPath>
+      </defs>
+      {layerData.map((entry, index) => {
+        const x = xScale(entry.timestamp);
+        if (!Number.isFinite(x)) return null;
+
+        const openY = yScale(entry.open);
+        const closeY = yScale(entry.close);
+        const highY = yScale(entry.high);
+        const lowY = yScale(entry.low);
+
+        const isUp = entry.close >= entry.open;
+        const strokeColor = isUp ? upColor : downColor;
+        const bodyY = Math.min(openY, closeY);
+        const bodyHeight = Math.max(1, Math.abs(openY - closeY));
+
+        return (
+          <g key={`candle-${index}`}>
+            <line
+              x1={x}
+              x2={x}
+              y1={highY}
+              y2={lowY}
+              stroke={strokeColor}
+              strokeWidth={1}
+            />
+            <rect
+              x={x - candleWidth / 2}
+              y={bodyY}
+              width={candleWidth}
+              height={bodyHeight}
+              fill={strokeColor}
+              stroke={strokeColor}
+              rx={1}
+              ry={1}
+            />
+          </g>
+        );
+      })}
+    </g>
   );
 };
 
@@ -186,12 +345,15 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   data,
   currency = 'USD',
   height = 500,
+  volumeHeight = 100,
   primaryTimeZone,
   secondaryTimeZone,
-  convention,
+  colorConvention,
 }) => {
-  const activeConvention = convention ?? conventionForCurrency(currency);
-  const colors = getMarketColors(activeConvention);
+  const { colorForDirection } = useMarketColors(colorConvention);
+  const upColor = colorForDirection('up');
+  const downColor = colorForDirection('down');
+  const flatColor = colorForDirection('flat');
 
   if (!data || data.length === 0) {
     return (
@@ -201,12 +363,12 @@ export const CandleChart: React.FC<CandleChartProps> = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#f9fafb',
-          borderRadius: '8px',
-          border: '1px solid #e5e7eb',
+          backgroundColor: color.surfaceMuted,
+          borderRadius: radius.lg,
+          border: `1px solid ${color.border}`,
         }}
       >
-        <p style={{ color: '#6b7280' }}>No chart data available</p>
+        <p style={{ color: color.inkDim }}>{ko.chart.noData}</p>
       </div>
     );
   }
@@ -217,14 +379,14 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   const maxPrice = Math.max(...allPrices);
   const padding = (maxPrice - minPrice) * 0.1;
 
-  // Calculate max volume for secondary Y-axis (unused but kept for potential future use)
-  // const maxVolume = Math.max(...data.map((d) => d.volume));
-
   const hasTime = data.some((d) => d.date.length > 8);
   const useKst = data.some((d) => isKoreanDate(d.date));
   const timeZone = primaryTimeZone ?? (useKst ? KST_TIMEZONE : undefined);
-  const secondaryZone =
-    secondaryTimeZone ?? (useKst ? undefined : KST_TIMEZONE);
+  const secondaryZone = secondaryTimeZone ?? (useKst ? undefined : KST_TIMEZONE);
+  const locale = currency === 'KRW' || useKst ? 'ko-KR' : 'en-US';
+
+  /** Price pane keeps whatever height is left once the volume pane is placed. */
+  const priceHeight = Math.max(120, height - volumeHeight);
 
   // Prepare data with timestamps for accurate time scaling
   const chartData = data
@@ -234,6 +396,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       hasTime,
       timeZone,
       secondaryTimeZone: secondaryZone,
+      locale,
     }))
     .sort((a, b) => a.timestamp - b.timestamp);
 
@@ -241,152 +404,64 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   const maxTimestamp = chartData[chartData.length - 1]?.timestamp ?? minTimestamp;
   const timeRange = Math.max(1, maxTimestamp - minTimestamp);
   const timePadding = Math.max(60_000, Math.round(timeRange * 0.02));
-
-  const formatVolume = (value: number) => {
-    if (value >= 1_000_000) {
-      return `${(value / 1_000_000).toFixed(1)}M`;
-    } else if (value >= 1_000) {
-      return `${(value / 1_000).toFixed(1)}K`;
-    }
-    return value.toString();
-  };
-
-  const CandlesLayer: React.FC<any> = ({
-    xAxisMap,
-    yAxisMap,
-    data: layerData,
-    offset,
-    width,
-    height,
-  }) => {
-    const xAxis = Object.values(xAxisMap || {})[0] as any;
-    const yAxis = Object.values(yAxisMap || {})[0] as any;
-    if (!xAxis || !yAxis) return null;
-
-    const xScale = xAxis.scale;
-    const yScale = yAxis.scale;
-    if (!xScale || !yScale) return null;
-
-    const clipId = React.useId();
-    const clipX = offset?.left ?? 0;
-    const clipY = offset?.top ?? 0;
-    const clipWidth = offset?.width ?? width ?? 0;
-    const clipHeight = offset?.height ?? height ?? 0;
-
-    let candleWidth = 6;
-    if (layerData && layerData.length >= 2) {
-      let minDiff = Number.POSITIVE_INFINITY;
-      const maxSamples = Math.min(layerData.length - 1, 40);
-      for (let i = 1; i <= maxSamples; i += 1) {
-        const prev = xScale(layerData[i - 1].timestamp);
-        const next = xScale(layerData[i].timestamp);
-        const diff = Math.abs(next - prev);
-        if (Number.isFinite(diff) && diff > 0) {
-          minDiff = Math.min(minDiff, diff);
-        }
-      }
-      if (Number.isFinite(minDiff) && minDiff > 0) {
-        candleWidth = Math.min(18, Math.max(2, minDiff * 0.6));
-      }
-    } else if (xAxis.bandSize) {
-      candleWidth = Math.min(18, Math.max(2, xAxis.bandSize * 0.6));
-    }
-
-    return (
-      <g clipPath={`url(#${clipId})`}>
-        <defs>
-          <clipPath id={clipId}>
-            <rect
-              x={clipX}
-              y={clipY}
-              width={clipWidth}
-              height={clipHeight}
-            />
-          </clipPath>
-        </defs>
-        {layerData.map((entry: any, index: number) => {
-          const x = xScale(entry.timestamp);
-          if (!Number.isFinite(x)) return null;
-
-          const openY = yScale(entry.open);
-          const closeY = yScale(entry.close);
-          const highY = yScale(entry.high);
-          const lowY = yScale(entry.low);
-
-          const isUp = entry.close >= entry.open;
-          const color = isUp ? colors.up : colors.down;
-          const bodyY = Math.min(openY, closeY);
-          const bodyHeight = Math.max(1, Math.abs(openY - closeY));
-
-          return (
-            <g key={`candle-${index}`}>
-              <line
-                x1={x}
-                x2={x}
-                y1={highY}
-                y2={lowY}
-                stroke={color}
-                strokeWidth={1}
-              />
-              <rect
-                x={x - candleWidth / 2}
-                y={bodyY}
-                width={candleWidth}
-                height={bodyHeight}
-                fill={color}
-                stroke={color}
-                rx={1}
-                ry={1}
-              />
-            </g>
-          );
-        })}
-      </g>
-    );
-  };
+  const timeDomain: [number, number] = [
+    minTimestamp - timePadding,
+    maxTimestamp + timePadding,
+  ];
 
   return (
-    <div style={{ width: '100%', backgroundColor: 'white', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-      <ResponsiveContainer width="100%" height={height - 100}>
+    <div
+      style={{
+        width: '100%',
+        backgroundColor: color.surface,
+        padding: space.lg,
+        borderRadius: radius.lg,
+        border: `1px solid ${color.border}`,
+      }}
+    >
+      <ResponsiveContainer width="100%" height={priceHeight}>
         <ComposedChart
           data={chartData}
+          syncId="hts-candle"
           margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <CartesianGrid strokeDasharray="3 3" stroke={color.borderSoft} />
           <XAxis
             dataKey="timestamp"
             type="number"
             scale="time"
-            domain={[minTimestamp - timePadding, maxTimestamp + timePadding]}
+            domain={timeDomain}
             tick={{ fontSize: 12 }}
             minTickGap={24}
             tickFormatter={(value: number) =>
-              formatDateLabel(value, hasTime, timeZone)
+              formatDateLabel(value, hasTime, timeZone, locale)
             }
           />
           <YAxis
             yAxisId="price"
+            width={72}
             domain={[minPrice - padding, maxPrice + padding]}
             tick={{ fontSize: 12 }}
             tickFormatter={(value) =>
               currency === 'KRW'
-                ? `₩${value.toLocaleString()}`
+                ? `₩${value.toLocaleString('ko-KR')}`
                 : `$${value.toFixed(2)}`
             }
           />
-          <Tooltip content={<CustomTooltip currency={currency} colors={colors} />} />
+          <Tooltip
+            content={
+              <CustomTooltip
+                currency={currency}
+                upColor={upColor}
+                downColor={downColor}
+                flatColor={flatColor}
+              />
+            }
+          />
           <Legend
             payload={[
-              {
-                value: activeConvention === 'KR' ? 'Up (상승)' : 'Up',
-                type: 'square',
-                color: colors.up,
-              },
-              {
-                value: activeConvention === 'KR' ? 'Down (하락)' : 'Down',
-                type: 'square',
-                color: colors.down,
-              },
+              { value: ko.chart.up, type: 'square', color: upColor },
+              { value: ko.chart.down, type: 'square', color: downColor },
             ]}
           />
           <Line
@@ -399,26 +474,31 @@ export const CandleChart: React.FC<CandleChartProps> = ({
             isAnimationActive={false}
             legendType="none"
           />
-          <Customized component={CandlesLayer} />
+          <Customized
+            component={CandlesLayer}
+            upColor={upColor}
+            downColor={downColor}
+          />
         </ComposedChart>
       </ResponsiveContainer>
-      
-      {/* Volume chart below */}
-      <ResponsiveContainer width="100%" height={100}>
+
+      {/* Volume pane, sharing the price pane's cursor via syncId */}
+      <ResponsiveContainer width="100%" height={volumeHeight}>
         <ComposedChart
           data={chartData}
+          syncId="hts-candle"
           margin={{ top: 0, right: 30, left: 20, bottom: 5 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <CartesianGrid strokeDasharray="3 3" stroke={color.borderSoft} />
           <XAxis
             dataKey="timestamp"
             type="number"
             scale="time"
-            domain={[minTimestamp - timePadding, maxTimestamp + timePadding]}
+            domain={timeDomain}
             tick={{ fontSize: 12 }}
             minTickGap={24}
             tickFormatter={(value: number) =>
-              formatDateLabel(value, hasTime, timeZone)
+              formatDateLabel(value, hasTime, timeZone, locale)
             }
           />
           {secondaryZone && (
@@ -427,32 +507,33 @@ export const CandleChart: React.FC<CandleChartProps> = ({
               dataKey="timestamp"
               type="number"
               scale="time"
-              domain={[minTimestamp - timePadding, maxTimestamp + timePadding]}
-              tick={{ fontSize: 11, fill: '#6b7280' }}
+              domain={timeDomain}
+              tick={{ fontSize: 11, fill: color.inkDim }}
               minTickGap={24}
               orientation="bottom"
               axisLine={false}
               tickLine={false}
               interval="preserveStartEnd"
               tickFormatter={(value: number) =>
-                formatDateLabel(value, hasTime, secondaryZone)
+                formatDateLabel(value, hasTime, secondaryZone, locale)
               }
             />
           )}
-          <YAxis
-            tick={{ fontSize: 12 }}
-            tickFormatter={formatVolume}
-          />
+          {/* Matches the price pane's axis width so the two panes stay aligned. */}
+          <YAxis width={72} tick={{ fontSize: 12 }} tickFormatter={formatVolume} />
           <Tooltip
-            formatter={(value: number) => [formatVolume(value), 'Volume']}
+            formatter={(value: number) => [formatVolume(value), ko.chart.volume]}
+            labelFormatter={(value: number) =>
+              formatTooltipLabel(value, hasTime, timeZone, locale)
+            }
           />
-          
+
           {/* Volume bars with color based on price change */}
-          <Bar dataKey="volume" name="Volume">
+          <Bar dataKey="volume" name={ko.chart.volume}>
             {chartData.map((entry, index) => (
               <Cell
                 key={`cell-${index}`}
-                fill={entry.close >= entry.open ? colors.up : colors.down}
+                fill={entry.close >= entry.open ? upColor : downColor}
                 opacity={0.6}
               />
             ))}

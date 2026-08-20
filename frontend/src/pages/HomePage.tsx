@@ -4,170 +4,139 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { color, fontSize, fontWeight, radius, space } from '../theme/tokens';
+import { ko } from '../i18n/ko';
 
-export const HomePage: React.FC = () => {
-  const containerStyle: React.CSSProperties = {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: '48px 24px',
-    textAlign: 'center',
-  };
+const MARKETS: Array<{
+  to: string;
+  icon: string;
+  title: string;
+  description: string;
+}> = [
+  {
+    to: '/korean',
+    icon: '🇰🇷',
+    title: ko.nav.korean,
+    description:
+      'KOSPI·KOSDAQ 종목의 시세, 투자지표, 재무제표, 추정실적을 조회합니다.',
+  },
+  {
+    to: '/bonds',
+    icon: '🏦',
+    title: ko.nav.bonds,
+    description:
+      '장내채권 마스터 기반 종목 검색과 현재가, 이론가, 발행 정보를 확인합니다.',
+  },
+  {
+    to: '/futures-options',
+    icon: '📈',
+    title: ko.nav.futuresOptions,
+    description: '국내 지수·주식·상품 선물옵션 마스터를 검색하고 차트를 조회합니다.',
+  },
+  {
+    to: '/us',
+    icon: '🇺🇸',
+    title: ko.nav.us,
+    description: 'NYSE·NASDAQ 종목을 Yahoo Finance 데이터로 조회합니다.',
+  },
+  {
+    to: '/account-check',
+    icon: '🧾',
+    title: ko.nav.account,
+    description: '국내주식 계좌의 잔고 구성과 평가 손익을 확인합니다.',
+  },
+];
 
-  const cardStyle: React.CSSProperties = {
-    display: 'inline-block',
-    width: '300px',
-    margin: '16px',
-    padding: '32px',
-    border: '1px solid #e5e7eb',
-    borderRadius: '12px',
-    backgroundColor: 'white',
-    textDecoration: 'none',
-    color: 'inherit',
-    transition: 'transform 0.2s, box-shadow 0.2s',
-    cursor: 'pointer',
-  };
+const FEATURES = [
+  '📊 실시간 시세 조회',
+  '💰 재무제표 분석',
+  '📈 기간별 차트',
+  '🔍 종목 검색',
+  '💱 원화·달러 표기',
+  '⚡ 국내 등락 색상 관행 적용',
+];
 
-  return (
-    <div style={containerStyle}>
-      <h1 style={{ fontSize: '48px', fontWeight: 'bold', marginBottom: '16px' }}>
-        Welcome to Custom HTS
-      </h1>
-      <p style={{ fontSize: '20px', color: '#6b7280', marginBottom: '48px' }}>
-        Your gateway to Korean and US stock markets
-      </p>
-
-      <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap' }}>
-        <Link
-          to="/korean"
-          style={cardStyle}
-          onMouseOver={(e) => {
-            e.currentTarget.style.transform = 'translateY(-4px)';
-            e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = 'none';
-          }}
-        >
-          <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '12px' }}>
-            🇰🇷 Korean Market
-          </h2>
-          <p style={{ color: '#6b7280' }}>
-            Access KOSPI & KOSDAQ stocks with real-time data from Korean
-            Investment Securities
-          </p>
-        </Link>
-
-        <Link
-          to="/us"
-          style={cardStyle}
-          onMouseOver={(e) => {
-            e.currentTarget.style.transform = 'translateY(-4px)';
-            e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = 'none';
-          }}
-        >
-          <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '12px' }}>
-            🇺🇸 US Market
-          </h2>
-          <p style={{ color: '#6b7280' }}>
-            Track NYSE & NASDAQ stocks with comprehensive data from Yahoo Finance
-          </p>
-        </Link>
-
-        <Link
-          to="/bonds"
-          style={cardStyle}
-          onMouseOver={(e) => {
-            e.currentTarget.style.transform = 'translateY(-4px)';
-            e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = 'none';
-          }}
-        >
-          <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '12px' }}>
-            🏦 장내채권
-          </h2>
-          <p style={{ color: '#6b7280' }}>
-            장내채권 마스터 파일 기반 상장 채권 목록과 현재가/핵심 정보를 확인합니다
-          </p>
-        </Link>
-
-        <Link
-          to="/futures-options"
-          style={cardStyle}
-          onMouseOver={(e) => {
-            e.currentTarget.style.transform = 'translateY(-4px)';
-            e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = 'none';
-          }}
-        >
-          <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '12px' }}>
-            📈 선물옵션
-          </h2>
-          <p style={{ color: '#6b7280' }}>
-            국내 지수/주식/상품 선물옵션 마스터 파일을 검색하고 필터링합니다
-          </p>
-        </Link>
-
-        <Link
-          to="/account-check"
-          style={cardStyle}
-          onMouseOver={(e) => {
-            e.currentTarget.style.transform = 'translateY(-4px)';
-            e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = 'none';
-          }}
-        >
-          <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '12px' }}>
-            🧾 Account Check
-          </h2>
-          <p style={{ color: '#6b7280' }}>
-            View Korean stock account balance API parameters and response fields
-          </p>
-        </Link>
-      </div>
-
-      <div
+export const HomePage: React.FC = () => (
+  <div className="hts-page" style={{ maxWidth: '1100px', paddingTop: '48px' }}>
+    <header style={{ textAlign: 'center', marginBottom: space.xxl }}>
+      <h1
         style={{
-          marginTop: '64px',
-          padding: '24px',
-          backgroundColor: '#f9fafb',
-          borderRadius: '8px',
+          fontSize: '40px',
+          fontWeight: fontWeight.bold,
+          letterSpacing: '-0.02em',
+          marginBottom: space.md,
         }}
       >
-        <h3 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>
-          Features
-        </h3>
-        <ul
-          style={{
-            listStyle: 'none',
-            padding: 0,
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-            gap: '16px',
-            textAlign: 'left',
-          }}
-        >
-          <li>📊 Real-time stock quotes</li>
-          <li>💰 Financial statements analysis</li>
-          <li>📈 Historical price charts</li>
-          <li>🔍 Company search</li>
-          <li>💱 Multi-currency support</li>
-          <li>⚡ Fast and responsive UI</li>
-        </ul>
-      </div>
+        Custom HTS
+      </h1>
+      <p style={{ fontSize: fontSize.xl, color: color.inkDim }}>
+        국내 주식·채권·파생과 해외 주식을 한 곳에서
+      </p>
+    </header>
+
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+        gap: space.lg,
+      }}
+    >
+      {MARKETS.map((market) => (
+        <Link key={market.to} to={market.to} className="hts-home-card">
+          <h2
+            style={{
+              fontSize: fontSize.xl,
+              fontWeight: fontWeight.semibold,
+              marginBottom: space.sm,
+            }}
+          >
+            <span aria-hidden="true">{market.icon}</span> {market.title}
+          </h2>
+          <p
+            style={{
+              color: color.inkDim,
+              fontSize: fontSize.base,
+              lineHeight: 1.6,
+            }}
+          >
+            {market.description}
+          </p>
+        </Link>
+      ))}
     </div>
-  );
-};
+
+    <section
+      style={{
+        marginTop: space.xxl,
+        padding: space.xl,
+        backgroundColor: color.surfaceMuted,
+        border: `1px solid ${color.border}`,
+        borderRadius: radius.lg,
+      }}
+    >
+      <h3
+        style={{
+          fontSize: fontSize.xl,
+          fontWeight: fontWeight.semibold,
+          marginBottom: space.lg,
+        }}
+      >
+        주요 기능
+      </h3>
+      <ul
+        style={{
+          listStyle: 'none',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: space.md,
+          color: color.inkMid,
+          fontSize: fontSize.base,
+        }}
+      >
+        {FEATURES.map((feature) => (
+          <li key={feature}>{feature}</li>
+        ))}
+      </ul>
+    </section>
+  </div>
+);

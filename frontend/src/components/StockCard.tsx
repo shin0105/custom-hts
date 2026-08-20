@@ -4,14 +4,16 @@
 
 import React from 'react';
 import {
-  conventionForCurrency,
   formatCurrency,
-  formatKoreanUnits,
+  formatKrwCompact,
   formatKstTimestamp,
   formatLargeNumber,
+  formatNumber,
   formatPercent,
-  getChangeColor,
 } from '../utils/format';
+import { useMarketColors } from '../theme/marketColorContext';
+import type { ColorConvention } from '../utils/marketColors';
+import { color, fontSize, fontWeight, radius, shadow, space, tabularNums } from '../theme/tokens';
 
 interface StockCardProps {
   symbol: string;
@@ -20,6 +22,12 @@ interface StockCardProps {
   change: number;
   changePercent: number;
   currency: 'USD' | 'KRW';
+  /** Pins the up/down colors instead of following the user's preference. */
+  colorConvention?: ColorConvention;
+  /**
+   * Session figures the quote endpoint already returns. Supplied where the
+   * caller has them; omitted fields are simply not rendered.
+   */
   open?: number | null;
   high?: number | null;
   low?: number | null;
@@ -30,17 +38,6 @@ interface StockCardProps {
   timestamp?: string | null;
 }
 
-const labelStyle: React.CSSProperties = {
-  fontSize: '12px',
-  color: '#6b7280',
-};
-
-const valueStyle: React.CSSProperties = {
-  fontSize: '14px',
-  fontWeight: 600,
-  color: '#0f172a',
-};
-
 export const StockCard: React.FC<StockCardProps> = ({
   symbol,
   name,
@@ -48,6 +45,7 @@ export const StockCard: React.FC<StockCardProps> = ({
   change,
   changePercent,
   currency,
+  colorConvention,
   open,
   high,
   low,
@@ -57,21 +55,21 @@ export const StockCard: React.FC<StockCardProps> = ({
   sharesOutstanding,
   timestamp,
 }) => {
-  const convention = conventionForCurrency(currency);
-  const changeColor = getChangeColor(change, convention);
+  const { colorForDirection, directionOf, glyphFor, labelFor } =
+    useMarketColors(colorConvention);
+  const direction = directionOf(undefined, change);
+  const changeColor = colorForDirection(direction);
   const isKrw = currency === 'KRW';
 
   const price = (value: number | null | undefined) =>
-    value === null || value === undefined
-      ? '-'
-      : formatCurrency(value, currency);
+    value === null || value === undefined ? '-' : formatCurrency(value, currency);
 
   const bigNumber = (value: number | null | undefined) => {
     if (value === null || value === undefined) return '-';
-    return isKrw ? formatKoreanUnits(value) : formatLargeNumber(value);
+    return isKrw ? formatKrwCompact(value) : formatLargeNumber(value);
   };
 
-  // Position of the current price inside the day's range, as a percentage.
+  // Where the current price sits inside the day's range, as a percentage.
   const hasRange =
     high !== null &&
     high !== undefined &&
@@ -79,29 +77,26 @@ export const StockCard: React.FC<StockCardProps> = ({
     low !== undefined &&
     high > low;
   const rangePosition = hasRange
-    ? ((currentPrice - (low as number)) / ((high as number) - (low as number))) *
-      100
-    : null;
+    ? ((currentPrice - low) / (high - low)) * 100
+    : 0;
 
   const stats: Array<{ label: string; value: string }> = [
-    { label: 'Open', value: price(open) },
-    { label: 'High', value: price(high) },
-    { label: 'Low', value: price(low) },
-    { label: 'Prev Close', value: price(previousClose) },
+    { label: '시가', value: price(open) },
+    { label: '고가', value: price(high) },
+    { label: '저가', value: price(low) },
+    { label: '전일종가', value: price(previousClose) },
     {
-      label: 'Volume',
+      label: '거래량',
       value:
-        volume === null || volume === undefined
-          ? '-'
-          : volume.toLocaleString(isKrw ? 'ko-KR' : 'en-US'),
+        volume === null || volume === undefined ? '-' : formatNumber(volume),
     },
   ];
 
   if (marketCap !== null && marketCap !== undefined) {
-    stats.push({ label: 'Market Cap', value: bigNumber(marketCap) });
+    stats.push({ label: '시가총액', value: bigNumber(marketCap) });
   }
   if (sharesOutstanding !== null && sharesOutstanding !== undefined) {
-    stats.push({ label: 'Shares Out', value: bigNumber(sharesOutstanding) });
+    stats.push({ label: '상장주식수', value: formatNumber(sharesOutstanding) });
   }
 
   const hasStats = stats.some((stat) => stat.value !== '-');
@@ -109,89 +104,115 @@ export const StockCard: React.FC<StockCardProps> = ({
   return (
     <div
       style={{
-        border: '1px solid #e5e7eb',
-        borderRadius: '8px',
-        padding: '16px',
-        backgroundColor: 'white',
+        border: `1px solid ${color.border}`,
+        borderRadius: radius.lg,
+        padding: space.lg,
+        backgroundColor: color.surface,
+        boxShadow: shadow.panel,
       }}
     >
       <div
         style={{
           display: 'flex',
           alignItems: 'baseline',
-          justifyContent: 'space-between',
+          gap: space.sm,
+          marginBottom: space.sm,
           flexWrap: 'wrap',
-          gap: '8px',
-          marginBottom: '8px',
         }}
       >
-        <div>
+        <span style={{ fontWeight: fontWeight.bold, fontSize: fontSize.xl }}>
+          {name || symbol}
+        </span>
+        <span
+          className="hts-mono"
+          style={{ color: color.inkDim, fontSize: fontSize.md }}
+        >
+          {symbol}
+        </span>
+        {timestamp && (
           <span
             style={{
-              fontWeight: 'bold',
-              fontSize: '18px',
-              marginRight: '8px',
+              marginLeft: 'auto',
+              fontSize: fontSize.sm,
+              color: color.inkDim,
             }}
           >
-            {symbol}
-          </span>
-          <span style={{ color: '#6b7280', fontSize: '14px' }}>{name}</span>
-        </div>
-        {timestamp && (
-          <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-            As of {isKrw ? formatKstTimestamp(timestamp) : timestamp} {isKrw && 'KST'}
+            {isKrw ? `${formatKstTimestamp(timestamp)} KST` : timestamp} 기준
           </span>
         )}
       </div>
-
-      <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '4px' }}>
+      <div
+        style={{
+          fontSize: '30px',
+          fontWeight: fontWeight.bold,
+          color: changeColor,
+          lineHeight: 1.2,
+          ...tabularNums,
+        }}
+      >
         {formatCurrency(currentPrice, currency)}
       </div>
-      <div style={{ color: changeColor, fontSize: '16px' }}>
-        {formatCurrency(change, currency)} ({formatPercent(changePercent)})
+      <div
+        style={{
+          color: changeColor,
+          fontSize: fontSize.lg,
+          marginTop: space.xs,
+          ...tabularNums,
+        }}
+      >
+        <span aria-hidden="true">{glyphFor(direction)}</span>{' '}
+        {formatCurrency(Math.abs(change), currency)} ({formatPercent(changePercent)})
+        {/* Direction is also stated in text so it does not rely on color alone. */}
+        <span
+          style={{
+            marginLeft: space.sm,
+            fontSize: fontSize.sm,
+            color: color.inkDim,
+          }}
+        >
+          {labelFor(direction)}
+        </span>
       </div>
 
       {hasRange && (
-        <div style={{ marginTop: '14px' }}>
+        <div style={{ marginTop: space.lg }}>
           <div
             style={{
               display: 'flex',
               justifyContent: 'space-between',
-              fontSize: '12px',
-              color: '#6b7280',
-              marginBottom: '4px',
+              fontSize: fontSize.sm,
+              color: color.inkDim,
+              marginBottom: space.xs,
+              ...tabularNums,
             }}
           >
             <span>{price(low)}</span>
-            <span>Day range</span>
+            <span>일중 범위</span>
             <span>{price(high)}</span>
           </div>
           <div
             style={{
               position: 'relative',
               height: '6px',
-              borderRadius: '999px',
-              backgroundColor: '#e5e7eb',
+              borderRadius: radius.pill,
+              backgroundColor: color.surfaceSunken,
             }}
             role="img"
-            aria-label={`Day range from ${price(low)} to ${price(
+            aria-label={`일중 범위 ${price(low)} ~ ${price(
               high
-            )}, current ${price(currentPrice)}`}
+            )}, 현재가 ${price(currentPrice)}`}
           >
             <div
               style={{
                 position: 'absolute',
                 top: '-3px',
-                left: `calc(${Math.min(
-                  100,
-                  Math.max(0, rangePosition ?? 0)
-                )}% - 6px)`,
+                left: `calc(${Math.min(100, Math.max(0, rangePosition))}% - 6px)`,
                 width: '12px',
                 height: '12px',
                 borderRadius: '50%',
                 backgroundColor: changeColor,
-                border: '2px solid white',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                border: `2px solid ${color.surface}`,
+                boxShadow: shadow.panel,
               }}
             />
           </div>
@@ -201,18 +222,29 @@ export const StockCard: React.FC<StockCardProps> = ({
       {hasStats && (
         <div
           style={{
-            marginTop: '16px',
-            paddingTop: '12px',
-            borderTop: '1px solid #f1f5f9',
+            marginTop: space.lg,
+            paddingTop: space.md,
+            borderTop: `1px solid ${color.borderSoft}`,
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
-            gap: '12px',
+            gap: space.md,
           }}
         >
           {stats.map((stat) => (
-            <div key={stat.label}>
-              <div style={labelStyle}>{stat.label}</div>
-              <div style={valueStyle}>{stat.value}</div>
+            <div key={stat.label} style={{ minWidth: 0 }}>
+              <div style={{ fontSize: fontSize.sm, color: color.inkDim }}>
+                {stat.label}
+              </div>
+              <div
+                style={{
+                  fontSize: fontSize.md,
+                  fontWeight: fontWeight.semibold,
+                  color: color.ink,
+                  ...tabularNums,
+                }}
+              >
+                {stat.value}
+              </div>
             </div>
           ))}
         </div>

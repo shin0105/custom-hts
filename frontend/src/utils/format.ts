@@ -3,53 +3,6 @@
  */
 
 /**
- * Market colour convention for price movement.
- *
- * Korean markets colour rises red (상승) and falls blue (하락), which is the
- * inverse of the US convention. Rendering KR data with US colours makes every
- * chart read backwards to a Korean user, so the convention travels with the
- * market rather than being hard-coded.
- */
-export type MarketConvention = 'KR' | 'US';
-
-export interface MarketColors {
-  up: string;
-  down: string;
-  flat: string;
-}
-
-export const MARKET_COLORS: Record<MarketConvention, MarketColors> = {
-  KR: {
-    up: '#dc2626', // red — 상승
-    down: '#2563eb', // blue — 하락
-    flat: '#6b7280',
-  },
-  US: {
-    up: '#16a34a', // green
-    down: '#dc2626', // red
-    flat: '#6b7280',
-  },
-};
-
-/**
- * Resolve the colour convention that applies to a currency.
- */
-export function conventionForCurrency(
-  currency: 'USD' | 'KRW'
-): MarketConvention {
-  return currency === 'KRW' ? 'KR' : 'US';
-}
-
-/**
- * Get the colour palette for a market convention.
- */
-export function getMarketColors(
-  convention: MarketConvention = 'US'
-): MarketColors {
-  return MARKET_COLORS[convention];
-}
-
-/**
  * Format a number as currency.
  */
 export function formatCurrency(
@@ -78,6 +31,9 @@ export function formatPercent(value: number, decimals = 2): string {
 
 /**
  * Format a large number in abbreviated form (K, M, B).
+ *
+ * For Korean figures use `formatKrwCompact` instead — Korean amounts are read
+ * in 만 / 억 / 조, not thousands and millions.
  */
 export function formatLargeNumber(num: number): string {
   if (num >= 1e9) {
@@ -92,72 +48,101 @@ export function formatLargeNumber(num: number): string {
   return num.toFixed(2);
 }
 
-const JO = 1e12; // 조
-const EOK = 1e8; // 억
-const MAN = 1e4; // 만
+const JO = 1e12;
+const EOK = 1e8;
+const MAN = 1e4;
 
 /**
- * Format a KRW amount using Korean 조/억/만 units.
+ * Format a won amount the way it is read in Korean: 348조 2,000억.
  *
- * DART reports raw won figures, so a revenue line arrives as
- * 279604799000000 — unreadable as digits. Korean readers parse this as
- * "279.6조" at a glance.
+ * Only the two largest non-zero units are shown, which is how figures are
+ * quoted in practice — 348조 2,000억, not 348조 2,000억 5,000만 3,210원.
  */
-export function formatKoreanUnits(
+export function formatKrwCompact(
   value: number | null | undefined,
-  decimals = 1
+  options: { withSymbol?: boolean } = {}
 ): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return '-';
   }
+
   const sign = value < 0 ? '-' : '';
   const abs = Math.abs(value);
+  const prefix = options.withSymbol ? '₩' : '';
 
-  if (abs >= JO) return `${sign}${(abs / JO).toFixed(decimals)}조`;
-  if (abs >= EOK) return `${sign}${(abs / EOK).toFixed(decimals)}억`;
-  if (abs >= MAN) return `${sign}${(abs / MAN).toFixed(decimals)}만`;
-  return `${sign}${abs.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}`;
+  if (abs < MAN) {
+    return `${sign}${prefix}${Math.round(abs).toLocaleString('ko-KR')}원`;
+  }
+
+  const units: Array<{ size: number; suffix: string }> = [
+    { size: JO, suffix: '조' },
+    { size: EOK, suffix: '억' },
+    { size: MAN, suffix: '만' },
+  ];
+
+  const parts: string[] = [];
+  let remainder = abs;
+
+  for (const { size, suffix } of units) {
+    const amount = Math.floor(remainder / size);
+    remainder -= amount * size;
+    if (amount > 0) {
+      parts.push(`${amount.toLocaleString('ko-KR')}${suffix}`);
+    }
+    if (parts.length === 2) break;
+  }
+
+  return `${sign}${prefix}${parts.join(' ')}`;
 }
 
 /**
- * Format a KRW amount in Korean units with the exact figure alongside, for
- * places where the precise number still matters (tooltips, table cells).
+ * Format a won amount in 억원, the unit financial statements are read in.
+ * State the unit once in the panel header rather than repeating it per row.
  */
-export function formatKoreanUnitsDetailed(
-  value: number | null | undefined
+export function formatEokKrw(
+  value: number | null | undefined,
+  decimals = 0
 ): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return '-';
   }
-  if (Math.abs(value) < MAN) {
-    return value.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
-  }
-  return `${formatKoreanUnits(value)} (${value.toLocaleString('ko-KR')})`;
+  return (value / EOK).toLocaleString('ko-KR', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
 }
 
-/**
- * Format a market-cap figure expressed in 억 KRW (stock master unit).
- */
-export function formatMarketCapFrom100m(
-  value: number | null | undefined
+/** Plain grouped number in the Korean locale. */
+export function formatNumber(
+  value: number | null | undefined,
+  decimals = 0
 ): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return '-';
   }
-  return formatKoreanUnits(value * EOK);
+  return value.toLocaleString('ko-KR', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
+/** Percentage with an explicit sign, or `-` when the value is missing. */
+export function formatSignedPercent(
+  value: number | null | undefined,
+  decimals = 2
+): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return '-';
+  }
+  return formatPercent(value, decimals);
 }
 
 /**
- * Get color for a price change under a market's colour convention.
+ * Format a `YYYYMMDD` string as `YYYY-MM-DD`.
  */
-export function getChangeColor(
-  change: number,
-  convention: MarketConvention = 'US'
-): string {
-  const colors = getMarketColors(convention);
-  if (change > 0) return colors.up;
-  if (change < 0) return colors.down;
-  return colors.flat;
+export function formatYyyymmdd(value?: string | null): string {
+  if (!value || value.length !== 8 || value === '00000000') return '-';
+  return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
 }
 
 /**
@@ -173,7 +158,20 @@ export function formatDate(dateStr: string): string {
 }
 
 /**
- * Format an ISO timestamp as a KST wall-clock time, for "as of" labels on
+ * Format a market-cap figure that arrives in 억 KRW, the unit the stock
+ * master files use.
+ */
+export function formatMarketCapFrom100m(
+  value: number | null | undefined
+): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return '-';
+  }
+  return formatKrwCompact(value * EOK);
+}
+
+/**
+ * Format an ISO timestamp as KST wall-clock time, for the "as of" label on
  * Korean market data.
  */
 export function formatKstTimestamp(value: string | null | undefined): string {

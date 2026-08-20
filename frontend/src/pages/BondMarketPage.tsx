@@ -1,6 +1,26 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CandleChart } from '../components/CandleChart';
 import { koreanMarketService } from '../services/koreanMarket';
+import {
+  Badge,
+  Button,
+  DefinitionTable,
+  EmptyState,
+  Field,
+  Notice,
+  Panel,
+  SectionHeader,
+  Select,
+  SkeletonPanel,
+  StatGrid,
+  StatTile,
+  Table,
+  TableScroll,
+  TextInput,
+} from '../components/ui';
+import { color, fontSize, space } from '../theme/tokens';
+import { useMarketColors } from '../theme/marketColorContext';
+import { toUserMessage } from '../utils/apiError';
 import type {
   KoreanBondInfo,
   KoreanBondMasterItem,
@@ -263,6 +283,8 @@ export const BondMarketPage: React.FC = () => {
   const [loadingMaster, setLoadingMaster] = useState(false);
   const [masterError, setMasterError] = useState<string | null>(null);
 
+  const { colorFor, directionOf, glyphFor } = useMarketColors();
+
   const searchInfo = async () => {
     const code = pdno.trim();
     if (!code) return;
@@ -300,9 +322,7 @@ export const BondMarketPage: React.FC = () => {
         setDailyError('일별 시세를 불러오지 못했습니다.');
       }
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : '채권 정보를 불러오지 못했습니다.';
-      setInfoError(`조회 실패: ${msg}`);
+      setInfoError(toUserMessage(err, '채권 정보를 불러오지 못했습니다.'));
     } finally {
       setLoadingInfo(false);
     }
@@ -375,9 +395,7 @@ export const BondMarketPage: React.FC = () => {
         });
       }
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : '장내채권 마스터를 불러오지 못했습니다.';
-      setMasterError(msg);
+      setMasterError(toUserMessage(err, '장내채권 마스터를 불러오지 못했습니다.'));
       if (reset) {
         setItems([]);
         setTotalLoaded(0);
@@ -388,7 +406,9 @@ export const BondMarketPage: React.FC = () => {
   };
 
   useEffect(() => {
+    // Initial load only; later loads go through applyFilters/resetFilters.
     loadBondMaster(0, '', true, { bondType: 'F9' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -408,6 +428,76 @@ export const BondMarketPage: React.FC = () => {
       setBondInterestClassCodeFilter('');
     }
   }, [bondTypeFilter, bondClassCodeFilter, bondInterestClassCodeFilter]);
+
+  const applyFilters = useCallback(() => {
+    const trimmed = query.trim();
+    setSubmittedQuery(trimmed);
+    loadBondMaster(0, trimmed, true, activeFilters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, activeFilters]);
+
+  const resetFilters = useCallback(() => {
+    setQuery('');
+    setSubmittedQuery('');
+    setBondTypeFilter('F9');
+    setBondClassCodeFilter('');
+    setBondInterestClassCodeFilter('');
+    setListedDateFrom('');
+    setListedDateTo('');
+    setIssueDateFrom('');
+    setIssueDateTo('');
+    setMaturityDate('');
+    loadBondMaster(0, '', true, { bondType: 'F9' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Applied filters read as chips rather than a concatenated sentence of codes. */
+  const appliedFilterChips = useMemo(() => {
+    const chips: string[] = [];
+    if (submittedQuery) chips.push(`검색어: ${submittedQuery}`);
+    if (bondTypeFilter) {
+      const label = BOND_TYPE_OPTIONS.find((o) => o.value === bondTypeFilter)?.label;
+      chips.push(`유형: ${label ?? bondTypeFilter}`);
+    }
+    if (bondClassCodeFilter) {
+      const label = (BOND_CLASS_OPTIONS_BY_TYPE[bondTypeFilter] ?? []).find(
+        (o) => o.value === bondClassCodeFilter
+      )?.label;
+      chips.push(`분류: ${label ?? bondClassCodeFilter}`);
+    }
+    if (bondInterestClassCodeFilter) {
+      const label = (BOND_INTEREST_CLASS_OPTIONS_BY_TYPE[bondTypeFilter] ?? []).find(
+        (o) => o.value === bondInterestClassCodeFilter
+      )?.label;
+      chips.push(`이자유형: ${label ?? bondInterestClassCodeFilter}`);
+    }
+    if (listedDateFrom) {
+      chips.push(`상장일 시작: ${yyyymmddToDateInput(dateInputToYyyymmdd(listedDateFrom))}`);
+    }
+    if (listedDateTo) {
+      chips.push(`상장일 종료: ${yyyymmddToDateInput(dateInputToYyyymmdd(listedDateTo))}`);
+    }
+    if (issueDateFrom) {
+      chips.push(`발행일 시작: ${yyyymmddToDateInput(dateInputToYyyymmdd(issueDateFrom))}`);
+    }
+    if (issueDateTo) {
+      chips.push(`발행일 종료: ${yyyymmddToDateInput(dateInputToYyyymmdd(issueDateTo))}`);
+    }
+    if (maturityDate) {
+      chips.push(`상환일: ${yyyymmddToDateInput(dateInputToYyyymmdd(maturityDate))}`);
+    }
+    return chips;
+  }, [
+    submittedQuery,
+    bondTypeFilter,
+    bondClassCodeFilter,
+    bondInterestClassCodeFilter,
+    listedDateFrom,
+    listedDateTo,
+    issueDateFrom,
+    issueDateTo,
+    maturityDate,
+  ]);
 
   const masterRows = useMemo(() => items, [items]);
   const classOptions = useMemo(
@@ -483,561 +573,454 @@ export const BondMarketPage: React.FC = () => {
   }, [data]);
 
   return (
-    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '24px' }}>
-      <h1 style={{ marginBottom: '8px' }}>장내채권 기본조회</h1>
-      <p style={{ marginTop: 0, color: '#6b7280' }}>
-        채권 종목코드(PDNO)를 입력하면 KDevelopers 장내채권 기본조회 API(CTPF1114R)로
-        채권 정보를 조회합니다.
-      </p>
+    <div className="hts-page">
+      <SectionHeader
+        title="장내채권"
+        description="채권 종목코드(PDNO)로 채권 정보와 시세, 이론가를 조회합니다."
+      />
 
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-        <input
+      <div style={{ display: 'flex', gap: space.md, marginBottom: space.lg }}>
+        <TextInput
           value={pdno}
           onChange={(e) => setPdno(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && searchInfo()}
           placeholder="채권코드 입력 (예: KR2033022D33)"
-          style={{
-            flex: 1,
-            border: '1px solid #d1d5db',
-            borderRadius: '6px',
-            padding: '10px 12px',
-            fontSize: '14px',
-          }}
+          aria-label="채권코드"
         />
-        <button
-          onClick={searchInfo}
-          disabled={loadingInfo || !pdno.trim()}
-          style={{
-            border: 'none',
-            borderRadius: '6px',
-            padding: '10px 20px',
-            backgroundColor: loadingInfo || !pdno.trim() ? '#9ca3af' : '#0f766e',
-            color: 'white',
-            cursor: loadingInfo || !pdno.trim() ? 'not-allowed' : 'pointer',
-            fontSize: '14px',
-          }}
-        >
+        <Button onClick={searchInfo} disabled={loadingInfo || !pdno.trim()}>
           {loadingInfo ? '조회 중...' : '조회'}
-        </button>
+        </Button>
       </div>
 
       {infoError && (
-        <div
-          style={{
-            color: '#dc2626',
-            backgroundColor: '#fef2f2',
-            border: '1px solid #fecaca',
-            borderRadius: '6px',
-            padding: '12px',
-            marginBottom: '16px',
-          }}
-        >
-          {infoError}
+        <div style={{ marginBottom: space.lg }}>
+          <Notice onRetry={searchInfo}>{infoError}</Notice>
         </div>
       )}
 
+      {loadingInfo && !data && (
+        <Panel title="채권 정보">
+          <SkeletonPanel rows={5} height={20} />
+        </Panel>
+      )}
+
       {data && (
-        <div
-          style={{
-            backgroundColor: 'white',
-            border: '1px solid #e5e7eb',
-            borderRadius: '8px',
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#f0fdfa',
-              padding: '12px 16px',
-              borderBottom: '1px solid #e5e7eb',
-              fontWeight: 600,
-              color: '#0f766e',
-            }}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: space.lg }}>
+          <Panel
+            title={data.ksd_bond_item_name || data.pdno}
+            note={
+              <span className="hts-mono">
+                {data.pdno}
+                {data.bond_clsf_kor_name ? ` · ${data.bond_clsf_kor_name}` : ''}
+              </span>
+            }
           >
-            {data.ksd_bond_item_name || data.pdno}
-          </div>
-          {quote && (
-            <div
-              style={{
-                padding: '12px 16px',
-                borderBottom: '1px solid #e5e7eb',
-                backgroundColor: '#f8fafc',
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-                gap: '8px',
-                fontSize: '13px',
-              }}
-            >
-              <div>현재가: <strong>{formatNumber(quote.current_price)}</strong></div>
-              <div>전일대비: <strong>{formatNumber(quote.change)}</strong></div>
-              <div>등락률: <strong>{formatPct(quote.change_percent)}</strong></div>
-              <div>중간가: <strong>{formatNumber(quote.middle_price)}</strong></div>
-              <div>최우선 매도/매수: <strong>{formatNumber(quote.best_ask)} / {formatNumber(quote.best_bid)}</strong></div>
-              <div>수익률: <strong>{formatPct(quote.earning_rate)}</strong></div>
-              <div>시가/고가/저가: <strong>{formatNumber(quote.open)} / {formatNumber(quote.high)} / {formatNumber(quote.low)}</strong></div>
-              <div>거래량: <strong>{formatNumber(quote.volume)}</strong></div>
-            </div>
-          )}
+            {quote ? (
+              <StatGrid minWidth={150}>
+                <StatTile
+                  label="현재가"
+                  value={formatNumber(quote.current_price)}
+                  valueColor={colorFor(quote.change ?? 0)}
+                  emphasis
+                />
+                <StatTile
+                  label="전일대비"
+                  value={`${glyphFor(directionOf(undefined, quote.change))} ${formatNumber(
+                    quote.change === null || quote.change === undefined
+                      ? null
+                      : Math.abs(quote.change)
+                  )}`}
+                  sub={formatPct(quote.change_percent)}
+                  valueColor={colorFor(quote.change ?? 0)}
+                />
+                <StatTile label="중간가" value={formatNumber(quote.middle_price)} />
+                <StatTile
+                  label="최우선 매도/매수"
+                  value={`${formatNumber(quote.best_ask)} / ${formatNumber(quote.best_bid)}`}
+                />
+                <StatTile label="수익률" value={formatPct(quote.earning_rate)} />
+                <StatTile
+                  label="시가/고가/저가"
+                  value={`${formatNumber(quote.open)} / ${formatNumber(quote.high)} / ${formatNumber(quote.low)}`}
+                />
+                <StatTile label="거래량" value={formatNumber(quote.volume)} />
+              </StatGrid>
+            ) : (
+              <EmptyState>현재가 정보를 불러오지 못했습니다.</EmptyState>
+            )}
+          </Panel>
+
           {valuation && (
-            <div
-              style={{
-                padding: '12px 16px',
-                borderBottom: '1px solid #e5e7eb',
-                backgroundColor: '#ecfeff',
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                gap: '8px',
-                fontSize: '13px',
-              }}
+            <Panel
+              title="채권 평가"
+              note={`시장가격 기준: ${formatMarketPriceSource(valuation.market_price_source)}`}
+              actions={
+                valuation.mispricing_percent === null ||
+                valuation.mispricing_percent === undefined ? null : (
+                  <Badge
+                    tone={
+                      valuation.mispricing_percent > 1
+                        ? 'warning'
+                        : valuation.mispricing_percent < -1
+                        ? 'accent'
+                        : 'neutral'
+                    }
+                    title="시장가격이 이론가 대비 얼마나 벗어나 있는지"
+                  >
+                    {valuation.mispricing_percent > 1
+                      ? '고평가'
+                      : valuation.mispricing_percent < -1
+                      ? '저평가'
+                      : '적정'}{' '}
+                    {formatPct(valuation.mispricing_percent)}
+                  </Badge>
+                )
+              }
             >
-              <div>시장가격: <strong>{formatNumber(valuation.market_price)}</strong></div>
-              <div>시장가격 Raw: <strong>{formatNumber(valuation.raw_market_price)}</strong></div>
-              <div>시장가격 소스: <strong>{formatMarketPriceSource(valuation.market_price_source)}</strong></div>
-              <div>이론 Dirty Price: <strong>{formatNumber(valuation.theoretical_dirty_price)}</strong></div>
-              <div>경과이자: <strong>{formatNumber(valuation.accrued_interest)}</strong></div>
-              <div>이론 Clean Price: <strong>{formatNumber(valuation.theoretical_clean_price)}</strong></div>
-              <div>괴리(시장-이론): <strong>{formatNumber(valuation.mispricing)}</strong></div>
-              <div>괴리율: <strong>{formatPct(valuation.mispricing_percent)}</strong></div>
-              <div>표면금리/할인율: <strong>{formatPct(valuation.annual_coupon_rate)} / {formatPct(valuation.annual_yield_rate)}</strong></div>
-              <div>이자주기/잔여회차: <strong>{valuation.payment_interval_months ?? '-'}개월 / {valuation.remaining_periods ?? '-'}</strong></div>
-              <div>차기이자지급일: <strong>{formatDate(valuation.next_coupon_date ?? undefined)}</strong></div>
-              <div>만기일: <strong>{formatDate(valuation.maturity_date ?? undefined)}</strong></div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                계산 메모: <strong>{valuation.notes.length ? valuation.notes.join(' | ') : '-'}</strong>
-              </div>
-            </div>
+              <StatGrid minWidth={170}>
+                <StatTile label="시장가격" value={formatNumber(valuation.market_price)} />
+                <StatTile
+                  label="이론 Dirty Price"
+                  value={formatNumber(valuation.theoretical_dirty_price)}
+                />
+                <StatTile
+                  label="이론 Clean Price"
+                  value={formatNumber(valuation.theoretical_clean_price)}
+                />
+                <StatTile label="경과이자" value={formatNumber(valuation.accrued_interest)} />
+                <StatTile
+                  label="괴리 (시장-이론)"
+                  value={formatNumber(valuation.mispricing)}
+                  valueColor={colorFor(valuation.mispricing ?? 0)}
+                />
+                <StatTile
+                  label="표면금리 / 할인율"
+                  value={`${formatPct(valuation.annual_coupon_rate)} / ${formatPct(valuation.annual_yield_rate)}`}
+                />
+                <StatTile
+                  label="이자주기 / 잔여회차"
+                  value={`${valuation.payment_interval_months ?? '-'}개월 / ${valuation.remaining_periods ?? '-'}`}
+                />
+                <StatTile
+                  label="차기이자지급일"
+                  value={formatDate(valuation.next_coupon_date ?? undefined)}
+                />
+                <StatTile
+                  label="만기일"
+                  value={formatDate(valuation.maturity_date ?? undefined)}
+                />
+              </StatGrid>
+              {valuation.notes.length > 0 && (
+                <p
+                  style={{
+                    marginTop: space.md,
+                    fontSize: fontSize.sm,
+                    color: color.inkDim,
+                  }}
+                >
+                  계산 메모: {valuation.notes.join(' | ')}
+                </p>
+              )}
+            </Panel>
           )}
-          <div
-            style={{
-              padding: '12px 16px',
-              borderBottom: '1px solid #e5e7eb',
-              backgroundColor: '#ffffff',
-            }}
-          >
-            <div
-              style={{
-                fontSize: '13px',
-                color: '#374151',
-                marginBottom: '8px',
-                fontWeight: 600,
-              }}
-            >
-              장내채권현재가(일별) 바 차트
-            </div>
+
+          <Panel title="장내채권 현재가 (일별)">
             {dailyError && (
-              <div
-                style={{
-                  color: '#b91c1c',
-                  backgroundColor: '#fef2f2',
-                  border: '1px solid #fecaca',
-                  borderRadius: '6px',
-                  padding: '8px 10px',
-                  marginBottom: '8px',
-                  fontSize: '12px',
-                }}
-              >
-                {dailyError}
+              <div style={{ marginBottom: space.md }}>
+                <Notice>{dailyError}</Notice>
               </div>
             )}
-            <CandleChart data={dailyPrices} currency="KRW" height={320} />
-          </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <tbody>
-              {summaryRows.map(({ label, value }) => (
-                <tr
-                  key={label}
-                  style={{ borderBottom: '1px solid #f3f4f6' }}
-                >
-                  <td
-                    style={{
-                      padding: '10px 16px',
-                      width: '40%',
-                      color: '#6b7280',
-                      fontSize: '14px',
-                      backgroundColor: '#f9fafb',
-                    }}
-                  >
-                    {label}
-                  </td>
-                  <td
-                    style={{
-                      padding: '10px 16px',
-                      fontSize: '14px',
-                      fontWeight: 500,
-                    }}
-                  >
-                    {value}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div
-            style={{
-              padding: '12px 16px',
-              borderTop: '1px solid #e5e7eb',
-              backgroundColor: '#f9fafb',
-              fontSize: '13px',
-              color: '#374151',
-              fontWeight: 600,
-            }}
-          >
-            CTPF1114R 원본 필드 전체 ({allFields.length}개)
-          </div>
-          <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <tbody>
-                {allFields.map((field) => (
-                  <tr key={field.key} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                    <td
-                      style={{
-                        padding: '8px 16px',
-                        width: '28%',
-                        color: '#6b7280',
-                        fontSize: '12px',
-                        backgroundColor: '#f9fafb',
-                        verticalAlign: 'top',
-                      }}
-                    >
-                      {field.label}
-                      <div style={{ fontFamily: 'monospace', fontSize: '11px' }}>{field.key}</div>
-                    </td>
-                    <td style={{ padding: '8px 16px', fontSize: '13px', wordBreak: 'break-all' }}>
-                      {field.value}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            <CandleChart data={dailyPrices} currency="KRW" height={320} volumeHeight={80} />
+          </Panel>
+
+          <Panel title="채권 기본정보" flush>
+            <DefinitionTable
+              rows={summaryRows.map((row) => ({
+                key: row.label,
+                label: row.label,
+                value: row.value,
+              }))}
+            />
+          </Panel>
+
+          <Panel title={`원본 필드 전체 (${allFields.length}개)`} note="CTPF1114R 응답" flush>
+            <TableScroll maxHeight={360} bordered={false}>
+              <Table>
+                <tbody>
+                  {allFields.map((field) => (
+                    <tr key={field.key}>
+                      <th
+                        scope="row"
+                        style={{
+                          position: 'static',
+                          width: '28%',
+                          backgroundColor: color.surfaceMuted,
+                          color: color.inkMid,
+                          fontWeight: 500,
+                          verticalAlign: 'top',
+                        }}
+                      >
+                        {field.label}
+                        <div
+                          className="hts-mono"
+                          style={{ fontSize: fontSize.xs, color: color.inkDim }}
+                        >
+                          {field.key}
+                        </div>
+                      </th>
+                      <td style={{ wordBreak: 'break-all' }}>{field.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </TableScroll>
+          </Panel>
         </div>
       )}
 
       {!loadingInfo && !data && !infoError && (
-        <div
-          style={{
-            textAlign: 'center',
-            color: '#9ca3af',
-            padding: '48px',
-            border: '1px dashed #d1d5db',
-            borderRadius: '8px',
-          }}
-        >
-          채권코드를 입력하고 조회 버튼을 클릭하세요.
-        </div>
+        <EmptyState>채권코드를 입력하고 조회 버튼을 클릭하세요.</EmptyState>
       )}
 
-      <div style={{ marginTop: '28px' }}>
-        <h2 style={{ marginBottom: '8px' }}>채권 마스터 코드</h2>
-        <p style={{ marginTop: 0, color: '#6b7280' }}>
-          마스터 목록은 10건씩 지연 로딩됩니다.
-        </p>
+      <div style={{ marginTop: space.xxl }}>
+        <SectionHeader
+          title="채권 마스터 코드"
+          description={`마스터 목록은 ${PAGE_SIZE}건씩 지연 로딩됩니다.`}
+        />
 
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
-          <input
+        <div style={{ display: 'flex', gap: space.md, marginBottom: space.md }}>
+          <TextInput
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                const q = query.trim();
-                setSubmittedQuery(q);
-                loadBondMaster(0, q, true, activeFilters);
+                applyFilters();
               }
             }}
             placeholder="채권코드 또는 채권명 검색"
-            style={{
-              flex: 1,
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              padding: '10px 12px',
-              fontSize: '14px',
-            }}
+            aria-label="채권 검색"
           />
-          <button
-            onClick={() => {
-              const q = query.trim();
-              setSubmittedQuery(q);
-              loadBondMaster(0, q, true, activeFilters);
-            }}
-            disabled={loadingMaster}
-            style={{
-              border: 'none',
-              borderRadius: '6px',
-              padding: '10px 20px',
-              backgroundColor: loadingMaster ? '#9ca3af' : '#0f766e',
-              color: 'white',
-              cursor: loadingMaster ? 'not-allowed' : 'pointer',
-              fontSize: '14px',
-            }}
-          >
+          <Button onClick={applyFilters} disabled={loadingMaster}>
             검색
-          </button>
-          <button
-            onClick={() => {
-              setQuery('');
-              setSubmittedQuery('');
-              setBondTypeFilter('F9');
-              setBondClassCodeFilter('');
-              setBondInterestClassCodeFilter('');
-              setListedDateFrom('');
-              setListedDateTo('');
-              setIssueDateFrom('');
-              setIssueDateTo('');
-              setMaturityDate('');
-              loadBondMaster(0, '', true, { bondType: 'F9' });
-            }}
-            disabled={loadingMaster}
-            style={{
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              padding: '10px 16px',
-              backgroundColor: 'white',
-              color: '#111827',
-              cursor: loadingMaster ? 'not-allowed' : 'pointer',
-              fontSize: '14px',
-              whiteSpace: 'nowrap',
-            }}
-          >
+          </Button>
+          <Button variant="secondary" onClick={resetFilters} disabled={loadingMaster}>
             필터 초기화
-          </button>
+          </Button>
         </div>
 
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-            gap: '10px',
-            marginBottom: '12px',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+            gap: space.md,
+            marginBottom: space.md,
           }}
         >
-          <select
-            value={bondTypeFilter}
-            onChange={(e) => setBondTypeFilter(e.target.value)}
-            style={{ border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '13px' }}
-          >
-            <option value="">유형 전체</option>
-            {BOND_TYPE_OPTIONS.map((option) => (
-              <option
-                key={option.value}
-                value={option.value}
-                disabled={(availableBondTypes[option.value] ?? 0) === 0}
-              >
-                {option.label} ({formatNumber(availableBondTypes[option.value] ?? 0)}건)
-              </option>
-            ))}
-          </select>
-          <select
-            value={bondClassCodeFilter}
-            onChange={(e) => setBondClassCodeFilter(e.target.value)}
-            style={{ border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '13px' }}
-          >
-            <option value="">분류코드 전체</option>
-            {classOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label} (
-                {formatNumber(
-                  (availableBondClassCodesByType[bondTypeFilter] ?? {})[option.value] ?? 0
-                )}
-                건)
-              </option>
-            ))}
-          </select>
-          <select
-            value={bondInterestClassCodeFilter}
-            onChange={(e) => setBondInterestClassCodeFilter(e.target.value)}
-            style={{ border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '13px' }}
-          >
-            <option value="">이자유형 전체</option>
-            {interestOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label} (
-                {formatNumber(
-                  (availableBondInterestCodesByType[bondTypeFilter] ?? {})[option.value] ?? 0
-                )}
-                건)
-              </option>
-            ))}
-          </select>
-          <div>
-            <div style={{ fontSize: '12px', color: '#4b5563', marginBottom: '4px' }}>상장일 시작</div>
-            <input
+          <Field label="채권 유형">
+            <Select
+              value={bondTypeFilter}
+              onChange={(e) => setBondTypeFilter(e.target.value)}
+            >
+              <option value="">유형 전체</option>
+              {BOND_TYPE_OPTIONS.map((option) => (
+                <option
+                  key={option.value}
+                  value={option.value}
+                  disabled={(availableBondTypes[option.value] ?? 0) === 0}
+                >
+                  {option.label} ({formatNumber(availableBondTypes[option.value] ?? 0)}건)
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="분류코드">
+            <Select
+              value={bondClassCodeFilter}
+              onChange={(e) => setBondClassCodeFilter(e.target.value)}
+            >
+              <option value="">분류코드 전체</option>
+              {classOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label} (
+                  {formatNumber(
+                    (availableBondClassCodesByType[bondTypeFilter] ?? {})[option.value] ?? 0
+                  )}
+                  건)
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="이자유형">
+            <Select
+              value={bondInterestClassCodeFilter}
+              onChange={(e) => setBondInterestClassCodeFilter(e.target.value)}
+            >
+              <option value="">이자유형 전체</option>
+              {interestOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label} (
+                  {formatNumber(
+                    (availableBondInterestCodesByType[bondTypeFilter] ?? {})[option.value] ?? 0
+                  )}
+                  건)
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="상장일 시작">
+            <TextInput
               type="date"
               value={listedDateFrom}
               onChange={(e) => setListedDateFrom(e.target.value)}
-              style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '13px' }}
             />
-          </div>
-          <div>
-            <div style={{ fontSize: '12px', color: '#4b5563', marginBottom: '4px' }}>상장일 종료</div>
-            <input
+          </Field>
+          <Field label="상장일 종료">
+            <TextInput
               type="date"
               value={listedDateTo}
               onChange={(e) => setListedDateTo(e.target.value)}
-              style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '13px' }}
             />
-          </div>
-          <div>
-            <div style={{ fontSize: '12px', color: '#4b5563', marginBottom: '4px' }}>발행일 시작</div>
-            <input
+          </Field>
+          <Field label="발행일 시작">
+            <TextInput
               type="date"
               value={issueDateFrom}
               onChange={(e) => setIssueDateFrom(e.target.value)}
-              style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '13px' }}
             />
-          </div>
-          <div>
-            <div style={{ fontSize: '12px', color: '#4b5563', marginBottom: '4px' }}>발행일 종료</div>
-            <input
+          </Field>
+          <Field label="발행일 종료">
+            <TextInput
               type="date"
               value={issueDateTo}
               onChange={(e) => setIssueDateTo(e.target.value)}
-              style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '13px' }}
             />
-          </div>
-          <div>
-            <div style={{ fontSize: '12px', color: '#4b5563', marginBottom: '4px' }}>상환일(만기일)</div>
-            <input
+          </Field>
+          <Field label="상환일 (만기일)">
+            <TextInput
               type="date"
               value={maturityDate}
               onChange={(e) => setMaturityDate(e.target.value)}
-              style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '13px' }}
             />
-          </div>
+          </Field>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
-          <button
-            onClick={() => {
-              const q = query.trim();
-              setSubmittedQuery(q);
-              loadBondMaster(0, q, true, activeFilters);
-            }}
-            disabled={loadingMaster}
-            style={{
-              border: 'none',
-              borderRadius: '6px',
-              padding: '8px 16px',
-              backgroundColor: loadingMaster ? '#9ca3af' : '#0f766e',
-              color: 'white',
-              cursor: loadingMaster ? 'not-allowed' : 'pointer',
-              fontSize: '13px',
-            }}
-          >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            marginBottom: space.sm,
+          }}
+        >
+          <Button size="sm" onClick={applyFilters} disabled={loadingMaster}>
             필터 적용
-          </button>
+          </Button>
         </div>
 
-        <div style={{ color: '#374151', fontSize: '14px', marginBottom: '8px' }}>
-          총 {formatNumber(totalLoaded)}건
-          {submittedQuery ? ` | 검색어: ${submittedQuery}` : ''}
-          {bondTypeFilter ? ` | 유형: ${bondTypeFilter}` : ''}
-          {bondClassCodeFilter ? ` | 분류코드: ${bondClassCodeFilter}` : ''}
-          {bondInterestClassCodeFilter ? ` | 이자유형: ${bondInterestClassCodeFilter}` : ''}
-          {listedDateFrom ? ` | 상장일 시작: ${yyyymmddToDateInput(dateInputToYyyymmdd(listedDateFrom))}` : ''}
-          {listedDateTo ? ` | 상장일 종료: ${yyyymmddToDateInput(dateInputToYyyymmdd(listedDateTo))}` : ''}
-          {issueDateFrom ? ` | 발행일 시작: ${yyyymmddToDateInput(dateInputToYyyymmdd(issueDateFrom))}` : ''}
-          {issueDateTo ? ` | 발행일 종료: ${yyyymmddToDateInput(dateInputToYyyymmdd(issueDateTo))}` : ''}
-          {maturityDate ? ` | 상환일: ${yyyymmddToDateInput(dateInputToYyyymmdd(maturityDate))}` : ''}
-          {sourceFile ? ` | source: ${sourceFile}` : ''}
-        </div>
-        <div style={{ color: '#6b7280', fontSize: '12px', marginBottom: '10px' }}>
-          소스 유형 현황:
-          {' '}
-          {Object.keys(availableBondTypes).length === 0
-            ? '-'
-            : Object.entries(availableBondTypes)
-                .map(([code, count]) => `${code} ${formatNumber(count)}건`)
-                .join(' / ')}
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: space.sm,
+            marginBottom: space.sm,
+            fontSize: fontSize.md,
+            color: color.inkMid,
+          }}
+        >
+          <span>총 {formatNumber(totalLoaded)}건</span>
+          {appliedFilterChips.map((chip) => (
+            <Badge key={chip}>{chip}</Badge>
+          ))}
+          {sourceFile && (
+            <span
+              className="hts-mono"
+              style={{ fontSize: fontSize.sm, color: color.inkDim }}
+            >
+              {sourceFile}
+            </span>
+          )}
         </div>
 
         {masterError && (
-          <div
-            style={{
-              color: '#dc2626',
-              backgroundColor: '#fef2f2',
-              border: '1px solid #fecaca',
-              borderRadius: '6px',
-              padding: '12px',
-              marginBottom: '10px',
-            }}
-          >
-            {masterError}
+          <div style={{ marginBottom: space.md }}>
+            <Notice onRetry={applyFilters}>{masterError}</Notice>
           </div>
         )}
 
-        <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1120px' }}>
+        <TableScroll>
+          <Table minWidth={1120}>
             <thead>
-              <tr style={{ backgroundColor: '#f9fafb' }}>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>코드</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>채권명</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>유형</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>분류코드</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>이자유형코드</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>분류</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>상장일</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>발행일</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>만기일</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>표면금리</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>등락률</th>
+              <tr>
+                <th>코드</th>
+                <th>채권명</th>
+                <th>유형</th>
+                <th>분류코드</th>
+                <th>이자유형코드</th>
+                <th>분류</th>
+                <th>상장일</th>
+                <th>발행일</th>
+                <th>만기일</th>
+                <th className="hts-num">표면금리</th>
+                <th className="hts-num">등락률</th>
               </tr>
             </thead>
             <tbody>
               {masterRows.map((item) => (
                 <tr key={item.pdno}>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{item.pdno}</td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{item.name || '-'}</td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{item.bond_type || '-'}</td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{item.bond_class_code || '-'}</td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{item.bond_interest_class_code || '-'}</td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{item.bond_class_name || '-'}</td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{formatDate(item.listed_date)}</td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{formatDate(item.issue_date)}</td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{formatDate(item.maturity_date)}</td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>
-                    {item.surface_interest_rate === null || item.surface_interest_rate === undefined
+                  <td className="hts-mono">{item.pdno}</td>
+                  <td>{item.name || '-'}</td>
+                  <td>{item.bond_type || '-'}</td>
+                  <td>{item.bond_class_code || '-'}</td>
+                  <td>{item.bond_interest_class_code || '-'}</td>
+                  <td>{item.bond_class_name || '-'}</td>
+                  <td>{formatDate(item.listed_date)}</td>
+                  <td>{formatDate(item.issue_date)}</td>
+                  <td>{formatDate(item.maturity_date)}</td>
+                  <td className="hts-num">
+                    {item.surface_interest_rate === null ||
+                    item.surface_interest_rate === undefined
                       ? '-'
                       : `${item.surface_interest_rate.toFixed(4)}%`}
                   </td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>{formatPct(item.change_percent)}</td>
+                  <td
+                    className="hts-num"
+                    style={{ color: colorFor(item.change_percent ?? 0) }}
+                  >
+                    {formatPct(item.change_percent)}
+                  </td>
                 </tr>
               ))}
               {!loadingMaster && masterRows.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={11}
-                    style={{
-                      padding: '16px',
-                      textAlign: 'center',
-                      color: '#6b7280',
-                    }}
-                  >
+                  <td colSpan={11} style={{ textAlign: 'center', color: color.inkDim }}>
                     표시할 채권 데이터가 없습니다.
                   </td>
                 </tr>
               )}
             </tbody>
-          </table>
-        </div>
+          </Table>
+        </TableScroll>
 
-        <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center' }}>
-          <button
+        <div
+          style={{
+            marginTop: space.md,
+            display: 'flex',
+            justifyContent: 'center',
+          }}
+        >
+          <Button
+            variant="secondary"
             onClick={() =>
               loadBondMaster(offset + PAGE_SIZE, submittedQuery, false, activeFilters)
             }
             disabled={loadingMaster || !hasMore}
-            style={{
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              padding: '8px 16px',
-              backgroundColor: loadingMaster || !hasMore ? '#f3f4f6' : 'white',
-              color: '#111827',
-              cursor: loadingMaster || !hasMore ? 'not-allowed' : 'pointer',
-              fontSize: '14px',
-            }}
           >
-            {loadingMaster ? '불러오는 중...' : hasMore ? '10건 더 불러오기' : '마지막 페이지'}
-          </button>
+            {loadingMaster
+              ? '불러오는 중...'
+              : hasMore
+              ? `${PAGE_SIZE}건 더 불러오기`
+              : '마지막 페이지'}
+          </Button>
         </div>
       </div>
     </div>

@@ -8,39 +8,46 @@ import { StockCard } from '../components/StockCard';
 import { CandleChart } from '../components/CandleChart';
 import { SymbolSearch } from '../components/SymbolSearch';
 import {
+  Badge,
+  Button,
+  Chip,
+  ChipGroup,
+  EmptyState,
+  Field,
+  Notice,
+  Panel,
+  SectionHeader,
+  Select,
   SkeletonPanel,
-  SkeletonTiles,
-  StaleOverlay,
-} from '../components/Skeleton';
+  StatGrid,
+  StatTile,
+  Table,
+  TableScroll,
+  TextInput,
+} from '../components/ui';
+import { color, fontSize, space } from '../theme/tokens';
+import { ko } from '../i18n/ko';
+import { formatKrwCompact, formatNumber } from '../utils/format';
+import { toUserMessage } from '../utils/apiError';
 import {
-  getApiErrorMessage,
   useKoreanCandles,
   useKoreanEstimates,
   useKoreanFinancials,
   useKoreanQuote,
   useKoreanValuation,
   type ChartParams,
-  type FinancialItem,
   type FinancialParams,
 } from '../hooks/useKoreanMarket';
-import { formatKoreanUnits, formatKoreanUnitsDetailed } from '../utils/format';
 import type {
   ChartInterval,
   MinuteInterval,
   PeriodType,
+  KoreanFinancialItem,
 } from '../types/korean';
 
 const DEFAULT_SYMBOL = '005930'; // Samsung Electronics
 const RECENT_KEY = 'kr-recent-symbols';
 const RECENT_LIMIT = 6;
-
-const POPULAR_STOCKS: Array<{ symbol: string; name: string }> = [
-  { symbol: '005930', name: '삼성전자' },
-  { symbol: '000660', name: 'SK하이닉스' },
-  { symbol: '005380', name: '현대차' },
-  { symbol: '035420', name: 'NAVER' },
-  { symbol: '035720', name: '카카오' },
-];
 
 type RecentEntry = { symbol: string; name?: string };
 
@@ -55,10 +62,32 @@ const readRecents = (): RecentEntry[] => {
   }
 };
 
+const writeRecents = (entries: RecentEntry[]) => {
+  try {
+    window.localStorage.setItem(RECENT_KEY, JSON.stringify(entries));
+  } catch {
+    // Storage can be unavailable (private mode); recents are a convenience.
+  }
+};
+
+const POPULAR_STOCKS: Array<{ code: string; name: string }> = [
+  { code: '005930', name: '삼성전자' },
+  { code: '000660', name: 'SK하이닉스' },
+  { code: '005380', name: '현대차' },
+  { code: '035420', name: 'NAVER' },
+  { code: '035720', name: '카카오' },
+];
+
+const STATEMENTS: Array<{ value: 'IS' | 'BS' | 'CF'; label: string }> = [
+  { value: 'IS', label: ko.financials.incomeStatement },
+  { value: 'BS', label: ko.financials.balanceSheet },
+  { value: 'CF', label: ko.financials.cashFlow },
+];
+
 export const KoreanMarketPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // The symbol lives in the URL so a view can be bookmarked and shared, and
+  // The symbol lives in the URL so a view is bookmarkable, shareable, and
   // survives a reload instead of snapping back to Samsung.
   const symbol = searchParams.get('symbol')?.trim() || DEFAULT_SYMBOL;
 
@@ -111,10 +140,10 @@ export const KoreanMarketPage: React.FC = () => {
     ]
   );
 
+  // The quote gates the page; the other panels wait for it to resolve, then
+  // each load independently and cache under their own key.
   const quoteQuery = useKoreanQuote(symbol, true);
   const hasQuote = Boolean(quoteQuery.data);
-
-  // Dependent sections only run once the symbol resolves to a real quote.
   const valuationQuery = useKoreanValuation(symbol, financialParams, hasQuote);
   const financialsQuery = useKoreanFinancials(symbol, financialParams, hasQuote);
   const estimatesQuery = useKoreanEstimates(symbol, hasQuote);
@@ -126,35 +155,50 @@ export const KoreanMarketPage: React.FC = () => {
   const estimatePerform = estimatesQuery.data ?? null;
   const candleData = candlesQuery.data ?? [];
 
+  const loading = quoteQuery.isFetching;
+  const valuationLoading = valuationQuery.isLoading;
+  const financialsLoading = financialsQuery.isLoading;
+  const estimateLoading = estimatesQuery.isLoading;
+  const candleLoading = candlesQuery.isLoading;
+
+  const error = quoteQuery.error
+    ? toUserMessage(quoteQuery.error, ko.stock.loadFailed)
+    : null;
+  const valuationError = valuationQuery.error
+    ? toUserMessage(valuationQuery.error, ko.stock.valuationFailed)
+    : null;
+  const financialsError = financialsQuery.error
+    ? toUserMessage(financialsQuery.error, ko.financials.loadFailed)
+    : null;
+  const estimateError = estimatesQuery.error
+    ? toUserMessage(estimatesQuery.error, ko.estimate.loadFailed)
+    : null;
+  const candleError = candlesQuery.error
+    ? toUserMessage(candlesQuery.error, ko.chart.noData)
+    : null;
+
   const selectSymbol = useCallback(
     (next: string, name?: string) => {
       const trimmed = next.trim();
       if (!trimmed) return;
-      setSearchParams(
-        (prev) => {
-          const params = new URLSearchParams(prev);
-          params.set('symbol', trimmed);
-          return params;
-        },
-        { replace: false }
-      );
+      setSearchParams((prev) => {
+        const params = new URLSearchParams(prev);
+        params.set('symbol', trimmed);
+        return params;
+      });
       setRecents((prev) => {
         const merged = [
           { symbol: trimmed, name },
           ...prev.filter((entry) => entry.symbol !== trimmed),
         ].slice(0, RECENT_LIMIT);
-        try {
-          window.localStorage.setItem(RECENT_KEY, JSON.stringify(merged));
-        } catch {
-          // Storage can be unavailable (private mode); recents are optional.
-        }
+        writeRecents(merged);
         return merged;
       });
     },
     [setSearchParams]
   );
 
-  // Record the resolved company name once the quote arrives.
+  // Backfill the company name on the recents entry once the quote lands.
   useEffect(() => {
     if (!quote?.name) return;
     setRecents((prev) => {
@@ -163,130 +207,57 @@ export const KoreanMarketPage: React.FC = () => {
       const merged = prev.map((entry) =>
         entry.symbol === quote.symbol ? { ...entry, name: quote.name } : entry
       );
-      try {
-        window.localStorage.setItem(RECENT_KEY, JSON.stringify(merged));
-      } catch {
-        // Ignore storage failures.
-      }
+      writeRecents(merged);
       return merged;
     });
   }, [quote?.symbol, quote?.name]);
 
-  const containerStyle: React.CSSProperties = {
-    maxWidth: '1400px',
-    margin: '0 auto',
-    padding: 'clamp(12px, 3vw, 24px)',
-  };
-
-  const controlsStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: '12px',
-    marginBottom: '16px',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-  };
-
-  const selectStyle: React.CSSProperties = {
-    padding: '8px 12px',
-    fontSize: '14px',
-    border: '1px solid #d1d5db',
-    borderRadius: '6px',
-    backgroundColor: 'white',
-  };
-
-  const statementBadgeStyle = (active: boolean): React.CSSProperties => ({
-    padding: '6px 10px',
-    fontSize: '12px',
-    fontWeight: 600,
-    borderRadius: '999px',
-    border: active ? '1px solid #2563eb' : '1px solid #d1d5db',
-    backgroundColor: active ? '#eff6ff' : 'white',
-    color: active ? '#1d4ed8' : '#374151',
-    cursor: 'pointer',
-  });
-
-  const chipStyle: React.CSSProperties = {
-    padding: '6px 12px',
-    fontSize: '13px',
-    borderRadius: '999px',
-    border: '1px solid #d1d5db',
-    backgroundColor: 'white',
-    color: '#334155',
-    cursor: 'pointer',
-  };
-
-  const sectionHeadingStyle: React.CSSProperties = {
-    fontSize: '24px',
-    fontWeight: 'bold',
-    margin: 0,
-  };
+  const handleSearch = useCallback(() => {
+    void quoteQuery.refetch();
+    void valuationQuery.refetch();
+    void financialsQuery.refetch();
+    void estimatesQuery.refetch();
+    void candlesQuery.refetch();
+  }, [
+    quoteQuery,
+    valuationQuery,
+    financialsQuery,
+    estimatesQuery,
+    candlesQuery,
+  ]);
 
   const formatValue = (value: unknown) => {
     if (value === null || value === undefined || value === '') return '-';
     if (typeof value === 'number') {
       const absValue = Math.abs(value);
       if (!Number.isInteger(value) && absValue < 1000) {
-        return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        return value.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
       }
-      return value.toLocaleString();
+      return value.toLocaleString('ko-KR');
     }
     return String(value);
   };
 
   const formatPeriodLabel = (year?: number, quarter?: number) => {
     if (!year) return '-';
-    return quarter ? `${year} Q${quarter}` : `${year} Annual`;
-  };
-
-  const estimateOutput1Labels: Record<string, string> = {
-    elw_short_code: 'ELW Short Code',
-    hts_korean_name: 'HTS Korean Name',
-    elw_current_price: 'ELW Current Price',
-    change_vs_prev_close: 'Change vs Prev Close',
-    change_sign: 'Change Sign',
-    change_rate: 'Change Rate',
-    cumulative_volume: 'Cumulative Volume',
-    strike_price: 'Strike Price',
-  };
-
-  const estimateMetricLabels: Record<string, string> = {
-    revenue: 'Revenue',
-    revenue_growth_rate: 'Revenue Growth Rate',
-    operating_income: 'Operating Income',
-    operating_income_growth_rate: 'Operating Income Growth Rate',
-    net_income: 'Net Income',
-    net_income_growth_rate: 'Net Income Growth Rate',
-    ebitda: 'EBITDA',
-    eps: 'EPS',
-    eps_growth_rate: 'EPS Growth Rate',
-    per: 'PER',
-    ev_ebitda: 'EV/EBITDA',
-    roe: 'ROE',
-    debt_ratio: 'Debt Ratio',
-    interest_coverage_ratio: 'Interest Coverage Ratio',
+    return quarter
+      ? `${year}년 ${quarter}분기`
+      : `${year}년 ${ko.valuation.annual}`;
   };
 
   const estimateYearLabels = (estimatePerform?.output4 || []) as string[];
 
   const buildEstimateSummaryEntries = (row: Record<string, unknown>) => {
-    const orderedKeys = Object.keys(estimateOutput1Labels).filter(
-      (key) => key in row
-    );
+    const labels: Record<string, string> = ko.estimateSummary;
+    const orderedKeys = Object.keys(labels).filter((key) => key in row);
     const remainingKeys = Object.keys(row)
       .filter((key) => !orderedKeys.includes(key))
       .sort();
-    const allKeys = [...orderedKeys, ...remainingKeys];
-    return allKeys.map((key) => ({
+    return [...orderedKeys, ...remainingKeys].map((key) => ({
       key,
-      label: estimateOutput1Labels[key] ?? key,
+      label: labels[key] ?? key,
       value: row[key],
     }));
-  };
-
-  const statementMap = {
-    IS: { label: 'Income Statement', key: 'income_statement' as const },
-    BS: { label: 'Balance Sheet', key: 'balance_sheet' as const },
-    CF: { label: 'Cash Flow', key: 'cashflow_statement' as const },
   };
 
   const parseAmount = (value?: string) => {
@@ -297,7 +268,7 @@ export const KoreanMarketPage: React.FC = () => {
     return Number.isFinite(parsed) ? parsed : null;
   };
 
-  const matchesStatement = useCallback((item: FinancialItem) => {
+  const matchesStatement = (item: KoreanFinancialItem) => {
     const sjDiv = (item.sj_div || '').toUpperCase();
     if (sjDiv) {
       if (finStatement === 'IS') return sjDiv === 'IS' || sjDiv === 'CIS';
@@ -310,23 +281,24 @@ export const KoreanMarketPage: React.FC = () => {
       return sjName.includes('손익계산서') || sjName.includes('포괄손익');
     if (finStatement === 'CF') return sjName.includes('현금흐름');
     return false;
-  }, [finStatement]);
+  };
 
-  const statementItems = useMemo(
-    () => (comprehensiveFinancials?.data || []).filter(matchesStatement),
-    [comprehensiveFinancials, matchesStatement]
+  const statementItems = (comprehensiveFinancials?.data || []).filter(
+    matchesStatement
   );
 
-  const selectedStatementItems = useMemo(() => {
-    const needle = accountFilter.trim().toLowerCase();
-    if (!needle) return statementItems;
-    return statementItems.filter((item) =>
-      (item.account_nm || '').toLowerCase().includes(needle)
-    );
-  }, [statementItems, accountFilter]);
+  // Highlights summarise the whole statement, so they read the unfiltered set;
+  // only the table below narrows to the account search.
+  const selectedStatementItems = accountFilter.trim()
+    ? statementItems.filter((item) =>
+        (item.account_nm || '')
+          .toLowerCase()
+          .includes(accountFilter.trim().toLowerCase())
+      )
+    : statementItems;
 
   const pickValue = (
-    items: FinancialItem[],
+    items: KoreanFinancialItem[],
     keys: string[]
   ): { key: string; value: number } | null => {
     for (const key of keys) {
@@ -348,13 +320,13 @@ export const KoreanMarketPage: React.FC = () => {
       const liabilities = pickValue(statementItems, ['부채총계']);
       const equity = pickValue(statementItems, ['자본총계']);
       return [
-        assets && { label: 'Assets', key: assets.key, value: assets.value },
+        assets && { label: ko.financials.assets, key: assets.key, value: assets.value },
         liabilities && {
-          label: 'Liabilities',
+          label: ko.financials.liabilities,
           key: liabilities.key,
           value: liabilities.value,
         },
-        equity && { label: 'Equity', key: equity.key, value: equity.value },
+        equity && { label: ko.financials.equity, key: equity.key, value: equity.value },
       ].filter(Boolean) as Array<{ label: string; key: string; value: number }>;
     }
     if (finStatement === 'IS') {
@@ -365,14 +337,14 @@ export const KoreanMarketPage: React.FC = () => {
         '분기순이익(손실)',
       ]);
       return [
-        revenue && { label: 'Revenue', key: revenue.key, value: revenue.value },
+        revenue && { label: ko.financials.revenue, key: revenue.key, value: revenue.value },
         opIncome && {
-          label: 'Operating Income',
+          label: ko.financials.operatingIncome,
           key: opIncome.key,
           value: opIncome.value,
         },
         netIncome && {
-          label: 'Net Income',
+          label: ko.financials.netIncome,
           key: netIncome.key,
           value: netIncome.value,
         },
@@ -382,22 +354,33 @@ export const KoreanMarketPage: React.FC = () => {
     const invCF = pickValue(statementItems, ['투자활동현금흐름']);
     const finCF = pickValue(statementItems, ['재무활동현금흐름']);
     return [
-      opCF && { label: 'Operating CF', key: opCF.key, value: opCF.value },
-      invCF && { label: 'Investing CF', key: invCF.key, value: invCF.value },
-      finCF && { label: 'Financing CF', key: finCF.key, value: finCF.value },
+      opCF && {
+        label: ko.financials.operatingCashFlow,
+        key: opCF.key,
+        value: opCF.value,
+      },
+      invCF && {
+        label: ko.financials.investingCashFlow,
+        key: invCF.key,
+        value: invCF.value,
+      },
+      finCF && {
+        label: ko.financials.financingCashFlow,
+        key: finCF.key,
+        value: finCF.value,
+      },
     ].filter(Boolean) as Array<{ label: string; key: string; value: number }>;
   };
 
   const highlights = buildHighlights();
   const requestedQuarter = finPeriod === 'quarterly' ? finQuarter : undefined;
-  const requestedPeriodLabel =
-    finPeriod === 'quarterly' ? `${finYear} Q${finQuarter}` : `${finYear} Annual`;
+  const requestedPeriodLabel = formatPeriodLabel(finYear, requestedQuarter);
   const usedPeriodLabel = valuation
     ? formatPeriodLabel(valuation.fiscal_year, valuation.fiscal_quarter)
     : '-';
   const ttmQuarterLabel = valuation?.ttm_quarters?.length
     ? valuation.ttm_quarters
-        .map((item) => `${item.year} Q${item.quarter}`)
+        .map((item) => `${item.year}년 ${item.quarter}분기`)
         .join(', ')
     : '-';
   const estimateLabelText = valuation?.estimate_12mf_labels?.length
@@ -408,1023 +391,657 @@ export const KoreanMarketPage: React.FC = () => {
     (valuation.fiscal_year !== finYear ||
       valuation.fiscal_quarter !== requestedQuarter);
 
-  const valuationError = valuationQuery.error
-    ? getApiErrorMessage(
-        valuationQuery.error,
-        'Failed to load valuation metrics.'
-      )
-    : null;
-  const financialsError = financialsQuery.error
-    ? getApiErrorMessage(
-        financialsQuery.error,
-        'Failed to load financial statements.'
-      )
-    : null;
-  const estimateError = estimatesQuery.error
-    ? getApiErrorMessage(
-        estimatesQuery.error,
-        'Failed to load estimate performance data.'
-      )
-    : null;
-  const quoteError = quoteQuery.error
-    ? getApiErrorMessage(
-        quoteQuery.error,
-        'Failed to load stock data. Please check the symbol and try again.'
-      )
-    : null;
-  const candlesError = candlesQuery.error
-    ? getApiErrorMessage(candlesQuery.error, 'Failed to load chart data.')
-    : null;
-
-  const valuationMetrics: Array<{
-    label: string;
-    value: string;
-  }> = valuation
+  /** Valuation metrics grouped by the basis they are computed on. */
+  const valuationGroups = valuation
     ? [
-        { label: 'PER', value: valuation.per?.toFixed(2) ?? 'N/A' },
-        { label: 'PER (TTM)', value: valuation.per_ttm?.toFixed(2) ?? 'N/A' },
-        { label: 'PER (12MF)', value: valuation.per_12mf?.toFixed(2) ?? 'N/A' },
-        { label: 'PBR', value: valuation.pbr?.toFixed(2) ?? 'N/A' },
-        { label: 'PBR (TTM)', value: valuation.pbr_ttm?.toFixed(2) ?? 'N/A' },
         {
-          label: 'EPS',
-          value:
-            valuation.eps !== undefined && valuation.eps !== null
-              ? `₩${valuation.eps.toFixed(2)}`
-              : 'N/A',
+          title: ko.valuation.actual,
+          note: usedPeriodLabel,
+          metrics: [
+            { label: 'PER', value: valuation.per, unit: '배' },
+            { label: 'PBR', value: valuation.pbr, unit: '배' },
+            { label: 'EPS', value: valuation.eps, unit: '원' },
+            { label: 'BPS', value: valuation.bps, unit: '원' },
+          ],
         },
         {
-          label: 'EPS (TTM)',
-          value:
-            valuation.eps_ttm !== undefined && valuation.eps_ttm !== null
-              ? `₩${valuation.eps_ttm.toFixed(2)}`
-              : 'N/A',
+          title: ko.valuation.ttm,
+          note: ttmQuarterLabel,
+          metrics: [
+            { label: 'PER', value: valuation.per_ttm, unit: '배' },
+            { label: 'PBR', value: valuation.pbr_ttm, unit: '배' },
+            { label: 'EPS', value: valuation.eps_ttm, unit: '원' },
+            { label: 'BPS', value: valuation.bps_ttm, unit: '원' },
+          ],
         },
         {
-          label: 'EPS (12MF)',
-          value:
-            valuation.eps_12mf !== undefined && valuation.eps_12mf !== null
-              ? `₩${valuation.eps_12mf.toFixed(2)}`
-              : 'N/A',
-        },
-        {
-          label: 'BPS',
-          value:
-            valuation.bps !== undefined && valuation.bps !== null
-              ? `₩${valuation.bps.toFixed(2)}`
-              : 'N/A',
-        },
-        {
-          label: 'BPS (TTM)',
-          value:
-            valuation.bps_ttm !== undefined && valuation.bps_ttm !== null
-              ? `₩${valuation.bps_ttm.toFixed(2)}`
-              : 'N/A',
+          title: ko.valuation.forward12m,
+          note: estimateLabelText,
+          metrics: [
+            { label: 'PER', value: valuation.per_12mf, unit: '배' },
+            { label: 'EPS', value: valuation.eps_12mf, unit: '원' },
+          ],
         },
       ]
     : [];
 
-  const errorBanner = (message: string, onRetry?: () => void) => (
-    <div
-      role="alert"
-      style={{
-        padding: '12px',
-        marginBottom: '12px',
-        backgroundColor: '#fee2e2',
-        color: '#991b1b',
-        borderRadius: '6px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '12px',
-        flexWrap: 'wrap',
-      }}
-    >
-      <span>{message}</span>
-      {onRetry && (
-        <button
-          type="button"
-          onClick={onRetry}
-          style={{
-            padding: '6px 12px',
-            fontSize: '13px',
-            fontWeight: 600,
-            borderRadius: '6px',
-            border: '1px solid #991b1b',
-            backgroundColor: 'white',
-            color: '#991b1b',
-            cursor: 'pointer',
-          }}
-        >
-          Retry
-        </button>
-      )}
-    </div>
+  const formatMetric = (value: number | undefined | null, unit: string) => {
+    if (value === undefined || value === null || !Number.isFinite(value)) {
+      return 'N/A';
+    }
+    if (unit === '원') return `${formatNumber(value, 0)}원`;
+    return `${value.toFixed(2)}${unit}`;
+  };
+
+  const yearOptions = Array.from(
+    { length: 5 },
+    (_, i) => new Date().getFullYear() - i
   );
 
   return (
-    <div style={containerStyle}>
-      <h1 style={{ fontSize: 'clamp(24px, 5vw, 32px)', fontWeight: 'bold', marginBottom: '24px' }}>
-        🇰🇷 Korean Market
-      </h1>
+    <div className="hts-page">
+      <SectionHeader
+        title={`🇰🇷 ${ko.stock.title}`}
+        description="종목코드로 시세, 투자지표, 재무제표, 추정실적을 조회합니다."
+      />
 
-      <div
-        style={{
-          display: 'flex',
-          gap: '12px',
-          marginBottom: '12px',
-          flexWrap: 'wrap',
-          alignItems: 'flex-start',
-        }}
-      >
+      <div style={{ display: 'flex', gap: space.md, marginBottom: space.lg }}>
         <SymbolSearch
           value={symbol}
           onSelect={(next, item) => selectSymbol(next, item?.name ?? undefined)}
         />
-        <button
-          type="button"
-          onClick={() => {
-            quoteQuery.refetch();
-            valuationQuery.refetch();
-            financialsQuery.refetch();
-            estimatesQuery.refetch();
-            candlesQuery.refetch();
-          }}
-          disabled={quoteQuery.isFetching}
-          style={{
-            padding: '12px 24px',
-            fontSize: '16px',
-            backgroundColor: '#3b82f6',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-          }}
-        >
-          {quoteQuery.isFetching ? 'Loading…' : 'Refresh'}
-        </button>
+        <Button onClick={handleSearch} disabled={loading}>
+          {loading ? ko.common.searching : ko.common.refresh}
+        </Button>
       </div>
 
-      {/* Popular + recently viewed shortcuts */}
-      <div style={{ ...controlsStyle, gap: '8px' }}>
-        <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500 }}>
-          Popular:
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: space.sm,
+          flexWrap: 'wrap',
+          marginBottom: space.xl,
+        }}
+      >
+        <span style={{ fontSize: fontSize.md, color: color.inkDim }}>
+          {ko.stock.popular}
         </span>
-        {POPULAR_STOCKS.map((stock) => (
-          <button
-            key={stock.symbol}
-            type="button"
-            onClick={() => selectSymbol(stock.symbol, stock.name)}
-            aria-current={stock.symbol === symbol ? 'true' : undefined}
-            style={{
-              ...chipStyle,
-              borderColor: stock.symbol === symbol ? '#2563eb' : '#d1d5db',
-              backgroundColor: stock.symbol === symbol ? '#eff6ff' : 'white',
-            }}
+        {POPULAR_STOCKS.map((item) => (
+          <Chip
+            key={item.code}
+            active={symbol === item.code}
+            onClick={() => selectSymbol(item.code, item.name)}
           >
-            {stock.name}{' '}
-            <span style={{ color: '#94a3b8', fontFamily: 'monospace' }}>
-              {stock.symbol}
+            {item.name}{' '}
+            <span className="hts-mono" style={{ color: color.inkDim }}>
+              {item.code}
             </span>
-          </button>
+          </Chip>
         ))}
       </div>
 
       {recents.length > 0 && (
-        <div style={{ ...controlsStyle, gap: '8px' }}>
-          <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: 500 }}>
-            Recent:
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: space.sm,
+            flexWrap: 'wrap',
+            marginBottom: space.xl,
+          }}
+        >
+          <span style={{ fontSize: fontSize.md, color: color.inkDim }}>
+            {ko.stock.recent}
           </span>
           {recents.map((entry) => (
-            <button
+            <Chip
               key={entry.symbol}
-              type="button"
+              active={symbol === entry.symbol}
               onClick={() => selectSymbol(entry.symbol, entry.name)}
-              style={{
-                ...chipStyle,
-                borderColor: entry.symbol === symbol ? '#2563eb' : '#e2e8f0',
-                backgroundColor: entry.symbol === symbol ? '#eff6ff' : '#f8fafc',
-              }}
             >
               {entry.name || entry.symbol}
-            </button>
+            </Chip>
           ))}
         </div>
       )}
 
-      {quoteError && errorBanner(quoteError, () => quoteQuery.refetch())}
-
-      {quoteQuery.isLoading && <SkeletonPanel rows={4} label="Loading quote" />}
+      {error && (
+        <div style={{ marginBottom: space.xl }}>
+          <Notice onRetry={handleSearch}>{error}</Notice>
+        </div>
+      )}
 
       {quote && (
-        <div style={{ marginBottom: '24px' }}>
-          <StaleOverlay stale={quoteQuery.isFetching}>
-            <StockCard
-              symbol={quote.symbol}
-              name={quote.name}
-              currentPrice={quote.current_price}
-              change={quote.change}
-              changePercent={quote.change_percent}
-              currency="KRW"
-              open={quote.open}
-              high={quote.high}
-              low={quote.low}
-              previousClose={quote.previous_close}
-              volume={quote.volume}
-              marketCap={valuation?.market_cap}
-              sharesOutstanding={valuation?.shares_outstanding}
-              timestamp={quote.timestamp}
-            />
-          </StaleOverlay>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: space.xl,
+          }}
+        >
+          <StockCard
+            symbol={quote.symbol}
+            name={quote.name}
+            currentPrice={quote.current_price}
+            change={quote.change}
+            changePercent={quote.change_percent}
+            currency="KRW"
+            open={quote.open}
+            high={quote.high}
+            low={quote.low}
+            previousClose={quote.previous_close}
+            volume={quote.volume}
+            marketCap={valuation?.market_cap}
+            sharesOutstanding={valuation?.shares_outstanding}
+            timestamp={quote.timestamp}
+          />
 
-          {valuationQuery.isLoading && (
-            <div style={{ marginTop: '12px' }}>
-              <SkeletonTiles count={6} label="Loading valuation metrics" />
-            </div>
-          )}
-
-          {valuation && (
-            <StaleOverlay stale={valuationQuery.isFetching}>
+          {/* Valuation */}
+          <Panel
+            title={ko.valuation.title}
+            note={`${ko.valuation.requested} ${requestedPeriodLabel}`}
+            actions={
+              fallbackUsed ? (
+                <Badge tone="warning" title="요청한 기간의 데이터가 없어 다른 기간을 사용했습니다.">
+                  {ko.valuation.fallback} · {usedPeriodLabel}
+                </Badge>
+              ) : valuation ? (
+                <Badge>{usedPeriodLabel}</Badge>
+              ) : null
+            }
+          >
+            {valuationLoading && !valuation ? (
+              <SkeletonPanel rows={3} height={28} />
+            ) : valuationError ? (
+              <Notice onRetry={() => void valuationQuery.refetch()}>{valuationError}</Notice>
+            ) : valuation ? (
               <div
                 style={{
-                  marginTop: '12px',
-                  padding: '16px',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                  backgroundColor: 'white',
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-                  gap: '12px',
+                  gap: space.lg,
+                  gridTemplateColumns:
+                    'repeat(auto-fit, minmax(260px, 1fr))',
                 }}
               >
-                <div
-                  style={{
-                    gridColumn: '1 / -1',
-                    marginBottom: '4px',
-                    fontSize: '12px',
-                    color: '#6b7280',
-                  }}
-                >
-                  <strong>Requested:</strong> {requestedPeriodLabel} |{' '}
-                  <strong>Used:</strong> {usedPeriodLabel}
-                  {fallbackUsed ? ' (fallback)' : ''} |{' '}
-                  <strong>TTM:</strong> {ttmQuarterLabel} |{' '}
-                  <strong>12MF:</strong> {estimateLabelText}
-                </div>
-                {valuationMetrics.map((metric) => (
-                  <div key={metric.label}>
-                    <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                      {metric.label}
+                {valuationGroups.map((group) => (
+                  <div key={group.title}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'baseline',
+                        gap: space.sm,
+                        marginBottom: space.sm,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: fontSize.md,
+                          fontWeight: 600,
+                          color: color.ink,
+                        }}
+                      >
+                        {group.title}
+                      </span>
+                      <span
+                        style={{ fontSize: fontSize.sm, color: color.inkDim }}
+                      >
+                        {group.note}
+                      </span>
                     </div>
-                    <div style={{ fontSize: '18px', fontWeight: 700 }}>
-                      {metric.value}
-                    </div>
+                    <StatGrid minWidth={110}>
+                      {group.metrics.map((metric) => (
+                        <StatTile
+                          key={`${group.title}-${metric.label}`}
+                          label={metric.label}
+                          value={formatMetric(metric.value, metric.unit)}
+                        />
+                      ))}
+                    </StatGrid>
                   </div>
                 ))}
                 {valuation.market_cap !== undefined &&
                   valuation.market_cap !== null && (
                     <div>
-                      <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                        Market Cap
+                      <div
+                        style={{
+                          fontSize: fontSize.md,
+                          fontWeight: 600,
+                          marginBottom: space.sm,
+                        }}
+                      >
+                        {ko.valuation.marketCap}
                       </div>
-                      <div style={{ fontSize: '18px', fontWeight: 700 }}>
-                        {formatKoreanUnits(valuation.market_cap)}
-                      </div>
+                      <StatGrid minWidth={110}>
+                        <StatTile
+                          label={ko.valuation.marketCap}
+                          value={formatKrwCompact(valuation.market_cap)}
+                          sub={`${formatNumber(valuation.market_cap)}원`}
+                        />
+                        {valuation.shares_outstanding ? (
+                          <StatTile
+                            label={ko.valuation.sharesOutstanding}
+                            value={formatNumber(valuation.shares_outstanding)}
+                            sub="주"
+                          />
+                        ) : null}
+                      </StatGrid>
                     </div>
                   )}
               </div>
-            </StaleOverlay>
-          )}
-
-          {(valuationError || Boolean(valuation?.notes?.length)) && (
-            <div
-              role={valuationError ? 'alert' : undefined}
-              style={{
-                marginTop: '12px',
-                padding: '12px',
-                backgroundColor: '#fff7ed',
-                color: '#9a3412',
-                borderRadius: '6px',
-                border: '1px solid #fdba74',
-                fontSize: '13px',
-              }}
-            >
-              {valuationError && (
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: '12px',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <span>{valuationError}</span>
-                  <button
-                    type="button"
-                    onClick={() => valuationQuery.refetch()}
-                    style={{
-                      padding: '4px 10px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      borderRadius: '6px',
-                      border: '1px solid #9a3412',
-                      backgroundColor: 'white',
-                      color: '#9a3412',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
-              {!valuationError &&
-                valuation?.notes?.map((note, index) => (
-                  <div key={`${note}-${index}`}>{note}</div>
-                ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Chart Section */}
-      {quote && (
-        <div style={{ marginBottom: '24px' }}>
-          <h2 style={{ ...sectionHeadingStyle, marginBottom: '16px' }}>
-            Price Chart
-          </h2>
-
-          {/* Chart Controls */}
-          <div style={controlsStyle}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '14px', fontWeight: '500' }}>Type:</span>
-              <select
-                value={chartInterval}
-                onChange={(e) => setChartInterval(e.target.value as ChartInterval)}
-                style={selectStyle}
-              >
-                <option value="daily">Daily</option>
-                <option value="minute">Minute</option>
-              </select>
-            </label>
-
-            {chartInterval === 'daily' ? (
-              <>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '500' }}>Period:</span>
-                  <select
-                    value={period}
-                    onChange={(e) => setPeriod(e.target.value as PeriodType)}
-                    style={selectStyle}
-                  >
-                    <option value="D">Daily</option>
-                    <option value="W">Weekly</option>
-                    <option value="M">Monthly</option>
-                  </select>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '500' }}>Start:</span>
-                  <input
-                    type="date"
-                    value={
-                      startDate
-                        ? `${startDate.slice(0, 4)}-${startDate.slice(4, 6)}-${startDate.slice(6, 8)}`
-                        : ''
-                    }
-                    onChange={(e) => setStartDate(e.target.value.replace(/-/g, ''))}
-                    style={selectStyle}
-                  />
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '500' }}>End:</span>
-                  <input
-                    type="date"
-                    value={
-                      endDate
-                        ? `${endDate.slice(0, 4)}-${endDate.slice(4, 6)}-${endDate.slice(6, 8)}`
-                        : ''
-                    }
-                    onChange={(e) => setEndDate(e.target.value.replace(/-/g, ''))}
-                    style={selectStyle}
-                  />
-                </label>
-              </>
             ) : (
-              <>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '500' }}>Interval:</span>
-                  <select
-                    value={minuteInterval}
-                    onChange={(e) =>
-                      setMinuteInterval(Number(e.target.value) as MinuteInterval)
-                    }
-                    style={selectStyle}
-                  >
-                    <option value={1}>1 Minute</option>
-                    <option value={5}>5 Minutes</option>
-                    <option value={10}>10 Minutes</option>
-                    <option value={30}>30 Minutes</option>
-                    <option value={60}>60 Minutes</option>
-                  </select>
-                </label>
-
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '500' }}>Date:</span>
-                  <input
-                    type="date"
-                    value={
-                      selectedDate
-                        ? `${selectedDate.slice(0, 4)}-${selectedDate.slice(4, 6)}-${selectedDate.slice(6, 8)}`
-                        : ''
-                    }
-                    onChange={(e) => setSelectedDate(e.target.value.replace(/-/g, ''))}
-                    style={selectStyle}
-                  />
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '500' }}>Time:</span>
-                  <input
-                    type="time"
-                    value={minuteTime}
-                    onChange={(e) => setMinuteTime(e.target.value)}
-                    style={selectStyle}
-                  />
-                </label>
-                <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                  Time is the KST end of the requested window (defaults to the
-                  15:30 close).
-                </div>
-              </>
+              <EmptyState>{ko.common.noData}</EmptyState>
             )}
-          </div>
-
-          {candlesError && errorBanner(candlesError, () => candlesQuery.refetch())}
-
-          {/* Chart Display */}
-          {candlesQuery.isLoading ? (
-            <SkeletonPanel rows={8} label="Loading chart" />
-          ) : (
-            <StaleOverlay stale={candlesQuery.isFetching}>
-              <CandleChart data={candleData} currency="KRW" height={500} />
-            </StaleOverlay>
-          )}
-        </div>
-      )}
-
-      {/* Financial Statements Section */}
-      {quote && (
-        <div style={{ marginBottom: '24px' }}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '16px',
-              flexWrap: 'wrap',
-              gap: '12px',
-            }}
-          >
-            <h2 style={sectionHeadingStyle}>Financial Statements (OpenDart)</h2>
-            <div
-              style={{
-                display: 'flex',
-                gap: '8px',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-              }}
-            >
-              <select
-                value={finYear}
-                onChange={(e) => setFinYear(Number(e.target.value))}
-                aria-label="Fiscal year"
-                style={selectStyle}
-              >
-                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(
-                  (year) => (
-                    <option key={year} value={year}>
-                      {year}
-                    </option>
-                  )
-                )}
-              </select>
-              <select
-                value={finPeriod}
-                onChange={(e) =>
-                  setFinPeriod(e.target.value as 'annual' | 'quarterly')
-                }
-                aria-label="Reporting period"
-                style={selectStyle}
-              >
-                <option value="annual">Annual</option>
-                <option value="quarterly">Quarterly</option>
-              </select>
-              <select
-                value={finQuarter}
-                onChange={(e) => setFinQuarter(Number(e.target.value))}
-                aria-label="Quarter"
-                style={selectStyle}
-                disabled={finPeriod === 'annual'}
-              >
-                <option value={1}>Q1</option>
-                <option value={2}>Q2</option>
-                <option value={3}>Q3</option>
-                <option value={4}>Q4</option>
-              </select>
-              <select
-                value={fsDivision}
-                onChange={(e) => setFsDivision(e.target.value as 'CFS' | 'OFS')}
-                aria-label="Consolidated or separate statements"
-                style={selectStyle}
-              >
-                <option value="CFS">Consolidated</option>
-                <option value="OFS">Separate</option>
-              </select>
-              <div
-                role="group"
-                aria-label="Statement type"
-                style={{ display: 'flex', gap: '6px', alignItems: 'center' }}
-              >
-                {(['IS', 'BS', 'CF'] as const).map((code) => (
-                  <button
-                    key={code}
-                    type="button"
-                    onClick={() => setFinStatement(code)}
-                    aria-pressed={finStatement === code}
-                    aria-label={statementMap[code].label}
-                    style={statementBadgeStyle(finStatement === code)}
-                  >
-                    {code}
-                  </button>
-                ))}
+            {!valuationError && valuation?.notes?.length ? (
+              <div style={{ marginTop: space.md }}>
+                <Notice tone="warning">
+                  {valuation.notes.map((note, index) => (
+                    <div key={`${note}-${index}`}>{note}</div>
+                  ))}
+                </Notice>
               </div>
-            </div>
-          </div>
+            ) : null}
+          </Panel>
 
-          {financialsError &&
-            errorBanner(financialsError, () => financialsQuery.refetch())}
+          {/* Chart */}
+          <Panel
+            title={ko.chart.title}
+            note={
+              chartInterval === 'minute' ? ko.chart.minuteTimeHint : undefined
+            }
+            actions={
+              <>
+                <Field label={ko.chart.type} inline>
+                  <Select
+                    value={chartInterval}
+                    onChange={(e) =>
+                      setChartInterval(e.target.value as ChartInterval)
+                    }
+                  >
+                    <option value="daily">{ko.chart.daily}</option>
+                    <option value="minute">{ko.chart.minute}</option>
+                  </Select>
+                </Field>
 
-          {financialsQuery.isLoading ? (
-            <SkeletonPanel rows={8} label="Loading financial statements" />
-          ) : comprehensiveFinancials && comprehensiveFinancials.count > 0 ? (
-            <StaleOverlay stale={financialsQuery.isFetching}>
-              <div
-                style={{
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                  backgroundColor: 'white',
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    padding: '16px',
-                    backgroundColor: '#f9fafb',
-                    borderBottom: '1px solid #e5e7eb',
-                  }}
+                {chartInterval === 'daily' ? (
+                  <>
+                    <Field label={ko.chart.period} inline>
+                      <Select
+                        value={period}
+                        onChange={(e) => setPeriod(e.target.value as PeriodType)}
+                      >
+                        <option value="D">일</option>
+                        <option value="W">주</option>
+                        <option value="M">월</option>
+                      </Select>
+                    </Field>
+                    <Field label={ko.chart.startDate} inline>
+                      <TextInput
+                        type="date"
+                        value={
+                          startDate
+                            ? `${startDate.slice(0, 4)}-${startDate.slice(4, 6)}-${startDate.slice(6, 8)}`
+                            : ''
+                        }
+                        onChange={(e) =>
+                          setStartDate(e.target.value.replace(/-/g, ''))
+                        }
+                      />
+                    </Field>
+                    <Field label={ko.chart.endDate} inline>
+                      <TextInput
+                        type="date"
+                        value={
+                          endDate
+                            ? `${endDate.slice(0, 4)}-${endDate.slice(4, 6)}-${endDate.slice(6, 8)}`
+                            : ''
+                        }
+                        onChange={(e) =>
+                          setEndDate(e.target.value.replace(/-/g, ''))
+                        }
+                      />
+                    </Field>
+                  </>
+                ) : (
+                  <>
+                    <Field label={ko.chart.interval} inline>
+                      <Select
+                        value={minuteInterval}
+                        onChange={(e) =>
+                          setMinuteInterval(
+                            Number(e.target.value) as MinuteInterval
+                          )
+                        }
+                      >
+                        <option value={1}>1분</option>
+                        <option value={5}>5분</option>
+                        <option value={10}>10분</option>
+                        <option value={30}>30분</option>
+                        <option value={60}>60분</option>
+                      </Select>
+                    </Field>
+                    <Field label={ko.chart.date} inline>
+                      <TextInput
+                        type="date"
+                        value={
+                          selectedDate
+                            ? `${selectedDate.slice(0, 4)}-${selectedDate.slice(4, 6)}-${selectedDate.slice(6, 8)}`
+                            : ''
+                        }
+                        onChange={(e) =>
+                          setSelectedDate(e.target.value.replace(/-/g, ''))
+                        }
+                      />
+                    </Field>
+                    <Field label={ko.chart.time} inline>
+                      <TextInput
+                        type="time"
+                        value={minuteTime}
+                        onChange={(e) => setMinuteTime(e.target.value)}
+                      />
+                    </Field>
+                  </>
+                )}
+              </>
+            }
+          >
+            {candleError && (
+              <div style={{ marginBottom: space.md }}>
+                <Notice onRetry={() => void candlesQuery.refetch()}>{candleError}</Notice>
+              </div>
+            )}
+            {candleLoading && candleData.length === 0 ? (
+              <SkeletonPanel rows={4} height={60} />
+            ) : (
+              <CandleChart data={candleData} currency="KRW" height={500} />
+            )}
+          </Panel>
+
+          {/* Financial statements */}
+          <Panel
+            title={ko.financials.title}
+            note={
+              comprehensiveFinancials
+                ? `${comprehensiveFinancials.symbol} · ${comprehensiveFinancials.year}년 ${
+                    comprehensiveFinancials.quarter
+                      ? `${comprehensiveFinancials.quarter}분기`
+                      : ko.valuation.annual
+                  } · ${ko.financials.items} ${selectedStatementItems.length}`
+                : undefined
+            }
+            actions={
+              <>
+                <Select
+                  value={finYear}
+                  onChange={(e) => setFinYear(Number(e.target.value))}
+                  aria-label="연도"
                 >
-                  <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>
-                    <strong>Symbol:</strong> {comprehensiveFinancials.symbol} |
-                    <strong> Year:</strong> {comprehensiveFinancials.year} |
-                    <strong> Period:</strong>{' '}
-                    {comprehensiveFinancials.quarter
-                      ? `Q${comprehensiveFinancials.quarter}`
-                      : 'Annual'}{' '}
-                    |<strong> Statement:</strong> {statementMap[finStatement].label} |
-                    <strong> Items:</strong> {selectedStatementItems.length}
-                    {accountFilter.trim() !== '' &&
-                      ` / ${statementItems.length}`}
-                  </p>
-                  <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#9ca3af' }}>
-                    Amounts are reported in KRW; 조 = trillion, 억 = 100 million.
-                  </p>
-                  {comprehensiveFinancials.note && (
-                    <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#9ca3af' }}>
-                      {comprehensiveFinancials.note}
-                    </p>
-                  )}
-                </div>
-
+                  {yearOptions.map((year) => (
+                    <option key={year} value={year}>
+                      {year}년
+                    </option>
+                  ))}
+                </Select>
+                <Select
+                  value={finPeriod}
+                  onChange={(e) =>
+                    setFinPeriod(e.target.value as 'annual' | 'quarterly')
+                  }
+                  aria-label={ko.financials.period}
+                >
+                  <option value="annual">{ko.valuation.annual}</option>
+                  <option value="quarterly">{ko.valuation.quarter}</option>
+                </Select>
+                <Select
+                  value={finQuarter}
+                  onChange={(e) => setFinQuarter(Number(e.target.value))}
+                  disabled={finPeriod === 'annual'}
+                  aria-label="분기"
+                >
+                  <option value={1}>1분기</option>
+                  <option value={2}>2분기</option>
+                  <option value={3}>3분기</option>
+                  <option value={4}>4분기</option>
+                </Select>
+                <Select
+                  value={fsDivision}
+                  onChange={(e) =>
+                    setFsDivision(e.target.value as 'CFS' | 'OFS')
+                  }
+                  aria-label="연결/별도"
+                >
+                  <option value="CFS">{ko.financials.consolidated}</option>
+                  <option value="OFS">{ko.financials.separate}</option>
+                </Select>
+                <ChipGroup label="재무제표 종류">
+                  {STATEMENTS.map((statement) => (
+                    <Chip
+                      key={statement.value}
+                      active={finStatement === statement.value}
+                      onClick={() => setFinStatement(statement.value)}
+                    >
+                      {statement.label}
+                    </Chip>
+                  ))}
+                </ChipGroup>
+              </>
+            }
+            flush
+          >
+            {financialsError ? (
+              <div style={{ padding: space.lg }}>
+                <Notice onRetry={() => void financialsQuery.refetch()}>{financialsError}</Notice>
+              </div>
+            ) : financialsLoading && !comprehensiveFinancials ? (
+              <div style={{ padding: space.lg }}>
+                <SkeletonPanel rows={6} />
+              </div>
+            ) : comprehensiveFinancials && statementItems.length > 0 ? (
+              <>
                 {highlights.length > 0 && (
                   <div
                     style={{
-                      display: 'grid',
-                      gap: '12px',
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                      padding: '16px',
-                      borderBottom: '1px solid #e5e7eb',
+                      padding: space.lg,
+                      borderBottom: `1px solid ${color.border}`,
                     }}
                   >
-                    {highlights.map((item) => (
-                      <div
-                        key={item.key}
-                        style={{
-                          backgroundColor: '#f8fafc',
-                          borderRadius: '8px',
-                          padding: '12px',
-                          border: '1px solid #e2e8f0',
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            color: '#475569',
-                          }}
-                        >
-                          {item.label}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: '18px',
-                            fontWeight: 700,
-                            color: '#0f172a',
-                            marginTop: '4px',
-                          }}
-                          title={item.value.toLocaleString('ko-KR')}
-                        >
-                          {formatKoreanUnits(item.value)}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: '11px',
-                            color: '#94a3b8',
-                            marginTop: '2px',
-                          }}
-                        >
-                          {item.key}
-                        </div>
-                      </div>
-                    ))}
+                    <StatGrid minWidth={180}>
+                      {highlights.map((item) => (
+                        <StatTile
+                          key={item.key}
+                          label={item.label}
+                          value={formatValue(item.value)}
+                          sub={ko.common.unitKrw}
+                        />
+                      ))}
+                    </StatGrid>
                   </div>
                 )}
-
                 <div
                   style={{
-                    padding: '12px 16px',
-                    borderBottom: '1px solid #e5e7eb',
+                    padding: `${space.md} ${space.lg}`,
+                    borderBottom: `1px solid ${color.border}`,
                   }}
                 >
-                  <input
+                  <TextInput
                     type="search"
                     value={accountFilter}
                     onChange={(e) => setAccountFilter(e.target.value)}
-                    placeholder="계정과목 검색 / Filter accounts (e.g. 매출)"
-                    aria-label="Filter financial statement accounts"
-                    style={{
-                      width: '100%',
-                      maxWidth: '360px',
-                      padding: '8px 12px',
-                      fontSize: '14px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '6px',
-                    }}
+                    placeholder={ko.financials.filterPlaceholder}
+                    aria-label={ko.financials.filterPlaceholder}
+                    style={{ maxWidth: '360px' }}
                   />
                 </div>
-
                 {selectedStatementItems.length > 0 ? (
-                  <div style={{ maxHeight: '600px', overflow: 'auto' }}>
-                    <table
-                      style={{
-                        width: '100%',
-                        borderCollapse: 'collapse',
-                        fontSize: '14px',
-                      }}
-                    >
-                      <thead
-                        style={{
-                          position: 'sticky',
-                          top: 0,
-                          backgroundColor: '#f9fafb',
-                          zIndex: 1,
-                        }}
-                      >
+                  <TableScroll maxHeight={600} bordered={false}>
+                    <Table>
+                      <thead>
                         <tr>
-                          <th
-                            scope="col"
-                            style={{
-                              padding: '12px',
-                              textAlign: 'left',
-                              borderBottom: '2px solid #e5e7eb',
-                              fontWeight: '600',
-                            }}
-                          >
-                            Account
-                          </th>
-                          <th
-                            scope="col"
-                            style={{
-                              padding: '12px',
-                              textAlign: 'right',
-                              borderBottom: '2px solid #e5e7eb',
-                              fontWeight: '600',
-                            }}
-                          >
-                            Value
-                          </th>
+                          <th>{ko.financials.account}</th>
+                          <th className="hts-num">{ko.financials.amount}</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {selectedStatementItems.map((item, index) => {
-                          const bgColor = index % 2 === 0 ? '#f8fafc' : 'white';
-                          const amount = parseAmount(item.thstrm_amount);
-                          return (
-                            <tr key={index} style={{ backgroundColor: bgColor }}>
-                              <td
-                                style={{
-                                  padding: '8px 12px',
-                                  borderBottom: '1px solid #f3f4f6',
-                                }}
-                              >
-                                {item.account_nm || '-'}
-                              </td>
-                              <td
-                                style={{
-                                  padding: '8px 12px',
-                                  borderBottom: '1px solid #f3f4f6',
-                                  textAlign: 'right',
-                                  fontFamily: 'monospace',
-                                  whiteSpace: 'nowrap',
-                                }}
-                                title={
-                                  amount !== null
-                                    ? amount.toLocaleString('ko-KR')
-                                    : undefined
-                                }
-                              >
-                                {amount !== null
-                                  ? formatKoreanUnitsDetailed(amount)
-                                  : formatValue(item.thstrm_amount ?? '-')}
-                              </td>
-                            </tr>
-                          );
-                        })}
+                        {selectedStatementItems.map((item, index) => (
+                          <tr key={index}>
+                            <td>{item.account_nm || '-'}</td>
+                            <td className="hts-num">
+                              {formatValue(
+                                parseAmount(item.thstrm_amount) ??
+                                  item.thstrm_amount ??
+                                  '-'
+                              )}
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
-                    </table>
-                  </div>
+                    </Table>
+                  </TableScroll>
                 ) : (
-                  <div
-                    style={{
-                      padding: '24px',
-                      textAlign: 'center',
-                      color: '#6b7280',
-                    }}
-                  >
-                    {accountFilter.trim() !== ''
-                      ? `No accounts match "${accountFilter}".`
-                      : 'No items for this statement in the selected period.'}
+                  <div style={{ padding: space.lg }}>
+                    <EmptyState>{ko.financials.filterNoMatch}</EmptyState>
                   </div>
                 )}
+              </>
+            ) : (
+              <div style={{ padding: space.lg }}>
+                <EmptyState>
+                  {comprehensiveFinancials?.note || ko.financials.empty}
+                </EmptyState>
               </div>
-            </StaleOverlay>
-          ) : (
-            <div
-              style={{
-                padding: '24px',
-                border: '1px solid #e5e7eb',
-                borderRadius: '8px',
-                backgroundColor: '#f9fafb',
-                textAlign: 'center',
-              }}
-            >
-              <p style={{ color: '#6b7280', margin: 0 }}>
-                {comprehensiveFinancials?.note ||
-                  'No financial data available for the selected period. Try a different year or quarter.'}
-              </p>
-            </div>
-          )}
+            )}
+          </Panel>
+
+          {/* Estimated performance */}
+          <Panel
+            title={ko.estimate.title}
+            note={estimatePerform?.unit_notes}
+            flush
+          >
+            {estimateError ? (
+              <div style={{ padding: space.lg }}>
+                <Notice onRetry={() => void estimatesQuery.refetch()}>{estimateError}</Notice>
+              </div>
+            ) : estimateLoading && !estimatePerform ? (
+              <div style={{ padding: space.lg }}>
+                <SkeletonPanel rows={5} />
+              </div>
+            ) : estimatePerform ? (
+              <>
+                {estimatePerform.output1.length > 0 && (
+                  <div
+                    style={{
+                      padding: space.lg,
+                      borderBottom: `1px solid ${color.border}`,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: fontSize.md,
+                        fontWeight: 600,
+                        marginBottom: space.sm,
+                      }}
+                    >
+                      {ko.estimate.summary}
+                    </div>
+                    <StatGrid minWidth={170}>
+                      {buildEstimateSummaryEntries(
+                        estimatePerform.output1[0]
+                      ).map((entry) => (
+                        <StatTile
+                          key={entry.key}
+                          label={entry.label}
+                          value={formatValue(entry.value)}
+                        />
+                      ))}
+                    </StatGrid>
+                  </div>
+                )}
+
+                {[
+                  { rows: estimatePerform.output2, title: ko.estimate.incomeEstimates },
+                  {
+                    rows: estimatePerform.output3,
+                    title: ko.estimate.investmentIndicators,
+                  },
+                ].map(({ rows, title }) =>
+                  rows.length > 0 && estimateYearLabels.length > 0 ? (
+                    <div
+                      key={title}
+                      style={{ borderTop: `1px solid ${color.border}` }}
+                    >
+                      <div
+                        style={{
+                          padding: `${space.md} ${space.lg}`,
+                          fontSize: fontSize.md,
+                          fontWeight: 600,
+                          backgroundColor: color.surfaceMuted,
+                        }}
+                      >
+                        {title}
+                      </div>
+                      <TableScroll maxHeight={400} bordered={false}>
+                        <Table>
+                          <thead>
+                            <tr>
+                              <th>항목</th>
+                              {estimateYearLabels.map((label, index) => (
+                                <th
+                                  key={`${label}-${index}`}
+                                  className="hts-num"
+                                >
+                                  {label}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map((row, rowIndex) => {
+                              const metricLabels: Record<string, string> =
+                                ko.metric;
+                              const label =
+                                metricLabels[row.metric] ??
+                                row.metric ??
+                                `항목 ${rowIndex + 1}`;
+                              const values = Array.isArray(row.values)
+                                ? row.values
+                                : estimateYearLabels.map(
+                                    (year) => row.year_values?.[year]
+                                  );
+                              return (
+                                <tr key={label}>
+                                  <td>{label}</td>
+                                  {values.map((value, index) => (
+                                    <td
+                                      key={`${label}-${index}`}
+                                      className="hts-num"
+                                    >
+                                      {formatValue(value)}
+                                    </td>
+                                  ))}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </Table>
+                      </TableScroll>
+                    </div>
+                  ) : null
+                )}
+              </>
+            ) : (
+              <div style={{ padding: space.lg }}>
+                <EmptyState>{ko.estimate.empty}</EmptyState>
+              </div>
+            )}
+          </Panel>
         </div>
       )}
 
-      {/* Estimated Performance Section */}
-      {quote && (
-        <div style={{ marginBottom: '24px' }}>
-          <h2 style={{ ...sectionHeadingStyle, marginBottom: '16px' }}>
-            Estimated Performance (KDevelopers)
-          </h2>
-
-          {estimateError &&
-            errorBanner(estimateError, () => estimatesQuery.refetch())}
-
-          {estimatesQuery.isLoading ? (
-            <SkeletonPanel rows={6} label="Loading estimates" />
-          ) : estimatePerform ? (
-            <StaleOverlay stale={estimatesQuery.isFetching}>
-              <div
-                style={{
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                  backgroundColor: 'white',
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    padding: '16px',
-                    backgroundColor: '#f9fafb',
-                    borderBottom: '1px solid #e5e7eb',
-                  }}
-                >
-                  <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>
-                    <strong>Symbol:</strong> {estimatePerform.symbol}
-                  </p>
-                  {estimatePerform.unit_notes && (
-                    <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#9ca3af' }}>
-                      {estimatePerform.unit_notes}
-                    </p>
-                  )}
-                </div>
-
-                {estimatePerform.output1.length > 0 && (
-                  <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb' }}>
-                    <div
-                      style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}
-                    >
-                      Summary
-                    </div>
-                    <div
-                      style={{
-                        display: 'grid',
-                        gap: '12px',
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                      }}
-                    >
-                      {buildEstimateSummaryEntries(estimatePerform.output1[0]).map(
-                        (entry) => (
-                          <div
-                            key={entry.key}
-                            style={{
-                              backgroundColor: '#f8fafc',
-                              borderRadius: '8px',
-                              padding: '12px',
-                              border: '1px solid #e2e8f0',
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontSize: '12px',
-                                fontWeight: 600,
-                                color: '#475569',
-                              }}
-                            >
-                              {entry.label}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: '14px',
-                                fontWeight: 700,
-                                color: '#0f172a',
-                                marginTop: '4px',
-                              }}
-                            >
-                              {formatValue(entry.value)}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: '11px',
-                                color: '#94a3b8',
-                                marginTop: '2px',
-                              }}
-                            >
-                              {entry.key}
-                            </div>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {([
-                  { rows: estimatePerform.output2, title: 'Income Statement Estimates' },
-                  { rows: estimatePerform.output3, title: 'Investment Indicators' },
-                ] as const).map(
-                  (table) =>
-                    table.rows.length > 0 &&
-                    estimateYearLabels.length > 0 && (
-                      <div key={table.title} style={{ borderTop: '1px solid #e5e7eb' }}>
-                        <div
-                          style={{
-                            padding: '12px 16px',
-                            fontSize: '14px',
-                            fontWeight: 600,
-                            backgroundColor: '#f9fafb',
-                          }}
-                        >
-                          {table.title}
-                        </div>
-                        <div style={{ maxHeight: '400px', overflow: 'auto' }}>
-                          <table
-                            style={{
-                              width: '100%',
-                              borderCollapse: 'collapse',
-                              fontSize: '13px',
-                            }}
-                          >
-                            <thead
-                              style={{
-                                position: 'sticky',
-                                top: 0,
-                                backgroundColor: '#f9fafb',
-                                zIndex: 1,
-                              }}
-                            >
-                              <tr>
-                                <th
-                                  scope="col"
-                                  style={{
-                                    padding: '10px 12px',
-                                    textAlign: 'left',
-                                    borderBottom: '2px solid #e5e7eb',
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  Metric
-                                </th>
-                                {estimateYearLabels.map((label, index) => (
-                                  <th
-                                    key={`${label}-${index}`}
-                                    scope="col"
-                                    style={{
-                                      padding: '10px 12px',
-                                      textAlign: 'left',
-                                      borderBottom: '2px solid #e5e7eb',
-                                      fontWeight: 600,
-                                    }}
-                                  >
-                                    {label}
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {table.rows.map((row, rowIndex) => {
-                                const bgColor = rowIndex % 2 === 0 ? '#f8fafc' : 'white';
-                                const label =
-                                  estimateMetricLabels[row.metric] ??
-                                  row.metric ??
-                                  `Metric ${rowIndex + 1}`;
-                                const values = Array.isArray(row.values)
-                                  ? row.values
-                                  : estimateYearLabels.map(
-                                      (year) => row.year_values?.[year]
-                                    );
-                                return (
-                                  <tr key={label} style={{ backgroundColor: bgColor }}>
-                                    <td
-                                      style={{
-                                        padding: '8px 12px',
-                                        borderBottom: '1px solid #f3f4f6',
-                                      }}
-                                    >
-                                      {label}
-                                    </td>
-                                    {values.map((value, index) => (
-                                      <td
-                                        key={`${label}-${index}`}
-                                        style={{
-                                          padding: '8px 12px',
-                                          borderBottom: '1px solid #f3f4f6',
-                                          fontFamily: 'monospace',
-                                        }}
-                                      >
-                                        {formatValue(value)}
-                                      </td>
-                                    ))}
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )
-                )}
-
-                {(!estimatePerform.output2.length || !estimateYearLabels.length) &&
-                  (!estimatePerform.output3.length || !estimateYearLabels.length) && (
-                    <div
-                      style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}
-                    >
-                      No estimate performance table data available.
-                    </div>
-                  )}
-              </div>
-            </StaleOverlay>
-          ) : (
-            <div
-              style={{
-                padding: '24px',
-                border: '1px solid #e5e7eb',
-                borderRadius: '8px',
-                backgroundColor: '#f9fafb',
-                textAlign: 'center',
-              }}
-            >
-              <p style={{ color: '#6b7280', margin: 0 }}>
-                No estimate performance data available for this symbol.
-              </p>
-            </div>
-          )}
-        </div>
+      {!quote && !error && !loading && (
+        <EmptyState>
+          종목코드를 입력하거나 위의 종목을 선택한 뒤 조회 버튼을 누르세요.
+        </EmptyState>
       )}
     </div>
   );
