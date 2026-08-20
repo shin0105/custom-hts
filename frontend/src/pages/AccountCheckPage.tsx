@@ -3,7 +3,8 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { formatCurrency, formatPercent, getChangeColor } from '../utils/format';
+import { formatCurrency, formatPercent } from '../utils/format';
+import { useMarketColors } from '../theme/marketColorContext';
 import { koreanMarketService } from '../services/koreanMarket';
 import type { KoreanAccountResponse } from '../types/korean';
 
@@ -49,7 +50,7 @@ const StatCard: React.FC<{
     }}
   >
     <div style={{ fontSize: '12px', textTransform: 'uppercase', color: '#64748b' }}>{label}</div>
-    <div style={{ fontSize: '22px', fontWeight: 700, marginTop: '6px', color: accent ?? '#0f172a' }}>
+    <div className="hts-num" style={{ fontSize: '22px', fontWeight: 700, marginTop: '6px', color: accent ?? '#0f172a' }}>
       {value}
     </div>
     {sub ? (
@@ -59,6 +60,7 @@ const StatCard: React.FC<{
 );
 
 export const AccountCheckPage: React.FC = () => {
+  const { colorFor } = useMarketColors();
   const [accountData, setAccountData] = useState<KoreanAccountResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +72,7 @@ export const AccountCheckPage: React.FC = () => {
       try {
         const data = await koreanMarketService.getAccountBalance();
         setAccountData(data);
-      } catch (err) {
+      } catch {
         setError('계좌 데이터를 불러오지 못했습니다. 백엔드 연결과 계좌 설정을 확인해주세요.');
       } finally {
         setLoading(false);
@@ -80,10 +82,10 @@ export const AccountCheckPage: React.FC = () => {
     loadAccount();
   }, []);
 
-  const positions = accountData?.positions ?? [];
   const balance = accountData?.balance;
 
   const enrichedPositions = useMemo(() => {
+    const positions = accountData?.positions ?? [];
     return positions.map((position, index) => {
       const evaluationAmount = Number.isFinite(position.evaluation_amount)
         ? position.evaluation_amount
@@ -105,7 +107,7 @@ export const AccountCheckPage: React.FC = () => {
         color: palette[index % palette.length],
       };
     });
-  }, [positions]);
+  }, [accountData]);
 
   const totals = useMemo(() => {
     const marketValue = enrichedPositions.reduce((sum, p) => sum + p.marketValue, 0);
@@ -151,7 +153,6 @@ export const AccountCheckPage: React.FC = () => {
     background:
       'radial-gradient(circle at 12% 12%, #fff1f2 0%, #f8fafc 35%, #ecfeff 72%, #e0f2fe 100%)',
     color: '#0f172a',
-    fontFamily: "'Space Grotesk', 'Noto Sans KR', sans-serif",
   };
 
   const pageWrapStyle: React.CSSProperties = {
@@ -195,9 +196,9 @@ export const AccountCheckPage: React.FC = () => {
               letterSpacing: '0.08em',
             }}
           >
-            Korean stocks only
+            국내주식 전용
           </div>
-          <h1 style={{ fontSize: '40px', fontWeight: 700, marginTop: '12px' }}>Account Check</h1>
+          <h1 style={{ fontSize: '40px', fontWeight: 700, marginTop: '12px' }}>계좌조회</h1>
           <p style={{ marginTop: '10px', fontSize: '16px', lineHeight: 1.7, maxWidth: '720px' }}>
             국내주식 계좌의 잔고 구성, 평가 손익, 현금 흐름을 한 화면에서 확인합니다.
           </p>
@@ -225,14 +226,14 @@ export const AccountCheckPage: React.FC = () => {
 
         <section style={sectionStyle}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-            <StatCard label="Total Equity" value={formatKRW(totals.totalEvaluation)} sub="총 평가금액" />
-            <StatCard label="Cash Balance" value={formatKRW(totals.cashBalance)} sub="예수금" />
-            <StatCard label="Investment Amount" value={formatKRW(totals.investmentAmount)} sub="매입금액 합계" />
+            <StatCard label="총 평가금액" value={formatKRW(totals.totalEvaluation)} sub="현금 포함" />
+            <StatCard label="예수금" value={formatKRW(totals.cashBalance)} sub="주문 가능 현금" />
+            <StatCard label="매입금액" value={formatKRW(totals.investmentAmount)} sub="보유 종목 매입 합계" />
             <StatCard
-              label="Unrealized P/L"
+              label="평가손익"
               value={formatSignedKRW(totals.profitLoss)}
               sub={formatSignedPercent(totals.profitLossPercent)}
-              accent={getChangeColor(totals.profitLoss)}
+              accent={colorFor(totals.profitLoss)}
             />
           </div>
         </section>
@@ -245,7 +246,7 @@ export const AccountCheckPage: React.FC = () => {
           }}
         >
           <div style={sectionStyle}>
-            <h2 style={{ fontSize: '20px', fontWeight: 600 }}>Account Summary</h2>
+            <h2 style={{ fontSize: '20px', fontWeight: 600 }}>계좌 요약</h2>
             <div style={{ display: 'grid', gap: '12px', marginTop: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px' }}>
                 <span>보유 주식 평가</span>
@@ -259,7 +260,7 @@ export const AccountCheckPage: React.FC = () => {
                 <span>매입금액 합계</span>
                 <strong>{formatKRW(totals.investmentAmount)}</strong>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', color: getChangeColor(totals.profitLoss) }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', color: colorFor(totals.profitLoss) }}>
                 <span>평가 손익</span>
                 <strong>{formatSignedKRW(totals.profitLoss)}</strong>
               </div>
@@ -280,7 +281,7 @@ export const AccountCheckPage: React.FC = () => {
           </div>
 
           <div style={sectionStyle}>
-            <h2 style={{ fontSize: '20px', fontWeight: 600 }}>Allocation</h2>
+            <h2 style={{ fontSize: '20px', fontWeight: 600 }}>종목 비중</h2>
             <div style={{ display: 'flex', gap: '18px', alignItems: 'center', marginTop: '18px', flexWrap: 'wrap' }}>
               <div
                 style={{
@@ -307,7 +308,7 @@ export const AccountCheckPage: React.FC = () => {
                     color: '#334155',
                   }}
                 >
-                  <div style={{ fontSize: '12px', textTransform: 'uppercase', color: '#94a3b8' }}>Holdings</div>
+                  <div style={{ fontSize: '12px', textTransform: 'uppercase', color: '#94a3b8' }}>보유</div>
                   <div style={{ fontSize: '18px', fontWeight: 700 }}>{enrichedPositions.length} 종목</div>
                 </div>
               </div>
@@ -339,7 +340,7 @@ export const AccountCheckPage: React.FC = () => {
         </section>
 
         <section style={sectionStyle}>
-          <h2 style={{ fontSize: '20px', fontWeight: 600 }}>Position Performance</h2>
+          <h2 style={{ fontSize: '20px', fontWeight: 600 }}>종목별 손익</h2>
           <div
             style={{
               marginTop: '16px',
@@ -351,7 +352,7 @@ export const AccountCheckPage: React.FC = () => {
           >
             {enrichedPositions.map((position) => {
               const height = Math.round((Math.abs(position.profitLoss) / plMax) * 72) + 8;
-              const color = getChangeColor(position.profitLoss);
+              const barColor = colorFor(position.profitLoss);
               return (
                 <div key={position.symbol} style={{ textAlign: 'center' }}>
                   <div
@@ -367,13 +368,13 @@ export const AccountCheckPage: React.FC = () => {
                         width: '36px',
                         height: `${height}px`,
                         borderRadius: '12px',
-                        backgroundColor: color,
+                        backgroundColor: barColor,
                         boxShadow: '0 8px 16px rgba(15, 23, 42, 0.1)',
                       }}
                     />
                   </div>
                   <div style={{ marginTop: '8px', fontSize: '12px', color: '#64748b' }}>{position.name}</div>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color }}>{formatSignedKRW(position.profitLoss)}</div>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: barColor }}>{formatSignedKRW(position.profitLoss)}</div>
                 </div>
               );
             })}
@@ -382,35 +383,35 @@ export const AccountCheckPage: React.FC = () => {
 
         <section style={sectionStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: 600 }}>Holdings</h2>
+            <h2 style={{ fontSize: '20px', fontWeight: 600 }}>보유 종목</h2>
             <div style={{ fontSize: '13px', color: '#64748b' }}>시장가 기준</div>
           </div>
           <div style={{ overflowX: 'auto', marginTop: '16px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '760px' }}>
               <thead>
                 <tr style={{ textAlign: 'left', color: '#64748b', fontSize: '12px', textTransform: 'uppercase' }}>
-                  <th style={{ padding: '12px 8px' }}>Stock</th>
-                  <th style={{ padding: '12px 8px' }}>Shares</th>
-                  <th style={{ padding: '12px 8px' }}>Avg Cost</th>
-                  <th style={{ padding: '12px 8px' }}>Price</th>
-                  <th style={{ padding: '12px 8px' }}>Market Value</th>
-                  <th style={{ padding: '12px 8px' }}>Unrealized</th>
+                  <th style={{ padding: '12px 8px' }}>종목</th>
+                  <th className="hts-num" style={{ padding: '12px 8px', textAlign: 'right' }}>수량</th>
+                  <th className="hts-num" style={{ padding: '12px 8px', textAlign: 'right' }}>평균단가</th>
+                  <th className="hts-num" style={{ padding: '12px 8px', textAlign: 'right' }}>현재가</th>
+                  <th className="hts-num" style={{ padding: '12px 8px', textAlign: 'right' }}>평가금액</th>
+                  <th className="hts-num" style={{ padding: '12px 8px', textAlign: 'right' }}>평가손익</th>
                 </tr>
               </thead>
               <tbody>
                 {enrichedPositions.map((position) => {
-                  const plColor = getChangeColor(position.profitLoss);
+                  const plColor = colorFor(position.profitLoss);
                   return (
                     <tr key={position.symbol} style={{ borderTop: '1px solid #e2e8f0' }}>
                       <td style={{ padding: '14px 8px' }}>
                         <div style={{ fontWeight: 600 }}>{position.name}</div>
                         <div style={{ fontSize: '12px', color: '#94a3b8' }}>{position.symbol}</div>
                       </td>
-                      <td style={{ padding: '14px 8px' }}>{position.quantity.toLocaleString('ko-KR')}주</td>
-                      <td style={{ padding: '14px 8px' }}>{formatKRW(position.average_price)}</td>
-                      <td style={{ padding: '14px 8px' }}>{formatKRW(position.current_price)}</td>
-                      <td style={{ padding: '14px 8px' }}>{formatKRW(position.marketValue)}</td>
-                      <td style={{ padding: '14px 8px', color: plColor }}>
+                      <td className="hts-num" style={{ padding: '14px 8px', textAlign: 'right' }}>{position.quantity.toLocaleString('ko-KR')}주</td>
+                      <td className="hts-num" style={{ padding: '14px 8px', textAlign: 'right' }}>{formatKRW(position.average_price)}</td>
+                      <td className="hts-num" style={{ padding: '14px 8px', textAlign: 'right' }}>{formatKRW(position.current_price)}</td>
+                      <td className="hts-num" style={{ padding: '14px 8px', textAlign: 'right' }}>{formatKRW(position.marketValue)}</td>
+                      <td className="hts-num" style={{ padding: '14px 8px', textAlign: 'right', color: plColor }}>
                         {formatSignedKRW(position.profitLoss)}
                         <div style={{ fontSize: '12px', color: plColor }}>{formatSignedPercent(position.profitLossPct)}</div>
                       </td>
