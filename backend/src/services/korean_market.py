@@ -30,6 +30,7 @@ from ..integrations.bond_master import bond_master_file_manager
 from ..integrations.futures_options_master import (
     futures_options_master_file_manager,
 )
+from ..integrations.stock_master import master_file_manager
 from ..integrations.opendart import opendart_client
 from ..integrations.supabase_client import supabase_client
 
@@ -1187,6 +1188,69 @@ class KoreanMarketService:
             force=force,
             source_url=source_url,
         )
+
+    async def get_stock_master(
+        self,
+        query: Optional[str] = None,
+        market: str = "all",
+        offset: int = 0,
+        limit: int = 20,
+        auto_download: bool = True,
+        force_download: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Search the Korean stock master files by code or Korean company name.
+
+        Args:
+            query: 6-digit code or Korean name fragment
+            market: all/kospi/kosdaq/konex
+            offset: Pagination offset
+            limit: Pagination limit
+            auto_download: Download missing master files on first use
+            force_download: Re-download and re-parse master files
+
+        Returns:
+            Dict matching KoreanStockMasterResponse
+        """
+        market_key = (market or "all").strip().lower()
+        valid_markets = list(master_file_manager.MARKETS.keys())
+        if market_key not in {"all", *valid_markets}:
+            raise ValueError(
+                f"market must be one of: all/{'/'.join(valid_markets)}"
+            )
+
+        target_markets = (
+            valid_markets if market_key == "all" else [market_key]
+        )
+
+        total_loaded = 0
+        for one_market in target_markets:
+            total_loaded += len(
+                master_file_manager.get_market_rows(
+                    one_market,
+                    auto_download=auto_download,
+                    force_download=force_download,
+                )
+            )
+
+        matches = master_file_manager.search_stocks(
+            query=query,
+            markets=target_markets,
+            auto_download=auto_download,
+            force_download=False,
+        )
+
+        page = matches[offset : offset + limit]
+        return {
+            "items": page,
+            "total_loaded": total_loaded,
+            "total_matched": len(matches),
+            "total_returned": len(page),
+            "offset": offset,
+            "limit": limit,
+            "query": query,
+            "markets": target_markets,
+        }
 
     async def get_futures_options_master(
         self,

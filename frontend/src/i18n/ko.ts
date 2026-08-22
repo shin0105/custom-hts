@@ -21,6 +21,7 @@ export const ko = {
   common: {
     search: '조회',
     searching: '조회 중...',
+    refresh: '새로고침',
     retry: '다시 시도',
     reset: '초기화',
     apply: '적용',
@@ -87,6 +88,8 @@ export const ko = {
     consolidated: '연결',
     separate: '별도',
     account: '계정과목',
+    filterPlaceholder: '계정과목 검색 (예: 매출)',
+    filterNoMatch: '검색 조건에 맞는 계정과목이 없습니다.',
     amount: '금액',
     period: '기간',
     items: '항목 수',
@@ -114,10 +117,14 @@ export const ko = {
 
   stock: {
     title: '국내주식',
-    searchPlaceholder: '종목코드 입력 (예: 005930 삼성전자)',
+    searchPlaceholder: '종목명 또는 코드 검색 (예: 삼성전자, 005930)',
     loadFailed: '종목 데이터를 불러오지 못했습니다. 종목코드를 확인해 주세요.',
     valuationFailed: '투자지표를 불러오지 못했습니다.',
     popular: '자주 찾는 종목',
+    recent: '최근 조회',
+    searchNoResults: '검색 결과가 없습니다.',
+    searchFailed: '종목 검색에 실패했습니다.',
+    searchInProgress: '검색 중...',
   },
 
   metric: {

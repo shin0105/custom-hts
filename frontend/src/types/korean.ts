@@ -16,6 +16,28 @@ export interface KoreanStockQuote {
   previous_close?: number;
 }
 
+export interface KoreanStockMasterItem {
+  symbol: string;
+  name?: string | null;
+  market: string;
+  standard_code?: string | null;
+  security_group_code?: string | null;
+  /** Market capitalisation in 억 KRW (100 million KRW). */
+  market_cap_100m?: number | null;
+  listing_date?: string | null;
+}
+
+export interface KoreanStockMasterResponse {
+  items: KoreanStockMasterItem[];
+  total_loaded: number;
+  total_matched: number;
+  total_returned: number;
+  offset: number;
+  limit: number;
+  query?: string | null;
+  markets: string[];
+}
+
 export interface KoreanFinancialStatement {
   symbol: string;
   company_name: string;

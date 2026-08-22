@@ -2,10 +2,11 @@
  * Korean Market page component.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { StockCard } from '../components/StockCard';
 import { CandleChart } from '../components/CandleChart';
-import { koreanMarketService } from '../services/koreanMarket';
+import { SymbolSearch } from '../components/SymbolSearch';
 import {
   Badge,
   Button,
@@ -28,17 +29,46 @@ import { color, fontSize, space } from '../theme/tokens';
 import { ko } from '../i18n/ko';
 import { formatKrwCompact, formatNumber } from '../utils/format';
 import { toUserMessage } from '../utils/apiError';
+import {
+  useKoreanCandles,
+  useKoreanEstimates,
+  useKoreanFinancials,
+  useKoreanQuote,
+  useKoreanValuation,
+  type ChartParams,
+  type FinancialParams,
+} from '../hooks/useKoreanMarket';
 import type {
-  KoreanStockQuote,
-  KoreanCandleData,
   ChartInterval,
   MinuteInterval,
   PeriodType,
-  KoreanValuationMetrics,
-  KoreanEstimatePerform,
-  KoreanAllFinancialsResponse,
   KoreanFinancialItem,
 } from '../types/korean';
+
+const DEFAULT_SYMBOL = '005930'; // Samsung Electronics
+const RECENT_KEY = 'kr-recent-symbols';
+const RECENT_LIMIT = 6;
+
+type RecentEntry = { symbol: string; name?: string };
+
+const readRecents = (): RecentEntry[] => {
+  try {
+    const raw = window.localStorage.getItem(RECENT_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.slice(0, RECENT_LIMIT) : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeRecents = (entries: RecentEntry[]) => {
+  try {
+    window.localStorage.setItem(RECENT_KEY, JSON.stringify(entries));
+  } catch {
+    // Storage can be unavailable (private mode); recents are a convenience.
+  }
+};
 
 const POPULAR_STOCKS: Array<{ code: string; name: string }> = [
   { code: '005930', name: '삼성전자' },
@@ -55,24 +85,13 @@ const STATEMENTS: Array<{ value: 'IS' | 'BS' | 'CF'; label: string }> = [
 ];
 
 export const KoreanMarketPage: React.FC = () => {
-  const [symbol, setSymbol] = useState('005930'); // Samsung Electronics
-  const [quote, setQuote] = useState<KoreanStockQuote | null>(null);
-  const [valuation, setValuation] = useState<KoreanValuationMetrics | null>(null);
-  const [valuationError, setValuationError] = useState<string | null>(null);
-  const [valuationLoading, setValuationLoading] = useState(false);
-  const [comprehensiveFinancials, setComprehensiveFinancials] =
-    useState<KoreanAllFinancialsResponse | null>(null);
-  const [financialsError, setFinancialsError] = useState<string | null>(null);
-  const [financialsLoading, setFinancialsLoading] = useState(false);
-  const [estimatePerform, setEstimatePerform] =
-    useState<KoreanEstimatePerform | null>(null);
-  const [estimateError, setEstimateError] = useState<string | null>(null);
-  const [estimateLoading, setEstimateLoading] = useState(false);
-  const [candleData, setCandleData] = useState<KoreanCandleData[]>([]);
-  const [candleError, setCandleError] = useState<string | null>(null);
-  const [candleLoading, setCandleLoading] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // The symbol lives in the URL so a view is bookmarkable, shareable, and
+  // survives a reload instead of snapping back to Samsung.
+  const symbol = searchParams.get('symbol')?.trim() || DEFAULT_SYMBOL;
+
+  const [recents, setRecents] = useState<RecentEntry[]>(() => readRecents());
 
   // Chart controls
   const [chartInterval, setChartInterval] = useState<ChartInterval>('daily');
@@ -89,176 +108,123 @@ export const KoreanMarketPage: React.FC = () => {
   const [finQuarter, setFinQuarter] = useState<number>(1);
   const [finStatement, setFinStatement] = useState<'IS' | 'BS' | 'CF'>('IS');
   const [fsDivision, setFsDivision] = useState<'CFS' | 'OFS'>('CFS');
+  const [accountFilter, setAccountFilter] = useState('');
 
-  const loadValuation = useCallback(async () => {
-    setValuationLoading(true);
-    try {
-      const valuationData = await koreanMarketService.getValuation(
-        symbol,
-        finYear,
-        finPeriod === 'quarterly' ? finQuarter : undefined,
-        fsDivision
-      );
-      setValuation(valuationData);
-      setValuationError(null);
-    } catch (valError) {
-      console.error('Failed to load valuation metrics:', valError);
-      setValuation(null);
-      setValuationError(
-        toUserMessage(valError, ko.stock.valuationFailed)
-      );
-    } finally {
-      setValuationLoading(false);
-    }
-  }, [symbol, finYear, finPeriod, finQuarter, fsDivision]);
+  const financialParams: FinancialParams = useMemo(
+    () => ({
+      year: finYear,
+      quarter: finPeriod === 'quarterly' ? finQuarter : undefined,
+      fsDivision,
+    }),
+    [finYear, finPeriod, finQuarter, fsDivision]
+  );
 
-  const loadFinancials = useCallback(async () => {
-    setFinancialsLoading(true);
-    try {
-      const finData = await koreanMarketService.getAllFinancials(
-        symbol,
-        finYear,
-        finPeriod === 'quarterly' ? finQuarter : undefined,
-        fsDivision
-      );
-      setComprehensiveFinancials(finData);
-      setFinancialsError(null);
-    } catch (finError) {
-      console.error('Failed to load financials:', finError);
-      setComprehensiveFinancials(null);
-      setFinancialsError(
-        toUserMessage(finError, ko.financials.loadFailed)
-      );
-    } finally {
-      setFinancialsLoading(false);
-    }
-  }, [symbol, finYear, finPeriod, finQuarter, fsDivision]);
+  const chartParams: ChartParams = useMemo(
+    () => ({
+      interval: chartInterval,
+      period,
+      minuteInterval,
+      date: selectedDate,
+      time: minuteTime,
+      startDate,
+      endDate,
+    }),
+    [
+      chartInterval,
+      period,
+      minuteInterval,
+      selectedDate,
+      minuteTime,
+      startDate,
+      endDate,
+    ]
+  );
 
-  const loadCandleData = useCallback(async () => {
-    setCandleLoading(true);
-    try {
-      if (chartInterval === 'daily') {
-        const candles = await koreanMarketService.getDailyCandle(
-          symbol,
-          period,
-          true,
-          undefined,
-          startDate || undefined,
-          endDate || undefined
-        );
-        setCandleData(candles);
-      } else {
-        // For minute candles, require a date; default to today in KST.
-        let dateStr = selectedDate;
-        if (!dateStr) {
-          const today = new Date();
-          const kstDate = new Date(today.getTime() + 9 * 60 * 60 * 1000); // UTC+9
-          dateStr = kstDate.toISOString().split('T')[0].replace(/-/g, '');
-          setSelectedDate(dateStr);
-        }
-        const candles = await koreanMarketService.getMinuteCandle(
-          symbol,
-          minuteInterval,
-          undefined,
-          dateStr,
-          minuteTime ? `${minuteTime.replace(':', '')}00` : undefined
-        );
-        setCandleData(candles);
-      }
-      setCandleError(null);
-    } catch (err) {
-      console.error('Failed to load candle data:', err);
-      setCandleData([]);
-      setCandleError(toUserMessage(err, ko.chart.noData));
-    } finally {
-      setCandleLoading(false);
-    }
+  // The quote gates the page; the other panels wait for it to resolve, then
+  // each load independently and cache under their own key.
+  const quoteQuery = useKoreanQuote(symbol, true);
+  const hasQuote = Boolean(quoteQuery.data);
+  const valuationQuery = useKoreanValuation(symbol, financialParams, hasQuote);
+  const financialsQuery = useKoreanFinancials(symbol, financialParams, hasQuote);
+  const estimatesQuery = useKoreanEstimates(symbol, hasQuote);
+  const candlesQuery = useKoreanCandles(symbol, chartParams, hasQuote);
+
+  const quote = quoteQuery.data ?? null;
+  const valuation = valuationQuery.data ?? null;
+  const comprehensiveFinancials = financialsQuery.data ?? null;
+  const estimatePerform = estimatesQuery.data ?? null;
+  const candleData = candlesQuery.data ?? [];
+
+  const loading = quoteQuery.isFetching;
+  const valuationLoading = valuationQuery.isLoading;
+  const financialsLoading = financialsQuery.isLoading;
+  const estimateLoading = estimatesQuery.isLoading;
+  const candleLoading = candlesQuery.isLoading;
+
+  const error = quoteQuery.error
+    ? toUserMessage(quoteQuery.error, ko.stock.loadFailed)
+    : null;
+  const valuationError = valuationQuery.error
+    ? toUserMessage(valuationQuery.error, ko.stock.valuationFailed)
+    : null;
+  const financialsError = financialsQuery.error
+    ? toUserMessage(financialsQuery.error, ko.financials.loadFailed)
+    : null;
+  const estimateError = estimatesQuery.error
+    ? toUserMessage(estimatesQuery.error, ko.estimate.loadFailed)
+    : null;
+  const candleError = candlesQuery.error
+    ? toUserMessage(candlesQuery.error, ko.chart.noData)
+    : null;
+
+  const selectSymbol = useCallback(
+    (next: string, name?: string) => {
+      const trimmed = next.trim();
+      if (!trimmed) return;
+      setSearchParams((prev) => {
+        const params = new URLSearchParams(prev);
+        params.set('symbol', trimmed);
+        return params;
+      });
+      setRecents((prev) => {
+        const merged = [
+          { symbol: trimmed, name },
+          ...prev.filter((entry) => entry.symbol !== trimmed),
+        ].slice(0, RECENT_LIMIT);
+        writeRecents(merged);
+        return merged;
+      });
+    },
+    [setSearchParams]
+  );
+
+  // Backfill the company name on the recents entry once the quote lands.
+  useEffect(() => {
+    if (!quote?.name) return;
+    setRecents((prev) => {
+      const existing = prev.find((entry) => entry.symbol === quote.symbol);
+      if (!existing || existing.name === quote.name) return prev;
+      const merged = prev.map((entry) =>
+        entry.symbol === quote.symbol ? { ...entry, name: quote.name } : entry
+      );
+      writeRecents(merged);
+      return merged;
+    });
+  }, [quote?.symbol, quote?.name]);
+
+  const handleSearch = useCallback(() => {
+    void quoteQuery.refetch();
+    void valuationQuery.refetch();
+    void financialsQuery.refetch();
+    void estimatesQuery.refetch();
+    void candlesQuery.refetch();
   }, [
-    symbol,
-    chartInterval,
-    period,
-    minuteInterval,
-    selectedDate,
-    minuteTime,
-    startDate,
-    endDate,
+    quoteQuery,
+    valuationQuery,
+    financialsQuery,
+    estimatesQuery,
+    candlesQuery,
   ]);
-
-  const loadEstimatePerform = useCallback(async () => {
-    setEstimateLoading(true);
-    try {
-      const estimate = await koreanMarketService.getEstimatePerform(symbol);
-      setEstimatePerform(estimate);
-      setEstimateError(null);
-    } catch (err) {
-      console.error('Failed to load estimate performance:', err);
-      setEstimatePerform(null);
-      setEstimateError(toUserMessage(err, ko.estimate.loadFailed));
-    } finally {
-      setEstimateLoading(false);
-    }
-  }, [symbol]);
-
-  const handleSearch = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // The quote gates the rest of the page, so it is awaited first and
-      // rendered as soon as it lands.
-      const quoteData = await koreanMarketService.getQuote(symbol);
-      setQuote(quoteData);
-    } catch (err) {
-      console.error('Failed to load quote:', err);
-      setError(toUserMessage(err, ko.stock.loadFailed));
-      setQuote(null);
-      setValuation(null);
-      setComprehensiveFinancials(null);
-      setEstimatePerform(null);
-      setCandleData([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(false);
-
-    // Each panel then loads independently: one failure leaves the others intact.
-    void Promise.allSettled([
-      loadValuation(),
-      loadCandleData(),
-      loadFinancials(),
-      loadEstimatePerform(),
-    ]);
-  };
-
-  // Reload candles when chart settings change
-  useEffect(() => {
-    if (symbol && quote) {
-      void loadCandleData();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    chartInterval,
-    period,
-    minuteInterval,
-    selectedDate,
-    minuteTime,
-    startDate,
-    endDate,
-  ]);
-
-  useEffect(() => {
-    if (symbol && quote) {
-      void loadFinancials();
-      void loadValuation();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finYear, finQuarter, finPeriod, fsDivision, symbol, quote]);
-
-  useEffect(() => {
-    if (symbol && quote) {
-      void loadEstimatePerform();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, quote]);
 
   const formatValue = (value: unknown) => {
     if (value === null || value === undefined || value === '') return '-';
@@ -317,9 +283,19 @@ export const KoreanMarketPage: React.FC = () => {
     return false;
   };
 
-  const selectedStatementItems = (comprehensiveFinancials?.data || []).filter(
+  const statementItems = (comprehensiveFinancials?.data || []).filter(
     matchesStatement
   );
+
+  // Highlights summarise the whole statement, so they read the unfiltered set;
+  // only the table below narrows to the account search.
+  const selectedStatementItems = accountFilter.trim()
+    ? statementItems.filter((item) =>
+        (item.account_nm || '')
+          .toLowerCase()
+          .includes(accountFilter.trim().toLowerCase())
+      )
+    : statementItems;
 
   const pickValue = (
     items: KoreanFinancialItem[],
@@ -338,11 +314,11 @@ export const KoreanMarketPage: React.FC = () => {
   };
 
   const buildHighlights = () => {
-    if (!selectedStatementItems.length) return [];
+    if (!statementItems.length) return [];
     if (finStatement === 'BS') {
-      const assets = pickValue(selectedStatementItems, ['자산총계']);
-      const liabilities = pickValue(selectedStatementItems, ['부채총계']);
-      const equity = pickValue(selectedStatementItems, ['자본총계']);
+      const assets = pickValue(statementItems, ['자산총계']);
+      const liabilities = pickValue(statementItems, ['부채총계']);
+      const equity = pickValue(statementItems, ['자본총계']);
       return [
         assets && { label: ko.financials.assets, key: assets.key, value: assets.value },
         liabilities && {
@@ -354,9 +330,9 @@ export const KoreanMarketPage: React.FC = () => {
       ].filter(Boolean) as Array<{ label: string; key: string; value: number }>;
     }
     if (finStatement === 'IS') {
-      const revenue = pickValue(selectedStatementItems, ['매출액']);
-      const opIncome = pickValue(selectedStatementItems, ['영업이익']);
-      const netIncome = pickValue(selectedStatementItems, [
+      const revenue = pickValue(statementItems, ['매출액']);
+      const opIncome = pickValue(statementItems, ['영업이익']);
+      const netIncome = pickValue(statementItems, [
         '당기순이익',
         '분기순이익(손실)',
       ]);
@@ -374,9 +350,9 @@ export const KoreanMarketPage: React.FC = () => {
         },
       ].filter(Boolean) as Array<{ label: string; key: string; value: number }>;
     }
-    const opCF = pickValue(selectedStatementItems, ['영업활동현금흐름']);
-    const invCF = pickValue(selectedStatementItems, ['투자활동현금흐름']);
-    const finCF = pickValue(selectedStatementItems, ['재무활동현금흐름']);
+    const opCF = pickValue(statementItems, ['영업활동현금흐름']);
+    const invCF = pickValue(statementItems, ['투자활동현금흐름']);
+    const finCF = pickValue(statementItems, ['재무활동현금흐름']);
     return [
       opCF && {
         label: ko.financials.operatingCashFlow,
@@ -470,16 +446,12 @@ export const KoreanMarketPage: React.FC = () => {
       />
 
       <div style={{ display: 'flex', gap: space.md, marginBottom: space.lg }}>
-        <TextInput
-          type="text"
-          placeholder={ko.stock.searchPlaceholder}
+        <SymbolSearch
           value={symbol}
-          onChange={(e) => setSymbol(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-          aria-label={ko.stock.searchPlaceholder}
+          onSelect={(next, item) => selectSymbol(next, item?.name ?? undefined)}
         />
         <Button onClick={handleSearch} disabled={loading}>
-          {loading ? ko.common.searching : ko.common.search}
+          {loading ? ko.common.searching : ko.common.refresh}
         </Button>
       </div>
 
@@ -499,7 +471,7 @@ export const KoreanMarketPage: React.FC = () => {
           <Chip
             key={item.code}
             active={symbol === item.code}
-            onClick={() => setSymbol(item.code)}
+            onClick={() => selectSymbol(item.code, item.name)}
           >
             {item.name}{' '}
             <span className="hts-mono" style={{ color: color.inkDim }}>
@@ -508,6 +480,31 @@ export const KoreanMarketPage: React.FC = () => {
           </Chip>
         ))}
       </div>
+
+      {recents.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: space.sm,
+            flexWrap: 'wrap',
+            marginBottom: space.xl,
+          }}
+        >
+          <span style={{ fontSize: fontSize.md, color: color.inkDim }}>
+            {ko.stock.recent}
+          </span>
+          {recents.map((entry) => (
+            <Chip
+              key={entry.symbol}
+              active={symbol === entry.symbol}
+              onClick={() => selectSymbol(entry.symbol, entry.name)}
+            >
+              {entry.name || entry.symbol}
+            </Chip>
+          ))}
+        </div>
+      )}
 
       {error && (
         <div style={{ marginBottom: space.xl }}>
@@ -530,6 +527,14 @@ export const KoreanMarketPage: React.FC = () => {
             change={quote.change}
             changePercent={quote.change_percent}
             currency="KRW"
+            open={quote.open}
+            high={quote.high}
+            low={quote.low}
+            previousClose={quote.previous_close}
+            volume={quote.volume}
+            marketCap={valuation?.market_cap}
+            sharesOutstanding={valuation?.shares_outstanding}
+            timestamp={quote.timestamp}
           />
 
           {/* Valuation */}
@@ -549,7 +554,7 @@ export const KoreanMarketPage: React.FC = () => {
             {valuationLoading && !valuation ? (
               <SkeletonPanel rows={3} height={28} />
             ) : valuationError ? (
-              <Notice onRetry={loadValuation}>{valuationError}</Notice>
+              <Notice onRetry={() => void valuationQuery.refetch()}>{valuationError}</Notice>
             ) : valuation ? (
               <div
                 style={{
@@ -742,7 +747,7 @@ export const KoreanMarketPage: React.FC = () => {
           >
             {candleError && (
               <div style={{ marginBottom: space.md }}>
-                <Notice onRetry={loadCandleData}>{candleError}</Notice>
+                <Notice onRetry={() => void candlesQuery.refetch()}>{candleError}</Notice>
               </div>
             )}
             {candleLoading && candleData.length === 0 ? (
@@ -825,13 +830,13 @@ export const KoreanMarketPage: React.FC = () => {
           >
             {financialsError ? (
               <div style={{ padding: space.lg }}>
-                <Notice onRetry={loadFinancials}>{financialsError}</Notice>
+                <Notice onRetry={() => void financialsQuery.refetch()}>{financialsError}</Notice>
               </div>
             ) : financialsLoading && !comprehensiveFinancials ? (
               <div style={{ padding: space.lg }}>
                 <SkeletonPanel rows={6} />
               </div>
-            ) : comprehensiveFinancials && selectedStatementItems.length > 0 ? (
+            ) : comprehensiveFinancials && statementItems.length > 0 ? (
               <>
                 {highlights.length > 0 && (
                   <div
@@ -852,30 +857,51 @@ export const KoreanMarketPage: React.FC = () => {
                     </StatGrid>
                   </div>
                 )}
-                <TableScroll maxHeight={600} bordered={false}>
-                  <Table>
-                    <thead>
-                      <tr>
-                        <th>{ko.financials.account}</th>
-                        <th className="hts-num">{ko.financials.amount}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedStatementItems.map((item, index) => (
-                        <tr key={index}>
-                          <td>{item.account_nm || '-'}</td>
-                          <td className="hts-num">
-                            {formatValue(
-                              parseAmount(item.thstrm_amount) ??
-                                item.thstrm_amount ??
-                                '-'
-                            )}
-                          </td>
+                <div
+                  style={{
+                    padding: `${space.md} ${space.lg}`,
+                    borderBottom: `1px solid ${color.border}`,
+                  }}
+                >
+                  <TextInput
+                    type="search"
+                    value={accountFilter}
+                    onChange={(e) => setAccountFilter(e.target.value)}
+                    placeholder={ko.financials.filterPlaceholder}
+                    aria-label={ko.financials.filterPlaceholder}
+                    style={{ maxWidth: '360px' }}
+                  />
+                </div>
+                {selectedStatementItems.length > 0 ? (
+                  <TableScroll maxHeight={600} bordered={false}>
+                    <Table>
+                      <thead>
+                        <tr>
+                          <th>{ko.financials.account}</th>
+                          <th className="hts-num">{ko.financials.amount}</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </Table>
-                </TableScroll>
+                      </thead>
+                      <tbody>
+                        {selectedStatementItems.map((item, index) => (
+                          <tr key={index}>
+                            <td>{item.account_nm || '-'}</td>
+                            <td className="hts-num">
+                              {formatValue(
+                                parseAmount(item.thstrm_amount) ??
+                                  item.thstrm_amount ??
+                                  '-'
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </TableScroll>
+                ) : (
+                  <div style={{ padding: space.lg }}>
+                    <EmptyState>{ko.financials.filterNoMatch}</EmptyState>
+                  </div>
+                )}
               </>
             ) : (
               <div style={{ padding: space.lg }}>
@@ -894,7 +920,7 @@ export const KoreanMarketPage: React.FC = () => {
           >
             {estimateError ? (
               <div style={{ padding: space.lg }}>
-                <Notice onRetry={loadEstimatePerform}>{estimateError}</Notice>
+                <Notice onRetry={() => void estimatesQuery.refetch()}>{estimateError}</Notice>
               </div>
             ) : estimateLoading && !estimatePerform ? (
               <div style={{ padding: space.lg }}>

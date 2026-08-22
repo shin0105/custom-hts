@@ -22,6 +22,7 @@ import type {
   KoreanFuturesOptionOrderbook,
   KoreanFuturesOptionMinuteCandleResponse,
   KoreanFuturesOptionChainResponse,
+  KoreanStockMasterResponse,
 } from '../types/korean';
 
 const API_BASE_URL = '/api';
@@ -33,6 +34,29 @@ export const koreanMarketService = {
   async getQuote(symbol: string): Promise<KoreanStockQuote> {
     const response = await axios.get<KoreanStockQuote>(
       `${API_BASE_URL}/korean/quote/${symbol}`
+    );
+    return response.data;
+  },
+
+  /**
+   * Search the Korean stock master files by 6-digit code or Korean name.
+   */
+  async getStockMaster(params?: {
+    query?: string;
+    market?: 'all' | 'kospi' | 'kosdaq' | 'konex';
+    offset?: number;
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<KoreanStockMasterResponse> {
+    const search = new URLSearchParams();
+    if (params?.query) search.append('query', params.query);
+    if (params?.market) search.append('market', params.market);
+    if (params?.offset !== undefined) search.append('offset', String(params.offset));
+    if (params?.limit !== undefined) search.append('limit', String(params.limit));
+
+    const response = await axios.get<KoreanStockMasterResponse>(
+      `${API_BASE_URL}/korean/stocks/master?${search.toString()}`,
+      { signal: params?.signal }
     );
     return response.data;
   },

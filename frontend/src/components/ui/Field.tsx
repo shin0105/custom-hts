@@ -41,14 +41,18 @@ export const Field: React.FC<{
   </label>
 );
 
-export const TextInput: React.FC<
+export const TextInput = React.forwardRef<
+  HTMLInputElement,
   React.InputHTMLAttributes<HTMLInputElement>
-> = ({ className, ...rest }) => (
+>(({ className, ...rest }, ref) => (
   <input
+    ref={ref}
     className={['hts-input', className ?? ''].filter(Boolean).join(' ')}
     {...rest}
   />
-);
+));
+
+TextInput.displayName = 'TextInput';
 
 export const Select: React.FC<
   React.SelectHTMLAttributes<HTMLSelectElement>

@@ -101,6 +101,13 @@ export const monoFont =
 export const shadow = {
   panel: '0 1px 2px rgba(16, 20, 27, 0.04)',
   raised: '0 6px 16px rgba(16, 20, 27, 0.10)',
+  overlay: '0 8px 24px rgba(16, 20, 27, 0.14)',
+} as const;
+
+/** Stacking order for elements that float above the page flow. */
+export const zIndex = {
+  stickyHeader: 1,
+  dropdown: 30,
 } as const;
 
 /**

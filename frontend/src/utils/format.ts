@@ -156,3 +156,31 @@ export function formatDate(dateStr: string): string {
     day: 'numeric',
   });
 }
+
+/**
+ * Format a market-cap figure that arrives in 억 KRW, the unit the stock
+ * master files use.
+ */
+export function formatMarketCapFrom100m(
+  value: number | null | undefined
+): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return '-';
+  }
+  return formatKrwCompact(value * EOK);
+}
+
+/**
+ * Format an ISO timestamp as KST wall-clock time, for the "as of" label on
+ * Korean market data.
+ */
+export function formatKstTimestamp(value: string | null | undefined): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
