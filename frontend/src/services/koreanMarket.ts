@@ -12,6 +12,7 @@ import type {
   KoreanAccountResponse,
   KoreanValuationMetrics,
   KoreanEstimatePerform,
+  KoreanAllFinancialsResponse,
   KoreanBondMasterResponse,
   KoreanBondQuote,
   KoreanBondInfo,
@@ -21,6 +22,7 @@ import type {
   KoreanFuturesOptionOrderbook,
   KoreanFuturesOptionMinuteCandleResponse,
   KoreanFuturesOptionChainResponse,
+  KoreanStockMasterResponse,
 } from '../types/korean';
 
 const API_BASE_URL = '/api';
@@ -32,6 +34,29 @@ export const koreanMarketService = {
   async getQuote(symbol: string): Promise<KoreanStockQuote> {
     const response = await axios.get<KoreanStockQuote>(
       `${API_BASE_URL}/korean/quote/${symbol}`
+    );
+    return response.data;
+  },
+
+  /**
+   * Search the Korean stock master files by 6-digit code or Korean name.
+   */
+  async getStockMaster(params?: {
+    query?: string;
+    market?: 'all' | 'kospi' | 'kosdaq' | 'konex';
+    offset?: number;
+    limit?: number;
+    signal?: AbortSignal;
+  }): Promise<KoreanStockMasterResponse> {
+    const search = new URLSearchParams();
+    if (params?.query) search.append('query', params.query);
+    if (params?.market) search.append('market', params.market);
+    if (params?.offset !== undefined) search.append('offset', String(params.offset));
+    if (params?.limit !== undefined) search.append('limit', String(params.limit));
+
+    const response = await axios.get<KoreanStockMasterResponse>(
+      `${API_BASE_URL}/korean/stocks/master?${search.toString()}`,
+      { signal: params?.signal }
     );
     return response.data;
   },
@@ -145,13 +170,13 @@ export const koreanMarketService = {
     year?: number,
     quarter?: number,
     fsDivision: 'CFS' | 'OFS' = 'CFS'
-  ): Promise<any> {
+  ): Promise<KoreanAllFinancialsResponse> {
     const params = new URLSearchParams();
     if (year) params.append('year', year.toString());
     if (quarter) params.append('quarter', quarter.toString());
     params.append('fs_div', fsDivision);
 
-    const response = await axios.get(
+    const response = await axios.get<KoreanAllFinancialsResponse>(
       `${API_BASE_URL}/korean/financials/${symbol}/all?${params}`
     );
     return response.data;

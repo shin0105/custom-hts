@@ -16,6 +16,28 @@ export interface KoreanStockQuote {
   previous_close?: number;
 }
 
+export interface KoreanStockMasterItem {
+  symbol: string;
+  name?: string | null;
+  market: string;
+  standard_code?: string | null;
+  security_group_code?: string | null;
+  /** Market capitalisation in 억 KRW (100 million KRW). */
+  market_cap_100m?: number | null;
+  listing_date?: string | null;
+}
+
+export interface KoreanStockMasterResponse {
+  items: KoreanStockMasterItem[];
+  total_loaded: number;
+  total_matched: number;
+  total_returned: number;
+  offset: number;
+  limit: number;
+  query?: string | null;
+  markets: string[];
+}
+
 export interface KoreanFinancialStatement {
   symbol: string;
   company_name: string;
@@ -66,9 +88,28 @@ export interface KoreanValuationMetrics {
   as_of: string;
 }
 
+/** One line item from the DART full financial statement response. */
+export interface KoreanFinancialItem {
+  sj_nm?: string;
+  sj_div?: string;
+  account_nm?: string;
+  thstrm_amount?: string;
+}
+
+export interface KoreanAllFinancialsResponse {
+  symbol: string;
+  year: number;
+  requested_year?: number;
+  quarter?: number;
+  fs_div: 'CFS' | 'OFS';
+  count: number;
+  data: KoreanFinancialItem[];
+  note?: string;
+}
+
 export interface KoreanEstimatePerform {
   symbol: string;
-  output1: Record<string, any>[];
+  output1: Record<string, unknown>[];
   output2: Array<{
     metric: string;
     values: Array<string | number | null>;
@@ -80,7 +121,7 @@ export interface KoreanEstimatePerform {
     year_values: Record<string, string | number | null>;
   }>;
   output4: string[];
-  units?: Record<string, any>;
+  units?: Record<string, unknown>;
   unit_notes?: string;
 }
 

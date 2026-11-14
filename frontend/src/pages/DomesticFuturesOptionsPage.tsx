@@ -1,6 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CandleChart } from '../components/CandleChart';
 import { koreanMarketService } from '../services/koreanMarket';
+import {
+  Badge,
+  Button,
+  Field,
+  Notice,
+  Panel,
+  SectionHeader,
+  Select,
+  SkeletonPanel,
+  Table,
+  TableScroll,
+  TextInput,
+} from '../components/ui';
+import { color, space } from '../theme/tokens';
+import { toUserMessage } from '../utils/apiError';
 import type {
   KoreanCandleData,
   KoreanFuturesChartInterval,
@@ -25,6 +40,12 @@ const CHART_INTERVAL_OPTIONS: Array<{
   { value: 'daily', label: '일봉' },
   { value: 'minute', label: '분봉' },
 ];
+
+const MARKET_LABELS: Record<string, string> = {
+  index: '지수',
+  stock: '주식',
+  commodity: '상품',
+};
 
 const MINUTE_RANGE_OPTIONS = [
   { value: 30, label: '30분' },
@@ -214,9 +235,7 @@ export const DomesticFuturesOptionsPage: React.FC = () => {
       setMasterItems(response.items);
     } catch (err: unknown) {
       setMasterItems([]);
-      setMasterError(
-        err instanceof Error ? err.message : '마스터 코드 조회에 실패했습니다.'
-      );
+      setMasterError(toUserMessage(err, '마스터 코드를 불러오지 못했습니다.'));
     } finally {
       setMasterLoading(false);
     }
@@ -358,7 +377,7 @@ export const DomesticFuturesOptionsPage: React.FC = () => {
       setDailyCandles([]);
       setMinuteCandles([]);
       setResolved(null);
-      setError(err instanceof Error ? err.message : '차트 조회에 실패했습니다.');
+      setError(toUserMessage(err, '차트를 조회하지 못했습니다.'));
     } finally {
       setLoading(false);
     }
@@ -369,278 +388,214 @@ export const DomesticFuturesOptionsPage: React.FC = () => {
   }, []);
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '24px' }}>
-      <h1 style={{ marginBottom: '8px' }}>국내 선물옵션 차트</h1>
-      <p style={{ marginTop: 0, color: '#6b7280' }}>
-        표준코드로 종목을 찾은 뒤 일봉 또는 분봉 차트를 조회합니다.
-      </p>
+    <div className="hts-page">
+      <SectionHeader
+        title="국내 선물옵션"
+        description="표준코드로 종목을 찾은 뒤 일봉 또는 분봉 차트를 조회합니다."
+      />
 
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns:
-            chartInterval === 'daily'
-              ? 'minmax(320px, 1.6fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr) auto'
-              : 'minmax(320px, 1.6fr) minmax(180px, 1fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(160px, 1fr) auto',
-          gap: '12px',
-          marginBottom: '12px',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: space.md,
+          marginBottom: space.md,
+          alignItems: 'end',
         }}
       >
-        <input
-          value={standardCode}
-          onChange={(e) => setStandardCode(e.target.value.toUpperCase())}
-          placeholder="표준코드 입력"
-          style={{ border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px' }}
-        />
-        <select
-          value={chartInterval}
-          onChange={(e) => setChartInterval(e.target.value as KoreanFuturesChartInterval)}
-          style={{ border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px' }}
-        >
-          {CHART_INTERVAL_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <Field label="표준코드" style={{ gridColumn: 'span 2' }}>
+          <TextInput
+            value={standardCode}
+            onChange={(e) => setStandardCode(e.target.value.toUpperCase())}
+            onKeyDown={(e) => e.key === 'Enter' && loadChart()}
+            placeholder="표준코드 또는 단축코드 입력"
+          />
+        </Field>
+        <Field label="차트 종류">
+          <Select
+            value={chartInterval}
+            onChange={(e) =>
+              setChartInterval(e.target.value as KoreanFuturesChartInterval)
+            }
+          >
+            {CHART_INTERVAL_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
         {chartInterval === 'daily' ? (
           <>
-            <input
-              type="date"
-              value={dailyStartDate}
-              onChange={(e) => setDailyStartDate(e.target.value)}
-              style={{
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                padding: '10px 12px',
-              }}
-            />
-            <input
-              type="date"
-              value={dailyEndDate}
-              onChange={(e) => setDailyEndDate(e.target.value)}
-              style={{
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                padding: '10px 12px',
-              }}
-            />
+            <Field label="시작일">
+              <TextInput
+                type="date"
+                value={dailyStartDate}
+                onChange={(e) => setDailyStartDate(e.target.value)}
+              />
+            </Field>
+            <Field label="종료일">
+              <TextInput
+                type="date"
+                value={dailyEndDate}
+                onChange={(e) => setDailyEndDate(e.target.value)}
+              />
+            </Field>
           </>
         ) : (
           <>
-            <input
-              type="date"
-              value={minuteDate}
-              onChange={(e) => setMinuteDate(e.target.value)}
-              style={{
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                padding: '10px 12px',
-              }}
-            />
-            <input
-              type="time"
-              value={minuteTime}
-              onChange={(e) => setMinuteTime(e.target.value)}
-              step={60}
-              style={{
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                padding: '10px 12px',
-              }}
-            />
-            <select
-              value={minuteRangeMinutes}
-              onChange={(e) => setMinuteRangeMinutes(Number(e.target.value))}
-              style={{
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                padding: '10px 12px',
-              }}
-            >
-              {MINUTE_RANGE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <Field label="기준일">
+              <TextInput
+                type="date"
+                value={minuteDate}
+                onChange={(e) => setMinuteDate(e.target.value)}
+              />
+            </Field>
+            <Field label="기준시각">
+              <TextInput
+                type="time"
+                value={minuteTime}
+                onChange={(e) => setMinuteTime(e.target.value)}
+                step={60}
+              />
+            </Field>
+            <Field label="조회 범위">
+              <Select
+                value={minuteRangeMinutes}
+                onChange={(e) => setMinuteRangeMinutes(Number(e.target.value))}
+              >
+                {MINUTE_RANGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
           </>
         )}
-        <button
-          onClick={loadChart}
-          disabled={loading}
-          style={{
-            border: 'none',
-            borderRadius: '6px',
-            padding: '10px 16px',
-            backgroundColor: '#1d4ed8',
-            color: 'white',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            minWidth: '120px',
-          }}
-        >
-          {loading ? '조회중' : '조회'}
-        </button>
+        <Button onClick={loadChart} disabled={loading}>
+          {loading ? '조회 중...' : '조회'}
+        </Button>
       </div>
 
       {resolved && (
-        <div style={{ marginBottom: '12px', fontSize: '14px', color: '#374151' }}>
-          단축코드: {resolved.symbol}
-          {resolved.standardCode ? ` | 표준코드: ${resolved.standardCode}` : ''}
-          {resolved.name ? ` | 종목명: ${resolved.name}` : ''}
+        <div
+          style={{
+            display: 'flex',
+            gap: space.sm,
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            marginBottom: space.md,
+          }}
+        >
+          {resolved.name && <Badge tone="accent">{resolved.name}</Badge>}
+          <Badge>단축코드 {resolved.symbol}</Badge>
+          {resolved.standardCode && <Badge>표준코드 {resolved.standardCode}</Badge>}
         </div>
       )}
 
-      <section
-        style={{
-          border: '1px solid #e5e7eb',
-          borderRadius: '8px',
-          padding: '12px',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0 }}>
-            {chartInterval === 'daily' ? '일봉 차트' : '분봉 차트'}
-          </h3>
-          <span style={{ color: '#6b7280', fontSize: '13px' }}>
-            {chartInterval === 'daily'
+      <div style={{ display: 'flex', flexDirection: 'column', gap: space.lg }}>
+        <Panel
+          title={chartInterval === 'daily' ? '일봉 차트' : '분봉 차트'}
+          note={
+            chartInterval === 'daily'
               ? `조회 범위: ${dailyStartDate} ~ ${dailyEndDate}`
-              : `기준: ${minuteDate} ${minuteTime} | 범위: ${padTime(
+              : `기준: ${minuteDate} ${minuteTime} · 범위 ${padTime(
                   Math.floor(minuteRangeMinutes / 60)
-                )}:${padTime(minuteRangeMinutes % 60)}`}
-          </span>
-        </div>
-        {error && <p style={{ color: '#dc2626' }}>{error}</p>}
-        {!error && chartData.length === 0 && (
-          <p style={{ color: '#6b7280' }}>조회된 차트 데이터가 없습니다.</p>
-        )}
-        <div style={{ marginTop: '10px' }}>
-          <CandleChart
-            data={chartData}
-            currency="KRW"
-            height={420}
-            primaryTimeZone="Asia/Seoul"
-          />
-        </div>
-      </section>
-
-      <section
-        style={{
-          border: '1px solid #e5e7eb',
-          borderRadius: '8px',
-          padding: '12px',
-          marginTop: '16px',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h3 style={{ margin: 0 }}>선물옵션 마스터 코드</h3>
-            <p style={{ margin: '6px 0 0', color: '#6b7280', fontSize: '14px' }}>
-              표준코드, 단축코드, 종목명으로 검색합니다.
-            </p>
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(320px, 1fr) auto auto',
-            gap: '12px',
-            marginTop: '12px',
-            marginBottom: '12px',
-          }}
+                )}:${padTime(minuteRangeMinutes % 60)}`
+          }
         >
-          <input
-            value={masterQuery}
-            onChange={(e) => setMasterQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                loadMaster(masterQuery);
-              }
-            }}
-            placeholder="표준코드 / 단축코드 / 종목명 검색"
-            style={{ border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px' }}
-          />
-          <button
-            onClick={() => loadMaster(masterQuery)}
-            disabled={masterLoading}
-            style={{
-              border: 'none',
-              borderRadius: '6px',
-              padding: '10px 16px',
-              backgroundColor: '#1d4ed8',
-              color: 'white',
-              cursor: masterLoading ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {masterLoading ? '조회중' : '검색'}
-          </button>
-          <button
-            onClick={() => {
-              setMasterQuery('');
-              loadMaster();
-            }}
-            disabled={masterLoading}
-            style={{
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              padding: '10px 16px',
-              backgroundColor: 'white',
-              color: '#111827',
-              cursor: masterLoading ? 'not-allowed' : 'pointer',
-            }}
-          >
-            초기화
-          </button>
-        </div>
+          {error && (
+            <div style={{ marginBottom: space.md }}>
+              <Notice onRetry={loadChart}>{error}</Notice>
+            </div>
+          )}
+          {loading && chartData.length === 0 ? (
+            <SkeletonPanel rows={4} height={60} />
+          ) : (
+            <CandleChart
+              data={chartData}
+              currency="KRW"
+              height={420}
+              primaryTimeZone="Asia/Seoul"
+            />
+          )}
+        </Panel>
 
-        {masterError && <p style={{ color: '#dc2626' }}>{masterError}</p>}
+        <Panel
+          title="선물옵션 마스터 코드"
+          note="표준코드, 단축코드, 종목명으로 검색합니다."
+          actions={
+            <>
+              <TextInput
+                value={masterQuery}
+                onChange={(e) => setMasterQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    loadMaster(masterQuery);
+                  }
+                }}
+                placeholder="표준코드 / 단축코드 / 종목명 검색"
+                aria-label="마스터 코드 검색"
+                style={{ minWidth: '260px' }}
+              />
+              <Button size="sm" onClick={() => loadMaster(masterQuery)} disabled={masterLoading}>
+                {masterLoading ? '조회 중...' : '검색'}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setMasterQuery('');
+                  loadMaster();
+                }}
+                disabled={masterLoading}
+              >
+                초기화
+              </Button>
+            </>
+          }
+          flush
+        >
+          {masterError && (
+            <div style={{ padding: space.lg }}>
+              <Notice onRetry={() => loadMaster(masterQuery)}>{masterError}</Notice>
+            </div>
+          )}
 
-        <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '820px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f9fafb' }}>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>시장</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>단축코드</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>표준코드</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>종목명</th>
-                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>기초자산명</th>
-              </tr>
-            </thead>
-            <tbody>
-              {masterItems.map((item) => (
-                <tr key={`${item.market}-${item.short_code}-${item.standard_code}`}>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>
-                    {item.market}
-                  </td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>
-                    {item.short_code || '-'}
-                  </td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>
-                    {item.standard_code || '-'}
-                  </td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>
-                    {item.name_kr || '-'}
-                  </td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #f3f4f6' }}>
-                    {item.underlying_name_kr || '-'}
-                  </td>
-                </tr>
-              ))}
-              {!masterLoading && masterItems.length === 0 && (
+          <TableScroll bordered={false} maxHeight={520}>
+            <Table minWidth={820}>
+              <thead>
                 <tr>
-                  <td
-                    colSpan={5}
-                    style={{ padding: '16px', textAlign: 'center', color: '#6b7280' }}
-                  >
-                    표시할 마스터 코드가 없습니다.
-                  </td>
+                  <th>시장</th>
+                  <th>단축코드</th>
+                  <th>표준코드</th>
+                  <th>종목명</th>
+                  <th>기초자산명</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody>
+                {masterItems.map((item) => (
+                  <tr key={`${item.market}-${item.short_code}-${item.standard_code}`}>
+                    <td>{MARKET_LABELS[item.market] ?? item.market}</td>
+                    <td className="hts-mono">{item.short_code || '-'}</td>
+                    <td className="hts-mono">{item.standard_code || '-'}</td>
+                    <td>{item.name_kr || '-'}</td>
+                    <td>{item.underlying_name_kr || '-'}</td>
+                  </tr>
+                ))}
+                {!masterLoading && masterItems.length === 0 && (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: 'center', color: color.inkDim }}>
+                      표시할 마스터 코드가 없습니다.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </Table>
+          </TableScroll>
+        </Panel>
+      </div>
     </div>
   );
 };

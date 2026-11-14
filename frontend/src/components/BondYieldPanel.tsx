@@ -35,6 +35,9 @@ const sectionTitle: React.CSSProperties = {
   color: '#374151',
   margin: '16px 0 8px',
 };
+/** A grid cell holding a table: scrolls sideways rather than spilling
+ * into its neighbour when the table is wider than the cell. */
+const tableCell: React.CSSProperties = { minWidth: 0, overflowX: 'auto' };
 const th: React.CSSProperties = {
   padding: '6px 10px',
   textAlign: 'right',
@@ -174,7 +177,6 @@ export const BondYieldPanel: React.FC<{ pdno: string }> = ({ pdno }) => {
     <div
       style={{
         padding: '12px 16px 16px',
-        borderBottom: '1px solid #e5e7eb',
         backgroundColor: '#ffffff',
       }}
     >
@@ -325,12 +327,12 @@ export const BondYieldPanel: React.FC<{ pdno: string }> = ({ pdno }) => {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))',
               gap: '16px',
             }}
           >
             {analytics.levels.length > 0 && (
-              <div>
+              <div style={tableCell}>
                 <div style={sectionTitle}>호가별 수익률</div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <thead>
@@ -363,7 +365,7 @@ export const BondYieldPanel: React.FC<{ pdno: string }> = ({ pdno }) => {
             )}
 
             {analytics.scenarios.length > 0 && (
-              <div>
+              <div style={tableCell}>
                 <div style={sectionTitle}>금리 변동 시 가격</div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <thead>
@@ -391,7 +393,7 @@ export const BondYieldPanel: React.FC<{ pdno: string }> = ({ pdno }) => {
             )}
 
             {analytics.agencies.length > 0 && (
-              <div>
+              <div style={tableCell}>
                 <div style={sectionTitle}>채권평가사별 평가</div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <thead>

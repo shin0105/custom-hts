@@ -84,7 +84,7 @@ export const USMarketPage: React.FC = () => {
         console.error('Failed to load financials:', finError);
         setFinancials(null);
       }
-    } catch (err) {
+    } catch {
       setError('Failed to load stock data. Please check the symbol and try again.');
       setQuote(null);
       setValuation(null);
@@ -97,7 +97,7 @@ export const USMarketPage: React.FC = () => {
 
   const loadCandleData = async () => {
     try {
-      let candles = await usMarketService.getHistoricalData(
+      const candles = await usMarketService.getHistoricalData(
         symbol,
         period,
         interval,
@@ -116,7 +116,7 @@ export const USMarketPage: React.FC = () => {
     if (symbol && quote) {
       const loadData = async () => {
         try {
-          let candles = await usMarketService.getHistoricalData(
+          const candles = await usMarketService.getHistoricalData(
             symbol,
             period,
             interval,
@@ -131,6 +131,7 @@ export const USMarketPage: React.FC = () => {
       };
       loadData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol, quote, period, interval, startDate, endDate, startTime]);
 
   useEffect(() => {
@@ -237,6 +238,7 @@ export const USMarketPage: React.FC = () => {
             change={quote.change}
             changePercent={quote.change_percent}
             currency="USD"
+            colorConvention="global"
           />
           {quote.market_cap && (
             <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '6px' }}>
@@ -381,6 +383,7 @@ export const USMarketPage: React.FC = () => {
             height={500}
             primaryTimeZone="America/New_York"
             secondaryTimeZone="Asia/Seoul"
+            colorConvention="global"
           />
         </div>
       )}
