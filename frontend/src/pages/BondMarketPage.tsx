@@ -638,11 +638,7 @@ export const BondMarketPage: React.FC = () => {
             )}
           </Panel>
 
-          {analyticsPdno && (
-            <Panel flush>
-              <BondYieldPanel pdno={analyticsPdno} />
-            </Panel>
-          )}
+          {analyticsPdno && <BondYieldPanel pdno={analyticsPdno} />}
 
           <Panel title="장내채권 현재가 (일별)">
             {dailyError && (
