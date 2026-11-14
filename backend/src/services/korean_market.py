@@ -32,6 +32,7 @@ from ..integrations.futures_options_master import (
 )
 from ..integrations.opendart import opendart_client
 from ..integrations.supabase_client import supabase_client
+from .bond_analytics import bond_analytics_service
 
 logger = logging.getLogger(__name__)
 
@@ -793,171 +794,54 @@ class KoreanMarketService:
         return kdevelopers_client.get_bond_issue_info(pdno)
 
     async def get_bond_valuation(self, pdno: str) -> Optional[KoreanBondValuation]:
-        info = kdevelopers_client.get_bond_basic_info(pdno) or {}
-        quote = await self.get_bond_price(pdno)
-        daily_prices = await self.get_bond_daily_price(pdno, limit=1) or []
+        """Compare the market price with the pricing agencies' valuation.
 
-        if not info and not quote and not daily_prices:
+        The theoretical price discounts the bond's cash flows at the
+        agencies' average yield, so the gap to the market price is a real
+        rich/cheap signal. Prices are dirty (KRX quotes include accrued
+        interest) and rescaled from the 10,000-face quote to face 100.
+        """
+        try:
+            analytics = await bond_analytics_service.get_analytics(pdno)
+        except LookupError:
             return None
 
-        notes: List[str] = []
-        raw_market_price, market_price_source = self._pick_bond_market_price(
-            quote, daily_prices
-        )
-        market_price = self._normalize_bond_price(raw_market_price)
-        if market_price is None:
-            notes.append("시장가격을 찾지 못했습니다.")
-        elif (
-            raw_market_price is not None
-            and market_price is not None
-            and abs(raw_market_price - market_price) > 1e-9
-        ):
-            notes.append(
-                "시장가격 단위를 액면 100 기준으로 정규화했습니다 (raw/100)."
-            )
+        def per_100(value: Optional[float]) -> Optional[float]:
+            return round(value / 100.0, 6) if value is not None else None
 
-        name = (
-            info.get("ksd_bond_item_name")
-            or (quote.name if quote else None)
-            or pdno
-        )
-        coupon_rate = self._to_float(info.get("ksd_rcvg_bond_srfc_inrt"))
-        if coupon_rate is None:
-            notes.append("표면이율이 없어 이표채 현금흐름 계산이 제한됩니다.")
+        notes = list(analytics.notes)
+        market = per_100(analytics.reference_price)
+        theoretical = per_100(analytics.agency_implied_price)
+        accrued = per_100(analytics.accrued_interest)
+        if analytics.supported and theoretical is None:
+            notes.append("민평 수익률이 없어 이론가격을 계산하지 못했습니다.")
 
-        yield_rate = quote.earning_rate if quote else None
-        if yield_rate is None:
-            yield_rate = self._to_float(info.get("bond_expd_asrc_erng_rt"))
-        if yield_rate is None:
-            yield_rate = self._to_float(info.get("expd_asrc_erng_rt"))
-        if yield_rate is None:
-            notes.append("수익률(할인율) 데이터가 없어 이론가격을 계산하지 못했습니다.")
-
-        interval_months = self._to_int(info.get("int_caltm_mcnt"))
-        if interval_months is not None and interval_months <= 0:
-            interval_months = None
-        if interval_months is None and coupon_rate and coupon_rate > 0:
-            interval_months = 6
-            notes.append(
-                "이자지급주기가 없어 반기(6개월)로 가정해 계산했습니다."
-            )
-
-        maturity_date_str = (info.get("rdpt_dt") or "").strip() or None
-        maturity_date = self._parse_yyyymmdd(maturity_date_str)
-        if maturity_date is None:
-            notes.append("만기일 데이터가 없어 이론가격 계산이 제한됩니다.")
-
-        next_coupon_date_str = (info.get("nxtm_int_dfrm_dt") or "").strip() or None
-        next_coupon_date = self._parse_yyyymmdd(next_coupon_date_str)
-
-        previous_coupon_date_str = (
-            (info.get("rgbf_int_dfrm_dt") or "").strip() or None
-        )
-        previous_coupon_date = self._parse_yyyymmdd(previous_coupon_date_str)
-
-        if (
-            next_coupon_date is None
-            and previous_coupon_date is not None
-            and interval_months
-        ):
-            next_coupon_date = self._add_months(
-                previous_coupon_date, interval_months
-            )
-            next_coupon_date_str = next_coupon_date.strftime("%Y%m%d")
-            notes.append("차기이자지급일이 없어 직전이자지급일로 보정했습니다.")
-
-        redemption_ratio = self._to_float(info.get("bond_expd_rdpt_rt"))
-        if redemption_ratio is None:
-            redemption_ratio = self._to_float(info.get("expd_rdpt_rt"))
-        if redemption_ratio is None:
-            redemption_ratio = 100.0
-
-        face_value = 100.0
-        theoretical_dirty_price: Optional[float] = None
-        accrued_interest: Optional[float] = None
-        theoretical_clean_price: Optional[float] = None
-        mispricing: Optional[float] = None
-        mispricing_percent: Optional[float] = None
-        remaining_periods: Optional[int] = None
-
-        if (
-            coupon_rate is not None
-            and yield_rate is not None
-            and interval_months is not None
-            and next_coupon_date is not None
-            and maturity_date is not None
-        ):
-            schedule = self._build_coupon_schedule(
-                next_coupon_date, maturity_date, interval_months
-            )
-            remaining_periods = len(schedule)
-
-            if remaining_periods == 0:
-                notes.append("남은 쿠폰 스케줄이 없어 만기 전 현금흐름을 계산하지 못했습니다.")
-            else:
-                period_years = interval_months / 12.0
-                period_discount = 1.0 + (yield_rate / 100.0) * period_years
-                if period_discount <= 0:
-                    notes.append("유효하지 않은 할인율로 이론가격 계산을 건너뛰었습니다.")
-                else:
-                    coupon_cashflow = face_value * (coupon_rate / 100.0) * period_years
-                    redemption_amount = face_value * (redemption_ratio / 100.0)
-                    theoretical_dirty_price = 0.0
-                    for period_index in range(1, remaining_periods + 1):
-                        discounted_coupon = coupon_cashflow / (
-                            period_discount**period_index
-                        )
-                        theoretical_dirty_price += discounted_coupon
-                    theoretical_dirty_price += redemption_amount / (
-                        period_discount**remaining_periods
-                    )
-
-                    if previous_coupon_date is None:
-                        previous_coupon_date = self._add_months(
-                            next_coupon_date, -interval_months
-                        )
-                    if previous_coupon_date and next_coupon_date:
-                        period_days = (next_coupon_date - previous_coupon_date).days
-                        if period_days > 0:
-                            elapsed_days = (
-                                date.today() - previous_coupon_date
-                            ).days
-                            elapsed_days = max(0, min(elapsed_days, period_days))
-                            accrued_interest = (
-                                coupon_cashflow * elapsed_days / period_days
-                            )
-                    theoretical_clean_price = theoretical_dirty_price - (
-                        accrued_interest or 0.0
-                    )
-
-        if (
-            market_price is not None
-            and theoretical_clean_price is not None
-            and theoretical_clean_price != 0
-        ):
-            mispricing = market_price - theoretical_clean_price
-            mispricing_percent = mispricing / theoretical_clean_price * 100.0
+        mispricing = None
+        mispricing_percent = None
+        if market is not None and theoretical:
+            mispricing = round(market - theoretical, 6)
+            mispricing_percent = round(mispricing / theoretical * 100.0, 6)
 
         return KoreanBondValuation(
             pdno=pdno,
-            name=name,
-            as_of=datetime.now(),
-            raw_market_price=raw_market_price,
-            market_price=market_price,
-            market_price_source=market_price_source,
-            theoretical_dirty_price=theoretical_dirty_price,
-            accrued_interest=accrued_interest,
-            theoretical_clean_price=theoretical_clean_price,
+            name=analytics.name,
+            as_of=analytics.as_of,
+            raw_market_price=analytics.reference_price,
+            market_price=market,
+            market_price_source=analytics.reference_source,
+            theoretical_dirty_price=theoretical,
+            accrued_interest=accrued,
+            theoretical_clean_price=round(theoretical - accrued, 6)
+            if theoretical is not None and accrued is not None
+            else None,
             mispricing=mispricing,
             mispricing_percent=mispricing_percent,
-            annual_coupon_rate=coupon_rate,
-            annual_yield_rate=yield_rate,
-            payment_interval_months=interval_months,
-            remaining_periods=remaining_periods,
-            face_value=face_value,
-            redemption_ratio=redemption_ratio,
-            next_coupon_date=next_coupon_date_str,
-            maturity_date=maturity_date_str,
+            annual_coupon_rate=analytics.coupon_rate,
+            annual_yield_rate=analytics.agency_yield,
+            payment_interval_months=analytics.interval_months,
+            face_value=100.0,
+            next_coupon_date=analytics.next_coupon_date,
+            maturity_date=analytics.maturity_date,
             notes=notes,
         )
 
@@ -1214,6 +1098,8 @@ class KoreanMarketService:
         rows: List[Dict[str, Any]] = []
 
         for one_market in target_markets:
+            # Contracts are relisted daily; a stale file names expired months.
+            futures_options_master_file_manager.ensure_fresh(one_market)
             local_file = futures_options_master_file_manager.get_local_master_file(
                 one_market
             )
@@ -1706,78 +1592,5 @@ class KoreanMarketService:
             return False
         return True
 
-    def _pick_bond_market_price(
-        self,
-        quote: Optional[KoreanBondQuote],
-        daily_prices: List[KoreanCandleData],
-    ) -> Tuple[Optional[float], Optional[str]]:
-        if quote and quote.middle_price is not None:
-            return quote.middle_price, "middle_price"
-        if quote and quote.current_price is not None:
-            return quote.current_price, "current_price"
-        if daily_prices:
-            return daily_prices[0].close, "daily_close"
-        return None, None
-
-    def _normalize_bond_price(self, raw_price: Optional[float]) -> Optional[float]:
-        if raw_price is None:
-            return None
-        # KR listed bond quote APIs often return price on KRW/10,000-par scale
-        # (e.g., 9,113.5 ~= 91.135 on face=100 basis).
-        if raw_price >= 1000:
-            return raw_price / 100.0
-        return raw_price
-
-    def _parse_yyyymmdd(self, value: Optional[str]) -> Optional[date]:
-        if not value:
-            return None
-        text = value.strip()
-        if len(text) != 8 or not text.isdigit() or text == "00000000":
-            return None
-        try:
-            return datetime.strptime(text, "%Y%m%d").date()
-        except ValueError:
-            return None
-
-    def _add_months(self, source: date, months: int) -> date:
-        month_index = (source.month - 1) + months
-        year = source.year + month_index // 12
-        month = month_index % 12 + 1
-        month_days = [
-            31,
-            29
-            if (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0))
-            else 28,
-            31,
-            30,
-            31,
-            30,
-            31,
-            31,
-            30,
-            31,
-            30,
-            31,
-        ][month - 1]
-        day = min(source.day, month_days)
-        return date(year, month, day)
-
-    def _build_coupon_schedule(
-        self, next_coupon_date: date, maturity_date: date, interval_months: int
-    ) -> List[date]:
-        if interval_months <= 0:
-            return []
-        schedule: List[date] = []
-        cursor = next_coupon_date
-
-        while cursor < date.today():
-            cursor = self._add_months(cursor, interval_months)
-
-        while cursor < maturity_date:
-            schedule.append(cursor)
-            cursor = self._add_months(cursor, interval_months)
-
-        schedule.append(maturity_date)
-        return schedule
 
 korean_market_service = KoreanMarketService()

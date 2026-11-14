@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { BondYieldPanel } from '../components/BondYieldPanel';
 import { CandleChart } from '../components/CandleChart';
 import { koreanMarketService } from '../services/koreanMarket';
 import type {
@@ -6,7 +7,6 @@ import type {
   KoreanBondMasterItem,
   KoreanBondQuote,
   KoreanCandleData,
-  KoreanBondValuation,
 } from '../types/korean';
 
 const PAGE_SIZE = 10;
@@ -44,14 +44,6 @@ const formatNumber = (value?: number | null) => {
 const formatPct = (value?: number | null) => {
   if (value === null || value === undefined) return '-';
   return `${value.toFixed(2)}%`;
-};
-
-const formatMarketPriceSource = (source?: string | null) => {
-  if (!source) return '-';
-  if (source === 'middle_price') return '중간가';
-  if (source === 'current_price') return '현재가';
-  if (source === 'daily_close') return '일별 종가';
-  return source;
 };
 
 const INTEREST_METHOD: Record<string, string> = {
@@ -236,7 +228,7 @@ export const BondMarketPage: React.FC = () => {
   const [infoError, setInfoError] = useState<string | null>(null);
   const [data, setData] = useState<KoreanBondInfo | null>(null);
   const [quote, setQuote] = useState<KoreanBondQuote | null>(null);
-  const [valuation, setValuation] = useState<KoreanBondValuation | null>(null);
+  const [analyticsPdno, setAnalyticsPdno] = useState<string | null>(null);
   const [dailyPrices, setDailyPrices] = useState<KoreanCandleData[]>([]);
   const [dailyError, setDailyError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -270,29 +262,25 @@ export const BondMarketPage: React.FC = () => {
     setInfoError(null);
     setData(null);
     setQuote(null);
-    setValuation(null);
+    setAnalyticsPdno(null);
     setDailyPrices([]);
     setDailyError(null);
     try {
-      const [infoResult, quoteResult, valuationResult, dailyResult] =
-        await Promise.allSettled([
+      const [infoResult, quoteResult, dailyResult] = await Promise.allSettled([
         koreanMarketService.getBondInfo(code),
         koreanMarketService.getBondPrice(code),
-        koreanMarketService.getBondValuation(code),
         koreanMarketService.getBondDailyPrice(code, 100),
       ]);
 
       if (infoResult.status === 'fulfilled') {
         setData(infoResult.value);
+        setAnalyticsPdno(code.toUpperCase());
       } else {
         throw infoResult.reason;
       }
 
       if (quoteResult.status === 'fulfilled') {
         setQuote(quoteResult.value);
-      }
-      if (valuationResult.status === 'fulfilled') {
-        setValuation(valuationResult.value);
       }
       if (dailyResult.status === 'fulfilled') {
         setDailyPrices(dailyResult.value);
@@ -483,11 +471,11 @@ export const BondMarketPage: React.FC = () => {
   }, [data]);
 
   return (
-    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '24px' }}>
-      <h1 style={{ marginBottom: '8px' }}>장내채권 기본조회</h1>
-      <p style={{ marginTop: 0, color: '#6b7280' }}>
-        채권 종목코드(PDNO)를 입력하면 KDevelopers 장내채권 기본조회 API(CTPF1114R)로
-        채권 정보를 조회합니다.
+    <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '24px' }}>
+      <h1 style={{ marginBottom: '8px' }}>장내채권 조회</h1>
+      <p style={{ margin: '0 0 12px', color: '#6b7280' }}>
+        채권 종목코드(PDNO)를 입력하면 시세와 수익률 분석(호가별 수익률, 민평 대비,
+        듀레이션, 수익률 추이), 채권 기본정보를 조회합니다.
       </p>
 
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
@@ -578,35 +566,7 @@ export const BondMarketPage: React.FC = () => {
               <div>거래량: <strong>{formatNumber(quote.volume)}</strong></div>
             </div>
           )}
-          {valuation && (
-            <div
-              style={{
-                padding: '12px 16px',
-                borderBottom: '1px solid #e5e7eb',
-                backgroundColor: '#ecfeff',
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                gap: '8px',
-                fontSize: '13px',
-              }}
-            >
-              <div>시장가격: <strong>{formatNumber(valuation.market_price)}</strong></div>
-              <div>시장가격 Raw: <strong>{formatNumber(valuation.raw_market_price)}</strong></div>
-              <div>시장가격 소스: <strong>{formatMarketPriceSource(valuation.market_price_source)}</strong></div>
-              <div>이론 Dirty Price: <strong>{formatNumber(valuation.theoretical_dirty_price)}</strong></div>
-              <div>경과이자: <strong>{formatNumber(valuation.accrued_interest)}</strong></div>
-              <div>이론 Clean Price: <strong>{formatNumber(valuation.theoretical_clean_price)}</strong></div>
-              <div>괴리(시장-이론): <strong>{formatNumber(valuation.mispricing)}</strong></div>
-              <div>괴리율: <strong>{formatPct(valuation.mispricing_percent)}</strong></div>
-              <div>표면금리/할인율: <strong>{formatPct(valuation.annual_coupon_rate)} / {formatPct(valuation.annual_yield_rate)}</strong></div>
-              <div>이자주기/잔여회차: <strong>{valuation.payment_interval_months ?? '-'}개월 / {valuation.remaining_periods ?? '-'}</strong></div>
-              <div>차기이자지급일: <strong>{formatDate(valuation.next_coupon_date ?? undefined)}</strong></div>
-              <div>만기일: <strong>{formatDate(valuation.maturity_date ?? undefined)}</strong></div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                계산 메모: <strong>{valuation.notes.length ? valuation.notes.join(' | ') : '-'}</strong>
-              </div>
-            </div>
-          )}
+          {analyticsPdno && <BondYieldPanel pdno={analyticsPdno} />}
           <div
             style={{
               padding: '12px 16px',

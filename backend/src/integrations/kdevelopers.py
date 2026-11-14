@@ -666,6 +666,69 @@ class KDevelopersClient:
             logger.error(f"Exception in get_bond_issue_info for {pdno}: {e}")
             return None
 
+    def get_bond_avg_unit(
+        self,
+        pdno: str,
+        start_date: str,
+        end_date: str,
+        max_pages: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get daily valuation prices/yields from the bond pricing agencies.
+
+        API: [장내채권] 기본시세 > 장내채권 평균단가조회 [국내주식-158]
+
+        Rows come back newest first, 20 per page; follow the continuation
+        key until the range is exhausted or ``max_pages`` is reached.
+
+        Args:
+            pdno: Bond standard code
+            start_date: Range start (YYYYMMDD)
+            end_date: Range end (YYYYMMDD)
+            max_pages: Upper bound on continuation requests
+
+        Returns:
+            output1 rows (evlu_dt, avg_evlu_erng_rt, avg_evlu_unpr, ...)
+        """
+        rows: List[Dict[str, Any]] = []
+        try:
+            api_url = "/uapi/domestic-bond/v1/quotations/avg-unit"
+            tr_id = "CTPF2005R"
+            next_key = ""
+            search_key = ""
+            for page in range(max(1, max_pages)):
+                params = {
+                    "INQR_STRT_DT": start_date,
+                    "INQR_END_DT": end_date,
+                    "PDNO": pdno,
+                    "PRDT_TYPE_CD": "302",
+                    "VRFC_KIND_CD": "00",
+                    "CTX_AREA_NK30": next_key,
+                    "CTX_AREA_FK100": search_key,
+                }
+                res = self._url_fetch(
+                    api_url, tr_id, "N" if page else "", params
+                )
+                if not res.is_ok():
+                    res.print_error(api_url)
+                    break
+
+                body = res.get_body()
+                rows.extend(
+                    self._output_to_list(getattr(body, "output1", None))
+                )
+                has_more = getattr(res.get_header(), "tr_cont", "") in (
+                    "M",
+                    "F",
+                )
+                next_key = getattr(body, "ctx_area_nk30", "") or ""
+                search_key = getattr(body, "ctx_area_fk100", "") or ""
+                if not has_more or not next_key.strip():
+                    break
+        except Exception as e:
+            logger.error(f"Exception in get_bond_avg_unit for {pdno}: {e}")
+        return rows
+
     def get_daily_candle(
         self,
         symbol: str,
@@ -1243,6 +1306,152 @@ class KDevelopersClient:
         except Exception as e:
             logger.error(f"Exception in get_future_option_callput for {expiry}: {e}")
             return None
+
+    def get_index_price(self, index_code: str) -> Optional[Dict[str, Any]]:
+        """
+        Get the current value of a domestic index.
+
+        API: [국내주식] 업종/기타 > 국내업종 현재지수 [v1_국내주식-063]
+
+        Args:
+            index_code: Index code (e.g. "2001" KOSPI200, "3003" KOSDAQ150)
+        """
+        try:
+            api_url = "/uapi/domestic-stock/v1/quotations/inquire-index-price"
+            tr_id = "FHPUP02100000"
+            params = {
+                "FID_COND_MRKT_DIV_CODE": "U",
+                "FID_INPUT_ISCD": index_code,
+            }
+            res = self._url_fetch(api_url, tr_id, "", params)
+            if not res.is_ok():
+                res.print_error(api_url)
+                return None
+            return self._output_to_dict(getattr(res.get_body(), "output", None))
+        except Exception as e:
+            logger.error(f"Exception in get_index_price for {index_code}: {e}")
+            return None
+
+    def _get_daily_chart_rows(
+        self,
+        api_url: str,
+        tr_id: str,
+        base_params: Dict[str, str],
+        start_date: str,
+        end_date: str,
+        max_pages: int,
+    ) -> List[Dict[str, Any]]:
+        """Page a date-ranged daily chart API backwards from ``end_date``.
+
+        These APIs return the newest rows first and cap each response, so
+        the next request ends the day before the oldest row received.
+        """
+        rows: List[Dict[str, Any]] = []
+        seen: set = set()
+        cursor_end = end_date
+        for _ in range(max(1, max_pages)):
+            params = dict(base_params)
+            params["FID_INPUT_DATE_1"] = start_date
+            params["FID_INPUT_DATE_2"] = cursor_end
+            res = self._url_fetch(api_url, tr_id, "", params)
+            if not res.is_ok():
+                res.print_error(api_url)
+                break
+            page = [
+                row
+                for row in self._output_to_list(
+                    getattr(res.get_body(), "output2", None)
+                )
+                if row.get("stck_bsop_date")
+                and row["stck_bsop_date"] not in seen
+            ]
+            if not page:
+                break
+            rows.extend(page)
+            seen.update(row["stck_bsop_date"] for row in page)
+            oldest = min(row["stck_bsop_date"] for row in page)
+            if oldest <= start_date:
+                break
+            cursor_end = (
+                datetime.strptime(oldest, "%Y%m%d") - timedelta(days=1)
+            ).strftime("%Y%m%d")
+            if cursor_end < start_date:
+                break
+        return rows
+
+    def get_index_daily_chart(
+        self,
+        index_code: str,
+        start_date: str,
+        end_date: str,
+        max_pages: int = 4,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get daily index values for a date range (50 rows per request).
+
+        API: [국내주식] 업종/기타 > 국내주식업종기간별시세(일/주/월/년)
+
+        Returns:
+            Rows with stck_bsop_date and bstp_nmix_prpr (close).
+        """
+        try:
+            return self._get_daily_chart_rows(
+                "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice",
+                "FHKUP03500100",
+                {
+                    "FID_COND_MRKT_DIV_CODE": "U",
+                    "FID_INPUT_ISCD": index_code,
+                    "FID_PERIOD_DIV_CODE": "D",
+                },
+                start_date,
+                end_date,
+                max_pages,
+            )
+        except Exception as e:
+            logger.error(
+                f"Exception in get_index_daily_chart for {index_code}: {e}"
+            )
+            return []
+
+    def get_stock_daily_chart(
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+        adjusted: bool = False,
+        max_pages: int = 3,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get daily stock prices for a date range (100 rows per request).
+
+        API: [국내주식] 기본시세 > 국내주식기간별시세(일/주/월/년)
+
+        Unlike get_daily_candle (latest 30 rows only), this honours the
+        date range. Prices are unadjusted by default so they line up with
+        what the futures traded against on each day.
+
+        Returns:
+            Rows with stck_bsop_date and stck_clpr (close).
+        """
+        try:
+            return self._get_daily_chart_rows(
+                "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+                "FHKST03010100",
+                {
+                    "FID_COND_MRKT_DIV_CODE": "J",
+                    "FID_INPUT_ISCD": symbol,
+                    "FID_PERIOD_DIV_CODE": "D",
+                    "FID_ORG_ADJ_PRC": "0" if adjusted else "1",
+                },
+                start_date,
+                end_date,
+                max_pages,
+            )
+        except Exception as e:
+            logger.error(
+                f"Exception in get_stock_daily_chart for {symbol}: {e}"
+            )
+            return []
 
     def get_account_balance(
         self, account_number: str, account_product_code: str = "01"

@@ -19,6 +19,22 @@ from ..models.korean import (
     KoreanFuturesOptionMinuteCandleResponse,
     KoreanFuturesOptionChainResponse,
 )
+from ..models.korean_analytics import (
+    KoreanBasisHistory,
+    KoreanBasisSnapshot,
+    KoreanBasisUnderlying,
+    KoreanBondAnalytics,
+    KoreanBondYieldHistory,
+    KoreanOptionParity,
+)
+from ..services.basis import basis_service
+from ..services.bond_analytics import bond_analytics_service
+from ..services.option_parity import (
+    DEFAULT_STRIKES,
+    MAX_STRIKES,
+    MIN_STRIKES,
+    option_parity_service,
+)
 from ..services.korean_market import korean_market_service
 from ..utils.config import settings
 from ..integrations.opendart import opendart_client
@@ -439,6 +455,33 @@ async def get_korean_bond_issue_info(pdno: str) -> Dict[str, Any]:
     return info
 
 
+@router.get("/bonds/{pdno}/analytics", response_model=KoreanBondAnalytics)
+async def get_korean_bond_analytics(pdno: str) -> KoreanBondAnalytics:
+    """Yields at last/bid/ask, risk measures and pricing-agency spread."""
+    try:
+        return await bond_analytics_service.get_analytics(pdno.strip().upper())
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get(
+    "/bonds/{pdno}/yield-history", response_model=KoreanBondYieldHistory
+)
+async def get_korean_bond_yield_history(
+    pdno: str,
+    days: int = Query(
+        120, ge=10, le=365, description="Calendar days of history"
+    ),
+) -> KoreanBondYieldHistory:
+    """Daily market yield against the pricing agencies' average yield."""
+    try:
+        return await bond_analytics_service.get_yield_history(
+            pdno.strip().upper(), days=days
+        )
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 @router.post("/bonds/master/refresh")
 async def refresh_korean_bond_master(
     output_format: str = Query(
@@ -764,6 +807,103 @@ async def get_korean_futures_options_option_chain(
             detail=f"Futures/options option-chain not found for expiry {expiry}",
         )
     return chain
+
+
+@router.get("/basis/underlyings", response_model=List[KoreanBasisUnderlying])
+async def get_korean_basis_underlyings(
+    query: Optional[str] = Query(
+        None, description="Filter by underlying code or name"
+    ),
+) -> List[KoreanBasisUnderlying]:
+    """List stocks and indexes that have listed futures."""
+    return await basis_service.get_underlyings(query)
+
+
+@router.get("/basis/{underlying}", response_model=KoreanBasisSnapshot)
+async def get_korean_basis_snapshot(
+    underlying: str,
+    rate: Optional[float] = Query(
+        None,
+        ge=-5,
+        le=30,
+        description=(
+            "Annual financing rate (%). Omit to use the broker's "
+            "theoretical price as fair value."
+        ),
+    ),
+    dividend: float = Query(
+        0.0,
+        ge=0,
+        description="Dividends expected before expiry, in price units",
+    ),
+    months: int = Query(4, ge=1, le=8, description="Contract months to quote"),
+) -> KoreanBasisSnapshot:
+    """Compare a stock or index with its listed futures months.
+
+    `underlying` accepts a stock code (005930), an index code (2001), or
+    a futures short code.
+    """
+    try:
+        return await basis_service.get_snapshot(
+            underlying, rate=rate, dividend=dividend, months=months
+        )
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/basis/{underlying}/history", response_model=KoreanBasisHistory)
+async def get_korean_basis_history(
+    underlying: str,
+    symbol: Optional[str] = Query(
+        None, description="Futures short code (default: front month)"
+    ),
+    days: int = Query(90, ge=5, le=365, description="Calendar days of history"),
+) -> KoreanBasisHistory:
+    """Daily basis between one futures contract and its underlying."""
+    try:
+        return await basis_service.get_history(
+            underlying, symbol=symbol, days=days
+        )
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/basis/{underlying}/options", response_model=KoreanOptionParity)
+async def get_korean_basis_options(
+    underlying: str,
+    expiry: Optional[str] = Query(
+        None,
+        pattern=r"^\d{6}$",
+        description="Option month (YYYYMM); the nearest one when omitted",
+    ),
+    rate: Optional[float] = Query(
+        None,
+        ge=-5,
+        le=30,
+        description=(
+            "Annual rate (%) for carrying the net option premium to expiry. "
+            "Omit to use the carry rate behind the broker's theoretical "
+            "futures price."
+        ),
+    ),
+    strikes: int = Query(
+        DEFAULT_STRIKES,
+        ge=MIN_STRIKES,
+        le=MAX_STRIKES,
+        description="Strikes to quote around the money",
+    ),
+) -> KoreanOptionParity:
+    """Synthetic futures from put-call parity, against futures and spot.
+
+    Returns an empty `expiries` list when the underlying has no listed
+    monthly options.
+    """
+    try:
+        return await option_parity_service.get_parity(
+            underlying, expiry=expiry, rate=rate, strikes=strikes
+        )
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get("/financials/{symbol}/balance-sheet")

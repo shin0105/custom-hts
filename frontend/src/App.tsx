@@ -11,6 +11,7 @@ import { USMarketPage } from './pages/USMarketPage';
 import { AccountCheckPage } from './pages/AccountCheckPage';
 import { BondMarketPage } from './pages/BondMarketPage';
 import { DomesticFuturesOptionsPage } from './pages/DomesticFuturesOptionsPage';
+import { BasisPage } from './pages/BasisPage';
 
 export const App: React.FC = () => {
   return (
@@ -22,6 +23,7 @@ export const App: React.FC = () => {
           <Route path="/korean" element={<KoreanMarketPage />} />
           <Route path="/bonds" element={<BondMarketPage />} />
           <Route path="/futures-options" element={<DomesticFuturesOptionsPage />} />
+          <Route path="/basis" element={<BasisPage />} />
           <Route path="/us" element={<USMarketPage />} />
           <Route path="/account-check" element={<AccountCheckPage />} />
         </Routes>

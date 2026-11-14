@@ -4,20 +4,28 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+import time
 import urllib.request
 import zipfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+KST = timezone(timedelta(hours=9))
 
 
 class FuturesOptionsMasterFileManager:
     """Manager for domestic futures/options master files."""
 
     BASE_URL = "https://new.real.download.dws.co.kr/common/master"
+
+    # After a failed refresh, wait this long before trying again.
+    REFRESH_RETRY_SECONDS = 600
 
     MARKET_FILES = {
         "index": "fo_idx_code_mts.mst.zip",
@@ -72,6 +80,68 @@ class FuturesOptionsMasterFileManager:
         else:
             self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        self._rows_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
+        self._last_refresh_attempt: Dict[str, float] = {}
+        self._refresh_lock = threading.Lock()
+
+    def is_stale(self, market: str) -> bool:
+        """True when the local master is missing or predates today (KST).
+
+        The exchange relists contracts daily, so yesterday's file can name
+        months that have since expired.
+        """
+        master_file = self._find_market_master_file(
+            (market or "").strip().lower()
+        )
+        if master_file is None:
+            return True
+        modified = datetime.fromtimestamp(master_file.stat().st_mtime, KST)
+        return modified.date() < datetime.now(KST).date()
+
+    def ensure_fresh(self, market: str) -> bool:
+        """Re-download a stale master, keeping the old file if that fails.
+
+        Returns:
+            True if the local file is current after the call.
+        """
+        market_key = (market or "").strip().lower()
+        if market_key not in self.MARKET_FILES:
+            return False
+        with self._refresh_lock:
+            if not self.is_stale(market_key):
+                return True
+            last_attempt = self._last_refresh_attempt.get(market_key)
+            if (
+                last_attempt is not None
+                and time.monotonic() - last_attempt
+                < self.REFRESH_RETRY_SECONDS
+            ):
+                return False
+            self._last_refresh_attempt[market_key] = time.monotonic()
+            self.download_market_master(market_key, force=True)
+            return not self.is_stale(market_key)
+
+    def get_cached_rows(self, market: str) -> List[Dict[str, Any]]:
+        """Parsed rows for a market, re-parsed only when the file changes.
+
+        The returned list is shared between callers: treat it as read-only.
+        """
+        market_key = (market or "").strip().lower()
+        master_file = self._find_market_master_file(market_key)
+        if master_file is None:
+            return []
+        stamp = master_file.stat().st_mtime
+        cached = self._rows_cache.get(market_key)
+        if cached and cached[0] == stamp:
+            return cached[1]
+        df = self.parse_market_master(market_key)
+        rows = (
+            []
+            if df is None or df.empty
+            else df.to_dict(orient="records")
+        )
+        self._rows_cache[market_key] = (stamp, rows)
+        return rows
 
     def download_market_master(
         self,
