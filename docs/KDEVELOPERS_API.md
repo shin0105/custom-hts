@@ -1,342 +1,303 @@
-# Korean Investment Securities API Integration
+# 한국투자증권 Open API 연동 · KIS Open API Integration
 
-This document describes the KDevelopers (한국투자증권) OpenAPI integration for the Custom HTS backend.
+[한국어](#한국어) · [English](#english)
 
-## Overview
+---
 
-The integration provides access to real-time stock data, historical price data, and account information for Korean stocks using the Korean Investment Securities OpenAPI.
+## 한국어
 
-## API Documentation
+### 개요
 
-Official API Portal: https://apiportal.koreainvestment.com/
+백엔드는 한국투자증권(KIS) Open API(KIS Developers)의 REST API로 국내 주식·장내채권·선물옵션 시세와 계좌 잔고를 조회합니다. 주문 API는 호출하지 않는 조회 전용 연동이며, WebSocket 실시간 시세도 쓰지 않습니다. 모든 값은 화면에서 조회한 시점의 스냅샷입니다.
 
-## Market Master Files
+- 클라이언트: [`backend/src/integrations/kdevelopers.py`](../backend/src/integrations/kdevelopers.py) (`KDevelopersClient`, 전역 인스턴스 `kdevelopers_client`)
+- 토큰 캐시: [`backend/src/integrations/token_store.py`](../backend/src/integrations/token_store.py)
+- 요청·응답 필드 전체 명세: [KIS Developers 포털](https://apiportal.koreainvestment.com/)
 
-### Stock Information Files (종목정보파일)
-You can download stock master files for various Korean markets:
+### 설정
 
-- **KOSPI (코스피)**: Download from [종목정보파일 페이지](https://apiportal.koreainvestment.com/apiservice-category)
-- **KOSDAQ (코스닥)**: Download from [종목정보파일 페이지](https://apiportal.koreainvestment.com/apiservice-category)
-- Python parsing sample code: [GitHub Repository](https://github.com/koreainvestment/open-trading-api/tree/main/stocks_info)
+저장소 루트의 `.env`에 아래 값을 넣습니다. 자세한 설치 과정은 [SETUP.md](SETUP.md)를 보세요.
 
-Note: These master files (.mst) contain stock codes, names, and other metadata. You can rename .mst to .txt to view as plain text.
+| 변수 | 설명 |
+|------|------|
+| `HANTU_API_KEY` | 앱키(appkey) |
+| `HANTU_API_SECRET` | 앱시크릿(appsecret) |
+| `HANTU_ACCOUNT_NUMBER` | 계좌번호 앞 8자리(CANO). 계좌조회에만 필요하며, 예전 이름 `HANTU_BANK_ACCOUNT`도 읽습니다 |
+| `HANTU_TOKEN_CACHE_PATH` | (선택) 토큰 캐시 파일 경로. 기본값 `backend/.cache/kis_tokens.json` |
 
-## Implemented Features
+```bash
+HANTU_API_KEY=your_app_key
+HANTU_API_SECRET=your_app_secret
+HANTU_ACCOUNT_NUMBER=12345678
+# HANTU_TOKEN_CACHE_PATH=/path/to/kis_tokens.json
+```
 
-### 1. Stock Price and Quote Data
+계좌상품코드(ACNT_PRDT_CD)는 환경 변수가 아니라 `/api/korean/account?account_product_code=01` 쿼리로 넘기며 기본값은 `01`입니다.
 
-#### Get Current Stock Price
-- **KIS API Endpoint**: `/uapi/domestic-stock/v1/quotations/inquire-price`
-- **Backend Endpoint**: `GET /api/korean/quote/{symbol}`
-- **Method**: GET
-- **Transaction ID**: `FHKST01010100` (both real and mock)
-- **Description**: Get current stock price and detailed market information
-- **Example**: `/api/korean/quote/005930` (Samsung Electronics)
-- **Required Parameters**:
-  - `FID_COND_MRKT_DIV_CODE`: Market division code (J: KRX, NX: NXT, UN: Unified)
-  - `FID_INPUT_ISCD`: Stock code (e.g., 005930 for Samsung Electronics)
-  
-**Important Note**: For real-time data, use WebSocket API. This REST API provides snapshot data.
+### 실전투자 서버만 지원
 
-### 2. Historical Daily Price Data (OHLCV)
+서버 주소는 `backend/src/utils/config.py`의 `HANTU_BASE_URL`(`https://openapi.koreainvestment.com:9443`)로 고정되어 있고, TR ID도 실전투자용(예: 잔고조회 `TTTC8434R`)을 씁니다. 모의투자 서버로 바꾸는 설정은 없으므로 모의투자 앱키로는 토큰 발급부터 실패합니다. 어떤 종류의 키인지는 아래 [키 점검 스크립트](#키-점검-스크립트)로 확인할 수 있습니다.
 
-#### Get Historical Daily/Weekly/Monthly Candle Data
-- **KIS API Endpoint**: `/uapi/domestic-stock/v1/quotations/inquire-daily-price`
-- **Backend Endpoint**: `GET /api/korean/candle/{symbol}`
-- **Method**: GET
-- **Transaction ID**: `FHKST01010400` (both real and mock)
-- **Description**: Get historical OHLCV (Open, High, Low, Close, Volume) data
-- **Limit**: Maximum 30 days/weeks/months of data
-- **Parameters**:
-  - `FID_COND_MRKT_DIV_CODE`: Market division code (J: KRX, NX: NXT, UN: Unified)
-  - `FID_INPUT_ISCD`: Stock code (e.g., 005930)
-  - `FID_PERIOD_DIV_CODE`: Period type
-    - `D`: Daily (최근 30거래일)
-    - `W`: Weekly (최근 30주)
-    - `M`: Monthly (최근 30개월)
-  - `FID_ORG_ADJ_PRC`: Price adjustment
-    - `0`: Unadjusted price
-    - `1`: Adjusted for splits/mergers
-- **Example**: `/api/korean/candle/005930?period=D&limit=30`
-- **Response**: Array of candle data with date, open, high, low, close, volume
+### 인증과 토큰 캐시
 
-### 3. Account Balance and Positions
+접근 토큰은 다음 순서로 구합니다.
 
-#### Get Account Balance
-- **KIS API Endpoint**: `/uapi/domestic-stock/v1/trading/inquire-balance`
-- **Backend Endpoint**: `GET /api/korean/account`
-- **Method**: GET
-- **Transaction ID**:
-  - Real: `TTTC8434R`
-  - Mock: `VTTC8434R`
-- **Description**: Query stock account balance and holdings
-- **Important**: This API is slow due to comprehensive data. For simple order preparation, use buy/sell quantity inquiry APIs instead.
-- **Pagination**:
-  - Real account: Max 50 items per call
-  - Mock account: Max 20 items per call
-  - Use continuation query for additional items
-- **Parameters**:
-  - `CANO`: Account number (first 8 digits)
-  - `ACNT_PRDT_CD`: Account product code (last 2 digits)
-  - `AFHR_FLPR_YN`: After-hours/Exchange flag
-    - `N`: Default
-    - `Y`: After-hours single price
-    - `X`: NXT regular market
-  - `INQR_DVSN`: Inquiry type
-    - `01`: By loan date
-    - `02`: By stock
-  - `UNPR_DVSN`: Unit price type (`01`: Default)
-  - `FUND_STTL_ICLD_YN`: Include fund settlement (`N`/`Y`)
-  - `FNCG_AMT_AUTO_RDPT_YN`: Auto loan repayment (`N`: Default)
-  - `PRCS_DVSN`: Process type
-    - `00`: Include previous day trades
-    - `01`: Exclude previous day trades
-- **Example**: `curl "http://localhost:8000/api/korean/account?account_product_code=01"`
-- **Response**: Account balance information and list of stock positions
+1. 메모리에 유효한 토큰이 있으면 그대로 씁니다.
+2. 없으면 로컬 캐시 파일에서 읽습니다. 항목은 앱키의 SHA-256 해시로 구분하며 앱키 자체는 저장하지 않습니다.
+3. 그래도 없으면 `POST /oauth2/tokenP`(`grant_type=client_credentials`)로 새로 발급받아 캐시에 저장합니다.
 
-### 4. Domestic Futures/Options Period Candles (Daily/Weekly/Monthly/Yearly)
+- 토큰은 약 24시간 유효하고, KIS는 토큰 발급을 앱키당 1분에 1회로 제한합니다. 그래서 서버를 재시작해도 캐시된 토큰을 재사용합니다.
+- 만료 시각은 응답의 `access_token_token_expired`(KST) 또는 `expires_in`으로 계산하며, 만료 60초 전부터는 만료된 것으로 봅니다.
+- API가 토큰 만료(`EGW00123` 등)를 응답하면 캐시를 지우고 한 번 재발급한 뒤 같은 요청을 다시 보냅니다.
+- 캐시 파일은 권한 0600으로 원자적으로 기록되고 `.gitignore`에 포함되어 있습니다. 여러 앱키가 한 파일을 공유할 수 있습니다.
+- `revoke_access_token()`은 `POST /oauth2/revokeP`로 토큰을 폐기하고 캐시를 지웁니다. API 라우트로는 노출되어 있지 않습니다.
 
-#### Get Domestic Futures/Options Period Candle Data
-- **KIS API Endpoint**: `/uapi/domestic-futureoption/v1/quotations/inquire-daily-fuopchartprice`
-- **Backend Endpoint**: `GET /api/korean/futures-options/daily-candles`
-- **Method**: GET
-- **Transaction ID**: `FHKIF03020100` (real/mock)
-- **Description**: Fetch futures/options candles for period `D/W/M/Y`
-- **Per-call limit**: KIS returns up to 100 rows per call
-- **Key Parameters**:
-  - `FID_COND_MRKT_DIV_CODE` (`market_div_code`): `F`, `O`, `JF`, `JO`, `CF`, `CM`, `EU`
-  - `FID_INPUT_ISCD` (`symbol`): instrument code
-  - `FID_INPUT_DATE_1` (`start_date`): range start (`YYYYMMDD`)
-  - `FID_INPUT_DATE_2` (`end_date`): range end (`YYYYMMDD`)
-  - `FID_PERIOD_DIV_CODE` (`period`): `D`, `W`, `M`, `Y`
-- **Important**:
-  - `FID_INPUT_DATE_1` and `FID_INPUT_DATE_2` must both be valid `YYYYMMDD`
-  - `start_date <= end_date`
-  - Use repeated calls with adjusted date windows for ranges larger than one call can return
-
-
-**Response Structure**:
 ```json
 {
-  "output1": [
-    {
-      "pdno": "005930",
-      "prdt_name": "삼성전자",
-      "hldg_qty": "100",
-      "pchs_avg_pric": "70000.00",
-      "prpr": "72000",
-      "evlu_amt": "7200000",
-      "evlu_pfls_amt": "200000",
-      "evlu_pfls_rt": "2.86"
-    }
-  ],
-  "output2": [
-    {
-      "dnca_tot_amt": "20000000",
-      "tot_evlu_amt": "100000000",
-      "nass_amt": "100000000",
-      "pchs_amt_smtl_amt": "80000000",
-      "evlu_amt_smtl_amt": "85000000",
-      "evlu_pfls_smtl_amt": "5000000"
-    }
-  ]
+  "<sha256 of app key>": {
+    "access_token": "<access token>",
+    "expires_at": "2025-01-02T00:00:00+00:00",
+    "updated_at": "2025-01-01T00:00:00+00:00"
+  }
 }
 ```
 
-## Authentication
+캐시 파일을 지우면 다음 요청에서 새 토큰을 발급받습니다. 1분 제한이 있으니 연달아 지우지 마세요.
 
-The API uses OAuth2 authentication with app key and app secret credentials. Authentication tokens are automatically managed by the client and cached for subsequent requests.
+### 공통 요청 형식
 
-### Required Environment Variables
+- 헤더: `authorization: Bearer <token>`, `appkey`, `appsecret`, `tr_id`, `custtype: P`(개인), `tr_cont`(연속조회)
+- 응답의 `rt_cd`가 `"0"`이면 성공이고, 실패하면 `msg_cd`·`msg1`을 로그에 남깁니다. 백엔드 엔드포인트는 이때 대부분 404를 돌려줍니다.
+- 주식기본조회·종목추정실적·채권 평균단가조회는 응답 헤더 `tr_cont`가 다음 페이지가 있다고 알리면 `tr_cont: N`으로 이어서 요청하며, 최대 10페이지까지 읽습니다.
+- 시장 구분 코드(`FID_COND_MRKT_DIV_CODE`): `J` 주식, `U` 업종·지수, `B` 장내채권, `F` 지수선물, `O` 지수옵션, `JF` 주식선물, `JO` 주식옵션. `CF`·`CM`·`EU`의 의미는 포털 명세를 참고하세요.
 
-```bash
-HANTU_API_KEY=your_app_key_here
-HANTU_API_SECRET=your_app_secret_here
-```
+### 속도 제한
 
-## API Implementation Details
+- 클라이언트는 모든 요청 뒤에 0.05초 쉽니다(`_smart_sleep`). KIS의 초당 호출 한도는 포털 공지를 따릅니다.
+- 옵션 전광판(`/futures-options/option-chain`)은 같은 조건을 1초 안에 다시 요청하면 직전 결과를 돌려줍니다.
+- 토큰 발급은 1분에 1회이므로 위의 캐시를 거칩니다.
 
-### Base URL
+### 사용하는 API
 
-- **Production**: `https://openapi.koreainvestment.com:9443`
-- **Mock Trading**: `https://openapivts.koreainvestment.com:29443`
+국내주식 (`/uapi/domestic-stock/v1/...`)
 
-### Common Headers
+| 기능 | 경로 | TR ID | 백엔드 사용처 |
+|------|------|-------|---------------|
+| 주식현재가 시세 | `quotations/inquire-price` | `FHKST01010100` | `/api/korean/quote/{symbol}`, 투자지표, 베이시스 |
+| 주식현재가 일자별 (일·주·월봉 최근 30개) | `quotations/inquire-daily-price` | `FHKST01010400` | `/api/korean/candle/{symbol}` |
+| 주식일별분봉조회 | `quotations/inquire-time-dailychartprice` | `FHKST03010230` | `/api/korean/candle-minute/{symbol}` |
+| 국내주식기간별시세 | `quotations/inquire-daily-itemchartprice` | `FHKST03010100` | 베이시스 추이(현물 일별 종가) |
+| 국내업종 현재지수 | `quotations/inquire-index-price` | `FHPUP02100000` | 베이시스(지수 현물) |
+| 국내업종기간별시세 | `quotations/inquire-daily-indexchartprice` | `FHKUP03500100` | 베이시스 추이(지수) |
+| 주식기본조회 | `quotations/search-stock-info` | `CTPF1002R` | `/api/korean/stock-info/{pdno}`, 투자지표 |
+| 국내주식 종목추정실적 | `quotations/estimate-perform` | `HHKST668300C0` | `/api/korean/estimate-perform/{symbol}` |
+| 주식잔고조회 | `trading/inquire-balance` | `TTTC8434R` | `/api/korean/account` |
 
-All API requests require the following headers:
+장내채권 (`/uapi/domestic-bond/v1/quotations/...`)
 
-- `content-type`: `application/json; charset=utf-8`
-- `authorization`: Access token from OAuth2
-- `appkey`: Your application key
-- `appsecret`: Your application secret
-- `tr_id`: Transaction ID (varies by endpoint)
-- `custtype`: Customer type (`P`: Personal, `B`: Corporate)
+| 기능 | 경로 | TR ID | 백엔드 사용처 |
+|------|------|-------|---------------|
+| 장내채권현재가(시세) | `inquire-price` | `FHKBJ773400C0` | `/api/korean/bonds/{pdno}/price`, 수익률 분석 |
+| 장내채권현재가(호가) | `inquire-asking-price` | `FHKBJ773401C0` | 최우선 호가, 수익률 분석 |
+| 장내채권현재가(일별) | `inquire-daily-price` | `FHKBJ773404C0` | `/api/korean/bonds/{pdno}/daily-price`, 수익률 추이 |
+| 장내채권 기본조회 | `search-bond-info` | `CTPF1114R` | `/api/korean/bonds/{pdno}/info`, 수익률 분석 |
+| 장내채권 발행정보 | `issue-info` | `CTPF1101R` | `/api/korean/bonds/{pdno}/issue` |
+| 장내채권 평균단가조회(민평) | `avg-unit` | `CTPF2005R` | 수익률 분석·추이 |
 
-### Transaction IDs (tr_id)
+국내선물옵션 (`/uapi/domestic-futureoption/v1/quotations/...`)
 
-Different API endpoints require different transaction IDs:
+| 기능 | 경로 | TR ID | 백엔드 사용처 |
+|------|------|-------|---------------|
+| 선물옵션 시세 | `inquire-price` | `FHMIF10000000` | `/api/korean/futures-options/quote`, 베이시스, 옵션 패리티 |
+| 선물옵션 시세호가 | `inquire-asking-price` | `FHMIF10010000` | `/api/korean/futures-options/orderbook`, 베이시스, 옵션 패리티 |
+| 선물옵션 분봉조회 | `inquire-time-fuopchartprice` | `FHKIF03020200` | `/api/korean/futures-options/minute-candles` |
+| 선물옵션기간별시세 | `inquire-daily-fuopchartprice` | `FHKIF03020100` | `/api/korean/futures-options/daily-candles`, 베이시스 추이 |
+| 국내옵션전광판_콜풋 | `display-board-callput` | `FHPIF05030100` | `/api/korean/futures-options/option-chain` |
 
-- **Current Stock Price**: `FHKST01010100`
-- **Historical Daily Price**: `FHKST01010400`
-- **Account Balance (Real)**: `TTTC8434R`
-- **Account Balance (Mock)**: `VTTC8434R`
+백엔드 엔드포인트의 파라미터는 [API.md](API.md)에 정리되어 있습니다.
 
-### Market Division Codes
+### 동작 참고
 
-- `J`: KRX (Korean Exchange)
-- `NX`: NXT (Next market)
-- `UN`: Unified (통합)
+- **일·주·월봉**: `inquire-daily-price`는 최근 30개 봉만 돌려줍니다. `start_date`·`end_date`는 그 30개 안에서 범위를 좁히는 필터입니다.
+- **분봉**: 한 번에 최대 120건씩 시각을 거슬러 올라가며 하루치를 모은 뒤 09:00부터 기준시각(기본 15:30)까지만 남깁니다. 5·10·30·60분봉은 1분봉을 합쳐 만듭니다.
+- **기간별 일봉(주식·지수)**: 한 번의 응답 상한(주식 100건, 지수 50건)을 넘는 구간은 종료일을 앞당기며 여러 번 조회합니다.
+- **계좌 잔고**: 첫 페이지만 조회하고 연속조회는 하지 않습니다. 한 페이지(실전 계좌 기준 50종목)를 넘게 보유하면 일부 종목이 빠질 수 있습니다.
+- **종목추정실적**: 매출액·영업이익 등 금액 단위는 억원입니다.
 
-## Data Models
+### 키 점검 스크립트
 
-### KoreanStockQuote
-Represents current stock quote data:
-- `symbol`: Stock code (e.g., "005930")
-- `stck_prpr`: Current stock price
-- `prdy_vrss`: Change from previous day
-- `prdy_vrss_sign`: Change sign (1: up, 2: unchanged, 3/4/5: down)
-- `prdy_ctrt`: Change percentage from previous day
-- `acml_vol`: Accumulated volume
-- `acml_tr_pbmn`: Accumulated trading amount
-- `stck_oprc`: Opening price
-- `stck_hgpr`: High price
-- `stck_lwpr`: Low price
+[`backend/scripts/check_hantu_keys.py`](../backend/scripts/check_hantu_keys.py)는 `.env`의 앱키가 실제로 동작하는지 확인합니다.
 
-### KoreanCandleData
-Represents OHLCV (Open, High, Low, Close, Volume) candle data:
-- `symbol`: Stock code (e.g., "005930")
-- `stck_bsop_date`: Trading date (YYYYMMDD format)
-- `stck_oprc`: Opening price
-- `stck_hgpr`: High price
-- `stck_lwpr`: Low price
-- `stck_clpr`: Closing price
-- `acml_vol`: Accumulated volume
-- `prdy_vrss`: Change from previous day
-- `prdy_vrss_sign`: Change sign
-- `prdy_ctrt`: Change percentage
-
-### KoreanAccountBalance
-Represents account balance information:
-- `dnca_tot_amt`: Total deposit amount
-- `tot_evlu_amt`: Total evaluation amount
-- `nass_amt`: Net asset amount
-- `pchs_amt_smtl_amt`: Total purchase amount
-- `evlu_amt_smtl_amt`: Total evaluation amount
-- `evlu_pfls_smtl_amt`: Total profit/loss amount
-
-### KoreanStockPosition
-Represents individual stock position:
-- `pdno`: Stock code
-- `prdt_name`: Product name (Korean)
-- `hldg_qty`: Holding quantity
-- `pchs_avg_pric`: Average purchase price
-- `prpr`: Current price
-- `evlu_amt`: Evaluation amount
-- `evlu_pfls_amt`: Profit/loss amount
-- `evlu_pfls_rt`: Profit/loss ratio
-
-## Usage Examples
-
-### Python Client Example
-
-```python
-from src.integrations.kdevelopers import kdevelopers_client
-
-# Get current stock quote
-quote = kdevelopers_client.get_quote("005930")
-print(f"Current price: {quote.stck_prpr} KRW")
-
-# Get daily candle data (last 30 days)
-candles = kdevelopers_client.get_daily_candle("005930", period="D", adjust_price=True)
-for candle in candles:
-    print(f"Date: {candle.stck_bsop_date}, Close: {candle.stck_clpr} KRW")
-
-# Get account balance
-account_data = kdevelopers_client.get_account_balance("12345678", "01")
-positions = account_data["output1"]
-balance = account_data["output2"][0]
-print(f"Total evaluation: {balance.tot_evlu_amt} KRW")
-for position in positions:
-    print(f"{position.prdt_name}: {position.hldg_qty} shares")
-```
-
-### HTTP API Example
-
-```bash
-# Get stock quote
-curl -X GET "https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/inquire-price?FID_COND_MRKT_DIV_CODE=J&FID_INPUT_ISCD=005930" \
-  -H "content-type: application/json" \
-  -H "authorization: Bearer YOUR_TOKEN" \
-  -H "appkey: YOUR_APP_KEY" \
-  -H "appsecret: YOUR_APP_SECRET" \
-  -H "tr_id: FHKST01010100" \
-  -H "custtype: P"
-
-# Get daily candles
-curl -X GET "https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/inquire-daily-price?FID_COND_MRKT_DIV_CODE=J&FID_INPUT_ISCD=005930&FID_PERIOD_DIV_CODE=D&FID_ORG_ADJ_PRC=1" \
-  -H "content-type: application/json" \
-  -H "authorization: Bearer YOUR_TOKEN" \
-  -H "appkey: YOUR_APP_KEY" \
-  -H "appsecret: YOUR_APP_SECRET" \
-  -H "tr_id: FHKST01010400" \
-  -H "custtype: P"
-
-# Get account balance
-curl -X GET "https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/trading/inquire-balance?CANO=12345678&ACNT_PRDT_CD=01&AFHR_FLPR_YN=N&INQR_DVSN=02&UNPR_DVSN=01&FUND_STTL_ICLD_YN=N&FNCG_AMT_AUTO_RDPT_YN=N&PRCS_DVSN=00" \
-  -H "content-type: application/json" \
-  -H "authorization: Bearer YOUR_TOKEN" \
-  -H "appkey: YOUR_APP_KEY" \
-  -H "appsecret: YOUR_APP_SECRET" \
-  -H "tr_id: TTTC8434R" \
-  -H "custtype: P"
-```
-
-
-## Error Handling
-
-The API includes comprehensive error handling:
-- Returns proper error codes and messages
-- Logs errors for debugging
-- Returns HTTP 404 if data not found
-- Validates input parameters
-- Handles authentication failures
-
-### Common Error Codes
-
-- `rt_cd = "0"`: Success
-- `rt_cd != "0"`: Failure (check `msg_cd` and `msg1` for details)
-
-## Rate Limiting
-
-Be aware of KIS API rate limits:
-- Implement proper throttling for production use
-- Cache frequently accessed data where appropriate
-- Use appropriate intervals for data updates
-- Monitor API usage to avoid exceeding limits
-
-## Important Notes
-
-1. **Stock Codes**: Korean stock codes are 6-digit numbers (e.g., "005930" for Samsung Electronics)
-2. **Master Files**: Download master files for complete stock lists from [종목정보파일](https://apiportal.koreainvestment.com/apiservice-category)
-3. **Real-time Data**: For true real-time streaming, use WebSocket API instead of REST API
-4. **Account Balance**: The balance API is comprehensive but slow. Use specific buy/sell inquiry APIs for faster order preparation
-5. **Continuation Queries**: Use `CTX_AREA_FK100` and `CTX_AREA_NK100` for paginated results when more than 50 (real) or 20 (mock) items exist
-6. **Price Adjustment**: Always consider whether to use adjusted prices (`FID_ORG_ADJ_PRC=1`) for historical analysis
-
-## Testing
-
-Run tests with:
 ```bash
 cd backend
-uv run pytest tests/test_korean_models.py -v
+uv run python scripts/check_hantu_keys.py
 ```
 
-## References
+- 저장소 루트 `.env`에서 `HANTU_API_KEY`/`HANTU_API_SECRET`과, 있으면 두 번째 키(`HANTU_API_KEY_2`/`HANTU_API_SECRET_2` 또는 `HANTU_API_KEY2`/`HANTU_API_SECRET2`)를 읽습니다.
+- 키마다 실전투자 서버에서 토큰을 발급받고, 실패하면 모의투자 서버(`https://openapivts.koreainvestment.com:29443`)에서 다시 시도해 모의투자 키인지 알려 줍니다. 이어서 삼성전자(005930) 현재가를 조회합니다.
+- 실전투자 서버에서 받은 토큰은 토큰 캐시에 저장하므로 앱이 바로 재사용합니다.
+- 앱키는 앞뒤 4자리만 보여 주고 시크릿·토큰은 출력하지 않습니다. 모든 키가 통과하면 종료 코드 0을 돌려줍니다.
+- 실행할 때마다 새 토큰을 발급하므로 1분 안에 다시 실행하면 발급 제한에 걸릴 수 있습니다.
 
-- [KIS Developers Portal](https://apiportal.koreainvestment.com/intro)
-- [Official GitHub Samples](https://github.com/koreainvestment/open-trading-api)
-- [API Documentation](https://apiportal.koreainvestment.com/apiservice)
-- [Stock Master Files](https://apiportal.koreainvestment.com/apiservice-category)
-- [Current Stock Price API](https://apiportal.koreainvestment.com/apiservice-apiservice?/uapi/domestic-stock/v1/quotations/inquire-price)
-- [Historical Daily Price API](https://apiportal.koreainvestment.com/apiservice-apiservice?/uapi/domestic-stock/v1/quotations/inquire-daily-price)
-- [Account Balance API](https://apiportal.koreainvestment.com/apiservice-apiservice?/uapi/domestic-stock/v1/trading/inquire-balance)
+### 문제 해결
+
+- **토큰 발급 실패**: 앱키·시크릿을 확인하고, 스크립트로 모의투자 키인지 확인하세요.
+- **1분당 1회 발급 제한 오류**: 1분 뒤 다시 시도하세요. 캐시 파일이 있으면 앱은 새로 발급하지 않습니다.
+- **계좌조회 500 오류(`HANTU_ACCOUNT_NUMBER ... is not configured correctly`)**: 계좌번호가 숫자 8자리인지 확인하세요.
+
+### 참고
+
+- [KIS Developers 포털](https://apiportal.koreainvestment.com/): API 명세, 공지, 신청
+- [KIS 공식 샘플 코드](https://github.com/koreainvestment/open-trading-api)
+- [MASTER_FILES.md](MASTER_FILES.md): 종목 마스터 파일
+- [API.md](API.md): 백엔드 REST API
+
+---
+
+## English
+
+### Overview
+
+The backend uses the REST API of the Korea Investment & Securities (KIS) Open API, also called KIS Developers, to read domestic stock, listed bond and futures/options quotes plus the account balance. The integration is read-only: no order APIs are called, and the WebSocket real-time feed is not used. Every value is a snapshot taken when a page requests it.
+
+- Client: [`backend/src/integrations/kdevelopers.py`](../backend/src/integrations/kdevelopers.py) (`KDevelopersClient`, global instance `kdevelopers_client`)
+- Token cache: [`backend/src/integrations/token_store.py`](../backend/src/integrations/token_store.py)
+- Full request/response field specs: [KIS Developers portal](https://apiportal.koreainvestment.com/)
+
+### Configuration
+
+Put these values in the `.env` at the repository root. See [SETUP.md](SETUP.md) for the full setup.
+
+| Variable | Description |
+|----------|-------------|
+| `HANTU_API_KEY` | App key (appkey) |
+| `HANTU_API_SECRET` | App secret (appsecret) |
+| `HANTU_ACCOUNT_NUMBER` | First 8 digits of the account number (CANO). Only needed for the account page; the legacy name `HANTU_BANK_ACCOUNT` is also read |
+| `HANTU_TOKEN_CACHE_PATH` | (Optional) token cache file path. Default `backend/.cache/kis_tokens.json` |
+
+```bash
+HANTU_API_KEY=your_app_key
+HANTU_API_SECRET=your_app_secret
+HANTU_ACCOUNT_NUMBER=12345678
+# HANTU_TOKEN_CACHE_PATH=/path/to/kis_tokens.json
+```
+
+The account product code (ACNT_PRDT_CD) is not an environment variable; pass it as `/api/korean/account?account_product_code=01`. It defaults to `01`.
+
+### Real-trading server only
+
+The server is fixed by `HANTU_BASE_URL` in `backend/src/utils/config.py` (`https://openapi.koreainvestment.com:9443`), and the TR IDs are the real-account ones (for example `TTTC8434R` for the balance). There is no setting to switch to the paper-trading (모의투자) server, so a paper-trading app key already fails at token issuance. Use the [key check script](#key-check-script) to see which kind of key you have.
+
+### Authentication and token cache
+
+The client obtains an access token in this order:
+
+1. Use a valid token held in memory.
+2. Otherwise read it from the local cache file. Entries are keyed by the SHA-256 hash of the app key; the key itself is never stored.
+3. Otherwise issue a new one with `POST /oauth2/tokenP` (`grant_type=client_credentials`) and save it to the cache.
+
+- A token is valid for about 24 hours, and KIS allows one token issuance per minute per app key. That is why the cached token is reused across server restarts.
+- Expiry comes from `access_token_token_expired` (KST) or `expires_in` in the response; a token is treated as expired 60 seconds early.
+- If an API call reports an expired token (`EGW00123` and similar), the client clears the cache, issues a new token once and retries the same request.
+- The cache file is written atomically with 0600 permissions and is listed in `.gitignore`. Several app keys can share one file.
+- `revoke_access_token()` revokes a token with `POST /oauth2/revokeP` and clears the cache. It is not exposed as an API route.
+
+```json
+{
+  "<sha256 of app key>": {
+    "access_token": "<access token>",
+    "expires_at": "2025-01-02T00:00:00+00:00",
+    "updated_at": "2025-01-01T00:00:00+00:00"
+  }
+}
+```
+
+Deleting the cache file makes the next request issue a new token. Because of the one-per-minute limit, do not delete it repeatedly.
+
+### Common request format
+
+- Headers: `authorization: Bearer <token>`, `appkey`, `appsecret`, `tr_id`, `custtype: P` (individual), `tr_cont` (continuation)
+- `rt_cd == "0"` means success; on failure `msg_cd` and `msg1` are logged, and most backend endpoints then return 404.
+- Stock basic info, estimate performance and bond average unit price follow continuation: when the response header `tr_cont` signals another page, the next one is requested with `tr_cont: N`, up to 10 pages.
+- Market division codes (`FID_COND_MRKT_DIV_CODE`): `J` stocks, `U` sector/index, `B` listed bonds, `F` index futures, `O` index options, `JF` stock futures, `JO` stock options. See the portal for `CF`, `CM` and `EU`.
+
+### Rate limits
+
+- The client sleeps 0.05 seconds after every request (`_smart_sleep`). KIS's per-second call limits are announced on the portal.
+- The option board (`/futures-options/option-chain`) returns the previous result when the same request arrives within one second.
+- Token issuance is limited to once per minute, hence the cache above.
+
+### APIs used
+
+Domestic stocks (`/uapi/domestic-stock/v1/...`)
+
+| Function | Path | TR ID | Used by |
+|----------|------|-------|---------|
+| Current price | `quotations/inquire-price` | `FHKST01010100` | `/api/korean/quote/{symbol}`, valuation, basis |
+| Daily prices (latest 30 daily/weekly/monthly candles) | `quotations/inquire-daily-price` | `FHKST01010400` | `/api/korean/candle/{symbol}` |
+| Minute candles for a day | `quotations/inquire-time-dailychartprice` | `FHKST03010230` | `/api/korean/candle-minute/{symbol}` |
+| Period prices | `quotations/inquire-daily-itemchartprice` | `FHKST03010100` | Basis history (spot daily close) |
+| Current index | `quotations/inquire-index-price` | `FHPUP02100000` | Basis (index spot) |
+| Index period prices | `quotations/inquire-daily-indexchartprice` | `FHKUP03500100` | Basis history (index) |
+| Stock basic info | `quotations/search-stock-info` | `CTPF1002R` | `/api/korean/stock-info/{pdno}`, valuation |
+| Estimate performance | `quotations/estimate-perform` | `HHKST668300C0` | `/api/korean/estimate-perform/{symbol}` |
+| Stock balance | `trading/inquire-balance` | `TTTC8434R` | `/api/korean/account` |
+
+Listed bonds (`/uapi/domestic-bond/v1/quotations/...`)
+
+| Function | Path | TR ID | Used by |
+|----------|------|-------|---------|
+| Bond price | `inquire-price` | `FHKBJ773400C0` | `/api/korean/bonds/{pdno}/price`, yield analytics |
+| Bond order book | `inquire-asking-price` | `FHKBJ773401C0` | Best bid/ask, yield analytics |
+| Bond daily prices | `inquire-daily-price` | `FHKBJ773404C0` | `/api/korean/bonds/{pdno}/daily-price`, yield history |
+| Bond basic info | `search-bond-info` | `CTPF1114R` | `/api/korean/bonds/{pdno}/info`, yield analytics |
+| Bond issue info | `issue-info` | `CTPF1101R` | `/api/korean/bonds/{pdno}/issue` |
+| Pricing-agency average unit price (민평) | `avg-unit` | `CTPF2005R` | Yield analytics and history |
+
+Domestic futures/options (`/uapi/domestic-futureoption/v1/quotations/...`)
+
+| Function | Path | TR ID | Used by |
+|----------|------|-------|---------|
+| Futures/options quote | `inquire-price` | `FHMIF10000000` | `/api/korean/futures-options/quote`, basis, option parity |
+| Futures/options order book | `inquire-asking-price` | `FHMIF10010000` | `/api/korean/futures-options/orderbook`, basis, option parity |
+| Minute candles | `inquire-time-fuopchartprice` | `FHKIF03020200` | `/api/korean/futures-options/minute-candles` |
+| Period candles | `inquire-daily-fuopchartprice` | `FHKIF03020100` | `/api/korean/futures-options/daily-candles`, basis history |
+| Option board (calls/puts) | `display-board-callput` | `FHPIF05030100` | `/api/korean/futures-options/option-chain` |
+
+Backend endpoint parameters are listed in [API.md](API.md).
+
+### Behaviour notes
+
+- **Daily/weekly/monthly candles**: `inquire-daily-price` returns only the latest 30 candles. `start_date` and `end_date` filter within those 30.
+- **Minute candles**: the client walks back in time up to 120 rows per call to collect one day, then keeps 09:00 up to the cut-off time (default 15:30). 5/10/30/60-minute candles are built from 1-minute candles.
+- **Period daily prices (stocks, indices)**: ranges longer than one response (100 rows for stocks, 50 for indices) are fetched in several calls, moving the end date back each time.
+- **Account balance**: only the first page is read; continuation is not implemented. Holdings beyond one page (50 stocks for a real account) may be missing.
+- **Estimate performance**: amounts such as revenue and operating income are in 억원 (100 million KRW).
+
+### Key check script
+
+[`backend/scripts/check_hantu_keys.py`](../backend/scripts/check_hantu_keys.py) checks that the app keys in `.env` actually work.
+
+```bash
+cd backend
+uv run python scripts/check_hantu_keys.py
+```
+
+- Reads `HANTU_API_KEY`/`HANTU_API_SECRET` from the repository-root `.env`, plus an optional second pair (`HANTU_API_KEY_2`/`HANTU_API_SECRET_2` or `HANTU_API_KEY2`/`HANTU_API_SECRET2`).
+- For each key it issues a token on the real-trading server; if that fails it retries on the paper-trading server (`https://openapivts.koreainvestment.com:29443`) to tell you it is a paper-trading key. It then requests the current price of Samsung Electronics (005930).
+- A token issued by the real-trading server is saved to the token cache, so the app reuses it right away.
+- Only the first and last four characters of an app key are shown; secrets and tokens are never printed. The exit code is 0 when every key passes.
+- Each run issues a new token, so running it again within a minute can hit the issuance limit.
+
+### Troubleshooting
+
+- **Token issuance fails**: check the app key and secret, and use the script to see whether it is a paper-trading key.
+- **One-issuance-per-minute error**: wait a minute and try again. While a cached token exists, the app does not issue a new one.
+- **Account page returns 500 (`HANTU_ACCOUNT_NUMBER ... is not configured correctly`)**: make sure the account number is exactly 8 digits.
+
+### References
+
+- [KIS Developers portal](https://apiportal.koreainvestment.com/): API specs, notices, sign-up
+- [Official KIS sample code](https://github.com/koreainvestment/open-trading-api)
+- [MASTER_FILES.md](MASTER_FILES.md): instrument master files
+- [API.md](API.md): backend REST API

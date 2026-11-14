@@ -87,9 +87,9 @@ Maintain comprehensive, clear, and up-to-date documentation for all aspects of t
 
 ### File Structure
 - **Main documentation**: Place in `docs/` directory
-- **Implementation guides**: Place in `docs/implementations/` for completed implementation documentation
-- **Test reports**: Place in `docs/reports/` for test reports and analysis
-- **Test results**: Place in `docs/reports/test-results/` for test result JSON files and data
+- **Bilingual format**: Human-facing docs are written Korean first, then English, in one file (`[한국어](#한국어) · [English](#english)` at the top, then `## 한국어` and `## English` sections). Update both languages together.
+- **No status reports**: Do not create implementation reports or "completion summary" docs; update the existing docs instead. `docs/archive/` holds historical reports and is not maintained.
+- **Test results**: Never commit generated test output. Live API tests write to `backend/tests/test-results/`, which is gitignored because it can contain account data.
 - **API-specific docs**: Use clear names like `KDEVELOPERS_API.md`, `OPENDART_API.md`
 - **Component docs**: Keep `backend/README.md` and `frontend/README.md` for component-specific info
 - Use consistent naming conventions across all documentation

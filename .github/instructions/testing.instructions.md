@@ -150,7 +150,7 @@ Apply comprehensive testing practices to ensure reliability of financial data pr
 ### File Structure
 - **Backend tests**: Place all Python tests in `backend/tests/` directory
 - **Frontend tests**: Place all TypeScript/React tests in `frontend/src/` alongside source files
-- **Test results**: Store test result files and reports in `docs/reports/test-results/`
+- **Test results**: Live API tests write output to `backend/tests/test-results/` (gitignored — it can contain account data; never commit it)
 - Use `.test.ts` for frontend unit tests
 - Use `.integration.test.ts` for frontend integration tests
 - Use `test_*.py` for Python backend tests

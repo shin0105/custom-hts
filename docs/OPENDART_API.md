@@ -1,204 +1,231 @@
-# OPENDART (DART) API Guide
+# OpenDART 연동 · OpenDART Integration
 
-This document summarizes the OPENDART (DART) endpoints used in this project for Korean company data and financial statements.
+[한국어](#한국어) · [English](#english)
 
-## Table of Contents
-- [Overview](#overview)
-- [Authentication](#authentication)
-- [Base URL](#base-url)
-- [Common Parameters](#common-parameters)
-- [Common Error Codes](#common-error-codes)
-- [Endpoints](#endpoints)
-  - [Corp Code List](#corp-code-list)
-  - [Company Information](#company-information)
-  - [Multi-Company Major Accounts](#multi-company-major-accounts)
-  - [Multi-Company Financial Indices](#multi-company-financial-indices)
-- [References](#references)
+---
 
-## Overview
-OPENDART provides corporate disclosure data for Korean listed and registered companies. Most endpoints require an 8-digit `corp_code` obtained from the corp code list endpoint.
+## 한국어
 
-## Authentication
-All requests require an API key:
-- Parameter name: `crtfc_key`
-- Value: 40-character OPENDART API key
-- Store locally as `DART_API_KEY` in `.env`
+### 개요
 
-## Base URL
-```
-https://opendart.fss.or.kr/api
-```
+금융감독원 전자공시시스템의 [OpenDART](https://opendart.fss.or.kr/) API로 국내 상장사의 재무제표(주요계정), 기업 개황, 공시 목록을 가져옵니다.
 
-## Common Parameters
-- `crtfc_key` (string, required): OPENDART API key
-- `corp_code` (string, required): 8-digit corp code from the corp code list
-- `bsns_year` (string, required): 4-digit fiscal year (e.g., 2023)
-- `reprt_code` (string, required): report type
-  - `11013`: Q1 report
-  - `11012`: Semiannual report
-  - `11014`: Q3 report
-  - `11011`: Annual report
+- 클라이언트: [`backend/src/integrations/opendart.py`](../backend/src/integrations/opendart.py) (`OpenDartClient`, 전역 인스턴스 `opendart_client`)
+- 기본 URL: `https://opendart.fss.or.kr/api`
+- 요청·응답 필드 전체 명세는 OpenDART 사이트의 개발가이드를 보세요.
 
-## Common Error Codes
-All endpoints return a status code in the response (or in the XML file for the corp code list).
+### 인증키
 
-- `000`: Success
-- `010`: Unregistered key
-- `011`: Invalid key (temporarily disabled)
-- `012`: Unauthorized IP
-- `013`: No data found
-- `014`: File not found
-- `020`: Request limit exceeded
-- `021`: Too many companies requested (max 100)
-- `100`: Invalid parameter value
-- `101`: Invalid access
-- `800`: System maintenance
-- `900`: Undefined error
-- `901`: Key expired (contact opendart@fss.or.kr)
+OpenDART에서 인증키(40자)를 발급받아 저장소 루트 `.env`에 넣습니다. 모든 요청에 `crtfc_key` 파라미터로 전달됩니다.
 
-## Endpoints
-
-### Corp Code List
-Download the complete corp code list (ZIP containing XML).
-
-- **Method**: GET
-- **URL**: `https://opendart.fss.or.kr/api/corpCode.xml`
-- **Response format**: ZIP (binary) with XML file
-
-**Request parameters**
-- `crtfc_key` (required)
-
-**Response XML fields**
-- `corp_code`: 8-digit corp code
-- `corp_name`: official company name
-- `corp_eng_name`: official English name
-- `stock_code`: 6-digit stock code (listed companies only)
-- `modify_date`: last modified date (YYYYMMDD)
-
-**Example**
 ```bash
-curl -o corpCode.zip "https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key=${DART_API_KEY}"
+DART_API_KEY=your_dart_api_key
 ```
 
-### Company Information
-Get detailed company profile by corp code.
+키가 없으면 재무제표·기업 개황·공시 요청은 데이터 없이 끝나고, 해당 엔드포인트는 404를 돌려줍니다.
 
-- **Method**: GET
-- **URL**: `https://opendart.fss.or.kr/api/company.json`
-- **XML variant**: `https://opendart.fss.or.kr/api/company.xml`
+### 사용하는 API
 
-**Request parameters**
-- `crtfc_key` (required)
-- `corp_code` (required)
+| OpenDART API | 경로 | 용도 |
+|--------------|------|------|
+| 고유번호 | `corpCode.xml` (ZIP) | 종목코드 → 고유번호(corp_code) 매핑 |
+| 단일회사 주요계정 | `fnlttSinglAcnt.json` | 재무제표 |
+| 다중회사 주요계정 | `fnlttMultiAcnt.json` | 재무제표 (위 결과와 합친 뒤 중복 제거) |
+| 기업개황 | `company.json` | 기업 정보 |
+| 공시검색 | `list.json` | 공시 목록 |
 
-**Response fields**
-- `status`: result code (see [Common Error Codes](#common-error-codes))
-- `message`: result message
-- `corp_name`: official company name
-- `corp_name_eng`: official English name
-- `stock_name`: stock name (listed) or short name
-- `stock_code`: 6-digit stock code
-- `ceo_nm`: CEO name
-- `corp_cls`: corporation class
-  - `Y`: KOSPI
-  - `K`: KOSDAQ
-  - `N`: KONEX
-  - `E`: Other
-- `jurir_no`: corporate registration number
-- `bizr_no`: business registration number
-- `adres`: address
-- `hm_url`: website URL
-- `ir_url`: IR website URL
-- `phn_no`: phone number
-- `fax_no`: fax number
-- `induty_code`: industry code
-- `est_dt`: establishment date (YYYYMMDD)
-- `acc_mt`: fiscal month (MM)
+- 재무제표 요청 파라미터는 `corp_code`, `bsns_year`, `reprt_code`입니다. 두 주요계정 API 결과를 합치고 `fs_div`(`CFS` 연결, `OFS` 별도)로 거른 뒤 중복을 없앱니다.
+- 보고서 코드: `11013` 1분기, `11012` 반기, `11014` 3분기, `11011` 사업보고서. 백엔드는 `quarter` 1·2·3·4를 각각 이 순서로 매핑하고, 분기를 주지 않으면 `11011`을 씁니다.
+- 주요계정 API는 재무상태표(BS)와 손익계산서(IS)의 주요 계정을 제공합니다. 현금흐름표(CF) 항목은 이 API 범위 밖이라 현금흐름 응답과 화면의 현금흐름표 탭은 대개 비어 있습니다.
+- 응답 `status`: `000` 정상, `013` 데이터 없음(빈 결과로 처리), `020` 요청 한도 초과. 그 밖의 값은 오류로 보고 404를 돌려줍니다.
 
-**Example**
+### 백엔드 엔드포인트
+
+| 엔드포인트 | 내용 |
+|------------|------|
+| `GET /api/korean/financials/{symbol}` | 요약 값(매출액, 영업이익, 당기순이익, 자산·부채·자본총계, EPS, BPS) |
+| `GET /api/korean/financials/{symbol}/all` | 주요계정 원본 항목 전체. 국내주식 화면의 재무제표 표가 사용 |
+| `GET /api/korean/financials/{symbol}/balance-sheet`, `/income-statement`, `/cash-flow` | `sj_div`가 BS·IS·CF인 항목만 |
+| `GET /api/korean/valuation/{symbol}` | KIS 현재가와 DART 재무로 계산한 PER·PBR·EPS·BPS |
+| `GET /api/korean/company/{symbol}` | 기업개황 |
+| `GET /api/korean/disclosures` | 공시 목록 (`corp`, `start`, `end`, `kind`, `final`, `limit`) |
+
+- 재무 관련 엔드포인트는 `year`, `quarter`를 받고, `/all`과 `/valuation`은 `fs_div`도 받습니다. `year` 기본값은 `/financials/{symbol}`만 올해이고 나머지는 전년도입니다.
+- `/disclosures`의 `corp`는 6자리 종목코드만 인식합니다. 회사명을 넣으면 필터가 적용되지 않아 전체 회사의 공시가 돌아옵니다.
+- (선택) [`backend/src/services/financial_statements.py`](../backend/src/services/financial_statements.py)는 같은 데이터를 Supabase 테이블에 저장하며 `/api/financials/korean/...` 엔드포인트가 이를 씁니다. [SUPABASE_INTEGRATION.md](SUPABASE_INTEGRATION.md)를 보세요.
+- 전체 파라미터는 [API.md](API.md)에 있습니다.
+
+### 고유번호(corp_code) 매핑
+
+OpenDART의 기업별 API는 6자리 종목코드가 아니라 8자리 고유번호를 받습니다. 클라이언트는 다음 순서로 고유번호를 찾습니다.
+
+1. 메모리의 매핑. 시작할 때 코드에 들어 있는 대형주 몇 종목의 기본 매핑과, 저장된 지 24시간이 안 된 경우 [`backend/src/data/opendart/corp_codes.json`](../backend/src/data/opendart/corp_codes.json)을 읽어 둡니다.
+2. 매핑에 없으면 `corpCode.xml`을 내려받아 종목코드가 있는 회사만 매핑에 넣고 `corp_codes.json`을 다시 씁니다.
+
+```json
+{
+  "timestamp": "2025-01-01T00:00:00+00:00",
+  "codes": {
+    "005930": "00126380"
+  }
+}
+```
+
+- `corp_codes.json`은 스냅샷으로 커밋되어 있습니다. 내려받기가 일어나면 이 파일이 바뀌므로 git 변경 사항으로 나타납니다.
+- 알려진 문제: 코드에 들어 있는 기본 매핑 중 일부는 실제 고유번호와 다릅니다. 매핑에 있는 종목은 내려받기를 하지 않으므로, `corp_codes.json`이 24시간보다 오래됐으면 일부 종목이 다른 회사의 재무제표를 보여 줄 수 있습니다. 아래 명령으로 매핑을 새로 받으면 24시간 동안은 파일의 값이 우선합니다.
+
 ```bash
-curl "https://opendart.fss.or.kr/api/company.json?crtfc_key=${DART_API_KEY}&corp_code=00126380"
+cd backend
+uv run python -c "from src.integrations.opendart import opendart_client as c; print(c.download_corp_code_list())"
 ```
 
-### Multi-Company Major Accounts
-Fetch major account line items for multiple companies and reports.
+### 요청 한도
 
-- **Method**: GET
-- **URL**: `https://opendart.fss.or.kr/api/fnlttMultiAcnt.json`
-- **XML variant**: `https://opendart.fss.or.kr/api/fnlttMultiAcnt.xml`
+- OpenDART는 인증키별로 하루 요청 수를 제한하며(일반적으로 약 20,000건), 넘으면 `status` `020`을 돌려줍니다. 정확한 한도는 OpenDART 안내를 따르세요.
+- 재무제표 한 번 조회에 주요계정 API 2건이 나갑니다.
+- 클라이언트 자체에는 요청 간 대기가 없습니다. 많은 종목을 조회할 때는 아래 스크립트를 쓰세요.
 
-**Request parameters**
-- `crtfc_key` (required)
-- `corp_code` (required): comma-separated corp codes (max 100)
-- `bsns_year` (required): fiscal year (available from 2015+)
-- `reprt_code` (required): report type
+### 전 종목 일괄 수집 스크립트
 
-**Response fields (list)**
-- `rcept_no`: receipt number (14 digits)
-- `bsns_year`: fiscal year
-- `stock_code`: 6-digit stock code
-- `reprt_code`: report code
-- `account_nm`: account name (e.g., Total Equity)
-- `fs_div`: financial statement type (`OFS` or `CFS`)
-- `fs_nm`: financial statement name
-- `sj_div`: statement type (`BS` or `IS`)
-- `sj_nm`: statement name
-- `thstrm_nm`: current period name
-- `thstrm_dt`: current period date
-- `thstrm_amount`: current period amount
-- `thstrm_add_amount`: current cumulative amount
-- `frmtrm_nm`: prior period name
-- `frmtrm_dt`: prior period date
-- `frmtrm_amount`: prior period amount
-- `frmtrm_add_amount`: prior cumulative amount
-- `bfefrmtrm_nm`: two-periods-ago name (annual only)
-- `bfefrmtrm_dt`: two-periods-ago date (annual only)
-- `bfefrmtrm_amount`: two-periods-ago amount (annual only)
-- `ord`: account sort order
-- `currency`: currency unit
+[`backend/scripts/fetch_opendart_all_stocks.py`](../backend/scripts/fetch_opendart_all_stocks.py)는 여러 종목의 재무제표를 받아 CSV로 저장합니다.
 
-**Example**
 ```bash
-curl "https://opendart.fss.or.kr/api/fnlttMultiAcnt.json?crtfc_key=${DART_API_KEY}&corp_code=00334624,00126380&bsns_year=2018&reprt_code=11011"
+cd backend
+uv run python scripts/fetch_opendart_all_stocks.py --years 2024
+uv run python scripts/fetch_opendart_all_stocks.py --years 2025 --periods 2025Q1 2025Q2 --symbols 005930 000660
 ```
 
-### Multi-Company Financial Indices
-Fetch key financial indices (profitability, stability, growth, activity).
+| 옵션 | 설명 |
+|------|------|
+| `--years` | 필수. 수집할 연도 목록 |
+| `--periods` | 예: `2025Q2 2025Y`. 생략하면 1~4분기와 연간(`Y`) 모두 |
+| `--symbols` | 일부 종목만 수집. 생략하면 고유번호 매핑의 전체 종목 |
+| `--limit` | 종목코드 순으로 앞의 N개만 |
+| `--sleep` | 분기별 조회 사이 대기(초), 기본 0.3 |
+| `--retries`, `--retry-sleep` | 실패 시 재시도 횟수(기본 2)와 대기(기본 30초) |
+| `--output-root` | 출력 폴더, 기본 저장소 루트의 `database/raw_data` |
 
-- **Method**: GET
-- **URL**: `https://opendart.fss.or.kr/api/fnlttCmpnyIndx.json`
-- **XML variant**: `https://opendart.fss.or.kr/api/fnlttCmpnyIndx.xml`
+- 결과: `<output-root>/<연도>/<기간>/{balance_sheet,income_statement,cashflow_statement}.csv`와 같은 이름의 `.schema.json`
+- 진행 상황은 `<output-root>/progress/opendart_<연도>.json`에 저장되어, 다시 실행하면 끝난 종목은 건너뜁니다. 재시도 후에도 실패하면 진행 상황을 저장하고 멈춥니다.
+- 연결·별도를 모두 받으므로 종목·연도마다 최대 16건을 요청합니다. 전 종목 수집은 하루 한도를 넘을 수 있으니 며칠에 나눠 실행하세요.
+- 분기 값: 스크립트는 반기·사업보고서의 손익·현금흐름 금액을 누적값, 3분기 금액을 3개월 값으로 보고 2분기 = 반기 − 1분기, 4분기 = 연간 − 반기 − 3분기로 계산합니다. 재무상태표는 시점 값을 그대로 씁니다.
+- `.gitignore`는 CSV만 제외합니다. `.schema.json`과 진행 파일도 커밋하지 마세요.
 
-**Request parameters**
-- `crtfc_key` (required)
-- `corp_code` (required): comma-separated corp codes (max 100)
-- `bsns_year` (required): fiscal year (available from 2023 Q3+)
-- `reprt_code` (required): report type
-- `idx_cl_code` (required): index category
-  - `M210000`: profitability
-  - `M220000`: stability
-  - `M230000`: growth
-  - `M240000`: activity
+### 참고
 
-**Response fields (list)**
-- `reprt_code`: report code
-- `bsns_year`: fiscal year
-- `corp_code`: corp code
-- `stock_code`: 6-digit stock code
-- `stlm_dt`: settlement date (YYYY-MM-DD)
-- `idx_cl_code`: index category code
-- `idx_cl_nm`: index category name
-- `idx_code`: index code
-- `idx_nm`: index name
-- `idx_val`: index value
+- [OpenDART](https://opendart.fss.or.kr/): 인증키 신청, 개발가이드
+- [API.md](API.md): 백엔드 REST API
 
-**Example**
+---
+
+## English
+
+### Overview
+
+The backend uses the [OpenDART](https://opendart.fss.or.kr/) API of the Financial Supervisory Service's disclosure system to fetch financial statements (major accounts), company overviews and filing lists for Korean listed companies.
+
+- Client: [`backend/src/integrations/opendart.py`](../backend/src/integrations/opendart.py) (`OpenDartClient`, global instance `opendart_client`)
+- Base URL: `https://opendart.fss.or.kr/api`
+- For the full request/response field specs, see the developer guide on the OpenDART site.
+
+### API key
+
+Get an API key (40 characters) from OpenDART and put it in the repository-root `.env`. It is sent with every request as the `crtfc_key` parameter.
+
 ```bash
-curl "https://opendart.fss.or.kr/api/fnlttCmpnyIndx.json?crtfc_key=${DART_API_KEY}&corp_code=00164742,00159023&bsns_year=2023&reprt_code=11014&idx_cl_code=M210000"
+DART_API_KEY=your_dart_api_key
 ```
 
-## References
-- Corp code list: https://opendart.fss.or.kr/guide/detail.do?apiGrpCd=DS001&apiId=2019018
-- Company information: https://opendart.fss.or.kr/guide/detail.do?apiGrpCd=DS001&apiId=2019002
-- Multi-company major accounts: https://opendart.fss.or.kr/guide/detail.do?apiGrpCd=DS003&apiId=2019017
-- Multi-company financial indices: https://opendart.fss.or.kr/guide/detail.do?apiGrpCd=DS003&apiId=2022002
+Without a key, financial statement, company and filing requests return no data, and those endpoints respond with 404.
+
+### APIs used
+
+| OpenDART API | Path | Purpose |
+|--------------|------|---------|
+| Corp code list | `corpCode.xml` (ZIP) | Stock code → corp code (corp_code) mapping |
+| Single-company major accounts | `fnlttSinglAcnt.json` | Financial statements |
+| Multi-company major accounts | `fnlttMultiAcnt.json` | Financial statements (merged with the above, then de-duplicated) |
+| Company overview | `company.json` | Company details |
+| Disclosure search | `list.json` | Filing list |
+
+- Financial statement requests take `corp_code`, `bsns_year` and `reprt_code`. Results from both major-account APIs are merged, filtered by `fs_div` (`CFS` consolidated, `OFS` separate) and de-duplicated.
+- Report codes: `11013` Q1, `11012` half-year, `11014` Q3, `11011` annual report. The backend maps `quarter` 1, 2, 3, 4 to these in that order and uses `11011` when no quarter is given.
+- The major-account APIs provide the main balance sheet (BS) and income statement (IS) accounts. Cash flow (CF) items are outside their scope, so cash-flow responses and the cash-flow tab in the UI are usually empty.
+- Response `status`: `000` OK, `013` no data (treated as an empty result), `020` request limit exceeded. Any other value is treated as an error and the endpoint returns 404.
+
+### Backend endpoints
+
+| Endpoint | Content |
+|----------|---------|
+| `GET /api/korean/financials/{symbol}` | Summary values (revenue, operating income, net income, total assets/liabilities/equity, EPS, BPS) |
+| `GET /api/korean/financials/{symbol}/all` | Every raw major-account line item. Used by the statements table on the domestic stock page |
+| `GET /api/korean/financials/{symbol}/balance-sheet`, `/income-statement`, `/cash-flow` | Only items whose `sj_div` is BS, IS or CF |
+| `GET /api/korean/valuation/{symbol}` | PER, PBR, EPS and BPS from the KIS price and DART financials |
+| `GET /api/korean/company/{symbol}` | Company overview |
+| `GET /api/korean/disclosures` | Filing list (`corp`, `start`, `end`, `kind`, `final`, `limit`) |
+
+- The financial endpoints take `year` and `quarter`; `/all` and `/valuation` also take `fs_div`. `year` defaults to the current year for `/financials/{symbol}` and to the previous year everywhere else.
+- `corp` on `/disclosures` only recognises 6-digit stock codes. A company name is not applied as a filter, so filings for all companies come back.
+- (Optional) [`backend/src/services/financial_statements.py`](../backend/src/services/financial_statements.py) stores the same data in Supabase tables, served by the `/api/financials/korean/...` endpoints. See [SUPABASE_INTEGRATION.md](SUPABASE_INTEGRATION.md).
+- All parameters are listed in [API.md](API.md).
+
+### Corp code mapping
+
+OpenDART's per-company APIs take an 8-digit corp code, not the 6-digit stock code. The client resolves it in this order:
+
+1. The in-memory mapping. At start-up it holds a small built-in table of a few large caps, plus [`backend/src/data/opendart/corp_codes.json`](../backend/src/data/opendart/corp_codes.json) if that file was saved less than 24 hours ago.
+2. On a miss, it downloads `corpCode.xml`, adds every company that has a stock code, and rewrites `corp_codes.json`.
+
+```json
+{
+  "timestamp": "2025-01-01T00:00:00+00:00",
+  "codes": {
+    "005930": "00126380"
+  }
+}
+```
+
+- `corp_codes.json` is committed as a snapshot. A download rewrites it, so it shows up as a git change.
+- Known issue: some entries in the built-in table do not match the real corp codes. Stocks found in the mapping never trigger a download, so when `corp_codes.json` is older than 24 hours some stocks can show another company's statements. Re-downloading the mapping with the command below makes the file's values win for the next 24 hours.
+
+```bash
+cd backend
+uv run python -c "from src.integrations.opendart import opendart_client as c; print(c.download_corp_code_list())"
+```
+
+### Rate limits
+
+- OpenDART limits daily requests per API key (typically about 20,000) and returns `status` `020` when exceeded. Follow OpenDART's notice for the exact limit.
+- One financial statement lookup sends two major-account requests.
+- The client itself does not pause between requests. Use the script below for many stocks.
+
+### Bulk download script
+
+[`backend/scripts/fetch_opendart_all_stocks.py`](../backend/scripts/fetch_opendart_all_stocks.py) downloads financial statements for many stocks and writes CSV files.
+
+```bash
+cd backend
+uv run python scripts/fetch_opendart_all_stocks.py --years 2024
+uv run python scripts/fetch_opendart_all_stocks.py --years 2025 --periods 2025Q1 2025Q2 --symbols 005930 000660
+```
+
+| Option | Description |
+|--------|-------------|
+| `--years` | Required. Years to fetch |
+| `--periods` | E.g. `2025Q2 2025Y`. Defaults to Q1–Q4 plus annual (`Y`) |
+| `--symbols` | Fetch only these stocks. Defaults to every stock in the corp code mapping |
+| `--limit` | Only the first N stocks by stock code |
+| `--sleep` | Pause between quarterly requests in seconds, default 0.3 |
+| `--retries`, `--retry-sleep` | Retries on failure (default 2) and the wait between them (default 30 s) |
+| `--output-root` | Output folder, default `database/raw_data` at the repository root |
+
+- Output: `<output-root>/<year>/<period>/{balance_sheet,income_statement,cashflow_statement}.csv`, each with a matching `.schema.json`
+- Progress is saved to `<output-root>/progress/opendart_<year>.json`; a rerun skips finished stocks. If a request still fails after the retries, the script saves progress and stops.
+- It fetches both consolidated and separate statements, so each stock and year costs up to 16 requests. A run over all stocks can exceed the daily limit; spread it over several days.
+- Quarterly values: the script treats half-year and annual income and cash-flow amounts as cumulative and Q3 amounts as three-month figures, and derives Q2 = half-year − Q1 and Q4 = annual − half-year − Q3. Balance sheet values are used as-is.
+- `.gitignore` excludes only the CSV files. Do not commit the `.schema.json` or progress files either.
+
+### References
+
+- [OpenDART](https://opendart.fss.or.kr/): API key sign-up and developer guide
+- [API.md](API.md): backend REST API
