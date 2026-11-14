@@ -110,6 +110,10 @@ backend/.venv/
 # Generated test outputs (may contain account data — never commit)
 backend/tests/test-results/
 backend/test_results/
+backend/tests/data/
+backend/API_TEST_RESULTS.md
+database/raw_data/
+*_fo_master.json
 
 # Local copy of the KIS (한국투자증권) official API docs — third-party content, not redistributed
 docs/kdevelopers_api/

@@ -1547,7 +1547,8 @@ class KDevelopersClient:
             else:
                 res.print_error(api_url)
                 logger.error(
-                    f"Failed to get account balance for {account_number}"
+                    "Failed to get account balance for account ****%s",
+                    account_number[-2:],
                 )
                 return None
 

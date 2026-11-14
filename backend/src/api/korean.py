@@ -274,7 +274,7 @@ async def get_korean_account_balance(
     if not result:
         raise HTTPException(
             status_code=404,
-            detail=f"Account balance not found for account {account_number}",
+            detail="Account balance not found for the configured account",
         )
     return result
 
