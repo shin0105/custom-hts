@@ -87,6 +87,8 @@ ENV/
 *.sqlite3
 
 # API keys and credentials
+# Local KIS access-token cache
+backend/.cache/
 secrets.json
 config.ini
 credentials.json

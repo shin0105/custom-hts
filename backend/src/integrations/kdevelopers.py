@@ -12,7 +12,6 @@ Key features:
 """
 
 import json
-import hashlib
 import time
 import logging
 from typing import Optional, Dict, Any, List
@@ -20,7 +19,7 @@ from datetime import datetime, timezone, timedelta
 from collections import namedtuple
 import requests
 from ..utils.config import settings
-from ..integrations.supabase_client import supabase_client
+from .token_store import token_store, hash_api_key
 from ..models.korean import (
     KoreanStockQuote,
     KoreanCandleData,
@@ -173,57 +172,34 @@ class KDevelopersClient:
             logger.error("API credentials not configured")
             return None
 
-        api_key_hash = (
-            hashlib.sha256(self.api_key.encode("utf-8")).hexdigest()
-            if self.api_key
-            else ""
-        )
+        api_key_hash = hash_api_key(self.api_key)
 
         # Check in-memory token first
-        if (
-            self.access_token
-            and self.token_expiry
-            and datetime.now(timezone.utc) < self.token_expiry
-        ):
+        if self._token_is_fresh(self.token_expiry) and self.access_token:
             return self.access_token
 
-        # Check cached token in Supabase
-        if api_key_hash and supabase_client.client:
-            cached = (
-                supabase_client.get_kdevelopers_token(api_key_hash)
-                if hasattr(supabase_client, "get_kdevelopers_token")
-                else None
-            )
+        # Check cached token in the local token file
+        cached = token_store.get(api_key_hash)
+        if cached:
+            cached_token = cached.get("access_token")
+            cached_expiry = None
+            expires_at = cached.get("expires_at")
+            if expires_at:
+                try:
+                    cached_expiry = datetime.fromisoformat(expires_at)
+                    if cached_expiry.tzinfo is None:
+                        cached_expiry = cached_expiry.replace(
+                            tzinfo=timezone.utc
+                        )
+                except ValueError:
+                    cached_expiry = None
 
-            if cached:
-                cached_token = cached.get("access_token")
-                expires_at = cached.get("expires_at")
-                cached_expiry = None
-                if expires_at:
-                    try:
-                        cached_expiry = datetime.fromisoformat(expires_at)
-                        if cached_expiry.tzinfo is None:
-                            cached_expiry = cached_expiry.replace(
-                                tzinfo=timezone.utc
-                            )
-                    except Exception:
-                        cached_expiry = None
+            if cached_token and self._token_is_fresh(cached_expiry):
+                self.access_token = cached_token
+                self.token_expiry = cached_expiry
+                return self.access_token
 
-                if (
-                    cached_token
-                    and cached_expiry
-                    and datetime.now(timezone.utc) < cached_expiry
-                ):
-                    self.access_token = cached_token
-                    self.token_expiry = cached_expiry
-                    return self.access_token
-
-                if (
-                    cached_expiry
-                    and datetime.now(timezone.utc) >= cached_expiry
-                ):
-                    if hasattr(supabase_client, "delete_kdevelopers_token"):
-                        supabase_client.delete_kdevelopers_token(api_key_hash)
+            token_store.delete(api_key_hash)
 
         # Request new token
         try:
@@ -244,11 +220,16 @@ class KDevelopersClient:
             self.access_token = data.get("access_token")
             # Token typically expires in 24 hours
             token_expired = data.get("access_token_token_expired")
+            expires_in = safe_int(data.get("expires_in"))
             if token_expired:
                 self.token_expiry = (
                     datetime.strptime(token_expired, "%Y-%m-%d %H:%M:%S")
                     .replace(tzinfo=self._kst_tz)
                     .astimezone(timezone.utc)
+                )
+            elif expires_in:
+                self.token_expiry = datetime.now(timezone.utc) + timedelta(
+                    seconds=expires_in
                 )
             else:
                 self.token_expiry = datetime.now(timezone.utc)
@@ -258,17 +239,24 @@ class KDevelopersClient:
                 f"[{self._last_auth_time}] => Token acquired successfully"
             )
 
-            if api_key_hash and supabase_client.client and self.access_token:
-                supabase_client.save_kdevelopers_token(
+            if self.access_token:
+                token_store.save(
                     api_key_hash, self.access_token, self.token_expiry
                 )
 
             return self.access_token
         except Exception as e:
-            if api_key_hash and supabase_client.client:
-                supabase_client.delete_kdevelopers_token(api_key_hash)
+            token_store.delete(api_key_hash)
             logger.error(f"Failed to get access token: {e}")
             return None
+
+    @staticmethod
+    def _token_is_fresh(expiry: Optional[datetime]) -> bool:
+        """True if a token expiring at `expiry` is still safely usable."""
+        if not expiry:
+            return False
+        margin = timedelta(seconds=60)
+        return datetime.now(timezone.utc) < expiry - margin
 
     def revoke_access_token(self, token: Optional[str] = None) -> bool:
         """
@@ -284,16 +272,12 @@ class KDevelopersClient:
             logger.error("API credentials not configured")
             return False
 
-        api_key_hash = (
-            hashlib.sha256(self.api_key.encode("utf-8")).hexdigest()
-            if self.api_key
-            else ""
-        )
+        api_key_hash = hash_api_key(self.api_key)
 
         access_token = token or self.access_token
 
-        if not access_token and api_key_hash and supabase_client.client:
-            cached = supabase_client.get_kdevelopers_token(api_key_hash)
+        if not access_token:
+            cached = token_store.get(api_key_hash)
             if cached:
                 access_token = cached.get("access_token")
 
@@ -316,8 +300,7 @@ class KDevelopersClient:
                 logger.info("Access token revoked successfully")
                 self.access_token = None
                 self.token_expiry = None
-                if api_key_hash and supabase_client.client:
-                    supabase_client.delete_kdevelopers_token(api_key_hash)
+                token_store.delete(api_key_hash)
                 return True
 
             logger.error(
@@ -414,13 +397,8 @@ class KDevelopersClient:
     def _purge_cached_token(self) -> None:
         self.access_token = None
         self.token_expiry = None
-        api_key_hash = (
-            hashlib.sha256(self.api_key.encode("utf-8")).hexdigest()
-            if self.api_key
-            else ""
-        )
-        if api_key_hash and supabase_client.client:
-            supabase_client.delete_kdevelopers_token(api_key_hash)
+        if self.api_key:
+            token_store.delete(hash_api_key(self.api_key))
 
     def _output_to_dict(self, output: Any) -> Optional[Dict[str, Any]]:
         """Normalize single API output payload to dict."""
