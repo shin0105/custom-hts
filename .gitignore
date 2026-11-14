@@ -89,6 +89,8 @@ ENV/
 # API keys and credentials
 # Local KIS access-token cache
 backend/.cache/
+.env.*
+!.env.example
 secrets.json
 config.ini
 credentials.json
@@ -104,6 +106,20 @@ frontend/.vite/
 
 # Dependency directories
 backend/.venv/
+
+# Generated test outputs (may contain account data — never commit)
+backend/tests/test-results/
+backend/test_results/
+
+# Local copy of the KIS (한국투자증권) official API docs — third-party content, not redistributed
+docs/kdevelopers_api/
+
+# Dev helper state
+.dev-pids/
+
+# Claude Code local state
+.claude/worktrees/
+.claude/settings.local.json
 
 # Lock files (optional - keep if you want reproducible builds)
 # package-lock.json

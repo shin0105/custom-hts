@@ -10,7 +10,7 @@ mkdir -p "$PID_DIR"
 
 start_backend() {
   cd "$BACKEND_DIR"
-  uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+  uv run uvicorn src.main:app --reload --host 127.0.0.1 --port 8000
 }
 
 start_frontend() {
