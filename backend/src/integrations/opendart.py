@@ -6,6 +6,7 @@ import zipfile
 import io
 import xml.etree.ElementTree as ET
 import logging
+import threading
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta, timezone
@@ -52,6 +53,8 @@ class OpenDartClient:
         )
         self._corp_code_cache_ttl = timedelta(hours=24)
         self._corp_code_cache_loaded_at: Optional[datetime] = None
+        # Lookups run on several pool threads; only one downloads the list.
+        self._corp_code_download_lock = threading.Lock()
         self._corp_code_cache_path.parent.mkdir(parents=True, exist_ok=True)
         # The full corp code list is downloaded lazily (on a cache miss) to
         # avoid startup network calls; the committed snapshot covers every
@@ -171,6 +174,15 @@ class OpenDartClient:
         Returns:
             True if successful, False otherwise
         """
+        loaded_before = self._corp_code_cache_loaded_at
+        with self._corp_code_download_lock:
+            if self._corp_code_cache_loaded_at != loaded_before:
+                # Another thread downloaded the list while this one waited.
+                return True
+            return self._download_corp_code_list_locked()
+
+    def _download_corp_code_list_locked(self) -> bool:
+        """Body of ``download_corp_code_list``; the caller holds the lock."""
         if not self.api_key:
             logger.warning("DART API key not configured")
             return False

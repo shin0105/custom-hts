@@ -34,7 +34,7 @@ cd frontend && npm run lint && npm run build      # 린트 + 타입 체크/빌�
 **백엔드** (`backend/src/`)
 - 계층: `api/`(FastAPI 라우터) → `services/`(비즈니스 로직) → `integrations/`(외부 API 클라이언트). 라우터에 로직을 넣지 말고 서비스에 둡니다.
 - 요청·응답 모델은 `models/`의 Pydantic 모델을 씁니다. 설정은 `from ..utils.config import settings`로만 읽습니다.
-- KIS 클라이언트(`integrations/kdevelopers.py`)는 동기 방식이며 호출마다 속도 제한을 겁니다. 새 서비스에서 KIS 호출 여러 개를 묶을 때는 `utils/concurrency.py`의 `run_blocking`(일부러 워커 1개)과 `TTLCache`를 쓰세요. `services/bond_analytics.py`, `services/basis.py`가 예시입니다.
+- KIS 클라이언트(`integrations/kdevelopers.py`)는 동기 방식이지만 여러 스레드에서 불러도 안전합니다(스레드 공용 속도 제한, 토큰 발급 잠금). 동기 클라이언트(KIS, OpenDART, 마스터 파일)를 `async def` 안에서 직접 부르면 이벤트 루프가 막히므로, `utils/concurrency.py`의 `run_blocking`이나 `@to_thread` 데코레이터로 블로킹 호출용 스레드 풀(워커 4개)에서 실행하세요. 호출 여러 개를 묶는 서비스는 `TTLCache`도 씁니다. `services/korean_market.py`(`@to_thread`), `services/bond_analytics.py`, `services/basis.py`(`run_blocking`)가 예시입니다.
 - KIS 접근 토큰은 `integrations/token_store.py`가 로컬 파일(`backend/.cache/kis_tokens.json`)에 캐시합니다. 토큰 발급은 1분에 1회로 제한되므로 새 토큰을 남발하지 마세요.
 - 순수 계산 로직(`services/bond_math.py`, `basis.py`, `option_parity.py`, `bond_analytics.py`)은 오프라인 단위 테스트가 있습니다. 수정하면 해당 테스트를 함께 고치고 실행하세요.
 - 스타일: black(line-length 79), 타입 힌트 필수.
@@ -86,7 +86,7 @@ cd frontend && npm run lint && npm run build      # lint + type-check/build
 **Backend** (`backend/src/`)
 - Layers: `api/` (FastAPI routers) → `services/` (business logic) → `integrations/` (external API clients). Keep logic out of routers; put it in services.
 - Use the Pydantic models in `models/` for requests and responses. Read settings only via `from ..utils.config import settings`.
-- The KIS client (`integrations/kdevelopers.py`) is synchronous and rate-limits every call. When a new service fans out several KIS calls, use `run_blocking` (a single worker on purpose) and `TTLCache` from `utils/concurrency.py`; see `services/bond_analytics.py` and `services/basis.py`.
+- The KIS client (`integrations/kdevelopers.py`) is synchronous but safe to call from several threads (a shared rate limiter and a lock on token issuance). Calling a synchronous client (KIS, OpenDART, master files) directly inside `async def` blocks the event loop, so run it on the blocking-call pool (4 workers) with `run_blocking` or the `@to_thread` decorator from `utils/concurrency.py`. Services that fan out several calls also use `TTLCache`. See `services/korean_market.py` (`@to_thread`) and `services/bond_analytics.py` / `services/basis.py` (`run_blocking`).
 - KIS access tokens are cached in a local file (`backend/.cache/kis_tokens.json`) by `integrations/token_store.py`. KIS allows one token issuance per minute, so do not request new tokens needlessly.
 - The pure calculation modules (`services/bond_math.py`, `basis.py`, `option_parity.py`, `bond_analytics.py`) have offline unit tests. When you change them, update and run those tests too.
 - Style: black (line-length 79), type hints required.

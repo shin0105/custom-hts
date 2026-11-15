@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from ..utils.concurrency import holding_lock
+
 logger = logging.getLogger(__name__)
 
 KST = timezone(timedelta(hours=9))
@@ -82,7 +84,10 @@ class FuturesOptionsMasterFileManager:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self._rows_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
         self._last_refresh_attempt: Dict[str, float] = {}
-        self._refresh_lock = threading.Lock()
+        # Guards downloads, which overwrite the master files in place.
+        # Reentrant because ensure_fresh and refresh_and_export download
+        # while already holding it.
+        self._refresh_lock = threading.RLock()
 
     def is_stale(self, market: str) -> bool:
         """True when the local master is missing or predates today (KST).
@@ -143,6 +148,7 @@ class FuturesOptionsMasterFileManager:
         self._rows_cache[market_key] = (stamp, rows)
         return rows
 
+    @holding_lock("_refresh_lock")
     def download_market_master(
         self,
         market: str,
@@ -267,6 +273,7 @@ class FuturesOptionsMasterFileManager:
                 out[market] = df
         return out
 
+    @holding_lock("_refresh_lock")
     def refresh_and_export(
         self,
         market: str = "all",

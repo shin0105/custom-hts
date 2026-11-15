@@ -31,7 +31,7 @@ This document collects **recipes** for common tasks and the **domain knowledge**
 1. [KIS Developers 포털](https://apiportal.koreainvestment.com/)에서 API 경로, `tr_id`, 파라미터를 확인합니다. 로컬에 `docs/kdevelopers_api/` 사본이 있다면 참고해도 되지만 커밋하지 마세요.
 2. `integrations/kdevelopers.py`에 메서드를 추가합니다. 기존 메서드(`get_bond_asking_price` 등)처럼 `self._url_fetch(api_url, tr_id, "", params)`를 호출하고, `res.is_ok()`를 확인한 뒤 `_output_to_dict` / `_output_to_list`로 변환합니다. 토큰과 속도 제한은 `_url_fetch`가 처리합니다.
 3. `models/korean.py`(또는 `korean_analytics.py`)에 Pydantic 응답 모델을 정의합니다.
-4. `services/`에서 원시 필드(`stck_prpr` 등)를 의미 있는 이름과 숫자 타입으로 바꿉니다. 호출 여러 개를 묶으면 `run_blocking`과 `TTLCache`를 씁니다.
+4. `services/`에서 원시 필드(`stck_prpr` 등)를 의미 있는 이름과 숫자 타입으로 바꿉니다. 클라이언트 호출은 이벤트 루프를 막지 않도록 `@to_thread` 메서드나 `run_blocking`으로 감싸고, 호출 여러 개를 묶으면 `TTLCache`도 씁니다.
 5. `api/korean.py`에 라우트를 추가하고, 결과가 없으면 `HTTPException(404)`를 반환합니다.
 6. `frontend/src/types/`, `services/koreanMarket.ts`, `hooks/`에 타입·호출·React Query 훅을 추가합니다.
 7. 계산 로직이 있으면 `backend/tests/`에 오프라인 단위 테스트를 추가합니다(네트워크 호출 금지).
@@ -48,7 +48,7 @@ This document collects **recipes** for common tasks and the **domain knowledge**
 ### 3. 도메인 지식
 
 - **KIS 토큰**: 접근 토큰은 약 24시간 유효하고 발급은 앱키당 1분에 1회입니다. 만료 응답을 받으면 캐시를 지우고 한 번 재발급합니다(`_is_token_expired_response`).
-- **KIS 속도 제한**: 클라이언트가 호출마다 간격을 둡니다(`_smart_sleep`, 0.05초). 앱은 실전투자 서버(`HANTU_BASE_URL`)를 씁니다. 병렬 호출로 제한을 우회하지 마세요.
+- **KIS 속도 제한**: 클라이언트의 `RateLimiter`가 모든 스레드에 걸쳐 요청 시작 간격을 0.06초 이상으로 벌립니다(초당 약 16건, 실전 한도 20건). 앱은 실전투자 서버(`HANTU_BASE_URL`)를 씁니다. 클라이언트를 거치지 않는 요청으로 제한을 우회하지 마세요.
 - **종목코드**: 국내 주식은 6자리(`005930`), 채권·선물옵션은 상품번호(`pdno`)를 씁니다. OpenDART는 종목코드가 아닌 8자리 고유번호(`corp_code`)를 쓰므로 `corp_codes.json`으로 변환합니다.
 - **등락 색상**: 한국 관행은 상승=빨강, 하락=파랑이며 기본값입니다.
 - **채권 관행**: 한국 시장 관행을 따릅니다. 가격은 액면 10,000원당 경과이자를 포함한 가격(dirty price)이고, 이표채는 이표 주기 복리 + 첫 구간 단리로 할인합니다. 수정 전에 `services/bond_math.py`의 docstring과 `tests/test_bond_math.py`를 먼저 읽으세요.
@@ -94,7 +94,7 @@ Paths are relative to `backend/src/` and `frontend/src/`.
 1. Look up the API path, `tr_id` and parameters on the [KIS Developers portal](https://apiportal.koreainvestment.com/). If a local copy exists in `docs/kdevelopers_api/`, you may read it, but never commit it.
 2. Add a method to `integrations/kdevelopers.py`. Like the existing methods (e.g. `get_bond_asking_price`), call `self._url_fetch(api_url, tr_id, "", params)`, check `res.is_ok()`, then convert with `_output_to_dict` / `_output_to_list`. `_url_fetch` handles tokens and rate limiting.
 3. Define a Pydantic response model in `models/korean.py` (or `korean_analytics.py`).
-4. In `services/`, map raw fields (such as `stck_prpr`) to meaningful names and numeric types. When fanning out several calls, use `run_blocking` and `TTLCache`.
+4. In `services/`, map raw fields (such as `stck_prpr`) to meaningful names and numeric types. Wrap client calls in a `@to_thread` method or `run_blocking` so they do not block the event loop, and add `TTLCache` when fanning out several calls.
 5. Add the route in `api/korean.py`; return `HTTPException(404)` when there is no result.
 6. Add the type, call and React Query hook in `frontend/src/types/`, `services/koreanMarket.ts` and `hooks/`.
 7. If there is calculation logic, add an offline unit test in `backend/tests/` (no network calls).
@@ -111,7 +111,7 @@ Paths are relative to `backend/src/` and `frontend/src/`.
 ### 3. Domain knowledge
 
 - **KIS tokens**: an access token lasts about 24 hours, and issuance is limited to once per minute per app key. On an expired-token response the client purges the cache and reissues once (`_is_token_expired_response`).
-- **KIS rate limits**: the client spaces out every call (`_smart_sleep`, 0.05 s). The app uses the live-trading server (`HANTU_BASE_URL`). Do not work around the limit with parallel calls.
+- **KIS rate limits**: the client's `RateLimiter` starts requests at least 0.06 s apart across all threads (about 16 per second, under the live limit of 20). The app uses the live-trading server (`HANTU_BASE_URL`). Do not work around the limit with requests that bypass the client.
 - **Codes**: Korean stocks use 6-digit codes (`005930`); bonds and futures/options use a product number (`pdno`). OpenDART uses an 8-digit `corp_code` rather than the stock code, mapped through `corp_codes.json`.
 - **Up/down colours**: the Korean convention, up = red and down = blue, is the default.
 - **Bond conventions**: Korean market convention. Prices are per 10,000 KRW face and include accrued interest (dirty prices); coupon bonds discount whole coupon periods with compounding and the first partial period with simple interest. Read the docstring of `services/bond_math.py` and `tests/test_bond_math.py` before changing anything.

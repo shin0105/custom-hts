@@ -10,10 +10,13 @@ Reference: https://github.com/koreainvestment/open-trading-api/tree/main/stocks_
 import urllib.request
 import zipfile
 import logging
+import threading
 import time
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 import pandas as pd
+
+from ..utils.concurrency import holding_lock
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +80,9 @@ class StockMasterFileManager:
 
         # market -> (cached_at_epoch, rows)
         self._rows_cache: Dict[str, tuple] = {}
+        # Parsing writes temp files at fixed paths and downloads overwrite
+        # the master files, so only one thread may load rows at a time.
+        self._file_lock = threading.RLock()
 
     def download_market_file(self, market: str, force: bool = False) -> bool:
         """
@@ -763,6 +769,7 @@ class StockMasterFileManager:
 
         return result.iloc[0].to_dict()
 
+    @holding_lock("_file_lock")
     def get_market_rows(
         self,
         market: str,
