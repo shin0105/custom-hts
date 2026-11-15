@@ -23,10 +23,15 @@ from pathlib import Path
 from typing import Any, Optional
 
 import requests
-from dotenv import dotenv_values
+from dotenv import dotenv_values, load_dotenv
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend"))
+
+# Put .env values (such as HANTU_TOKEN_CACHE_PATH) into the environment
+# before token_store is imported, so the script writes the same token cache
+# file as the app. Variables already set in the shell take precedence.
+load_dotenv(ROOT / ".env")
 
 from src.integrations.token_store import hash_api_key, token_store  # noqa: E402
 

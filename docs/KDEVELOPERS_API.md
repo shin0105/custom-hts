@@ -135,7 +135,7 @@ uv run python scripts/check_hantu_keys.py
 
 - 저장소 루트 `.env`에서 `HANTU_API_KEY`/`HANTU_API_SECRET`과, 있으면 두 번째 키(`HANTU_API_KEY_2`/`HANTU_API_SECRET_2` 또는 `HANTU_API_KEY2`/`HANTU_API_SECRET2`)를 읽습니다.
 - 키마다 실전투자 서버에서 토큰을 발급받고, 실패하면 모의투자 서버(`https://openapivts.koreainvestment.com:29443`)에서 다시 시도해 모의투자 키인지 알려 줍니다. 이어서 삼성전자(005930) 현재가를 조회합니다.
-- 실전투자 서버에서 받은 토큰은 토큰 캐시에 저장하므로 앱이 바로 재사용합니다.
+- 실전투자 서버에서 받은 토큰은 토큰 캐시에 저장하므로 앱이 바로 재사용합니다. `.env`에 `HANTU_TOKEN_CACHE_PATH`가 있으면 앱과 같은 그 경로를 씁니다.
 - 앱키는 앞뒤 4자리만 보여 주고 시크릿·토큰은 출력하지 않습니다. 모든 키가 통과하면 종료 코드 0을 돌려줍니다.
 - 실행할 때마다 새 토큰을 발급하므로 1분 안에 다시 실행하면 발급 제한에 걸릴 수 있습니다.
 
@@ -285,7 +285,7 @@ uv run python scripts/check_hantu_keys.py
 
 - Reads `HANTU_API_KEY`/`HANTU_API_SECRET` from the repository-root `.env`, plus an optional second pair (`HANTU_API_KEY_2`/`HANTU_API_SECRET_2` or `HANTU_API_KEY2`/`HANTU_API_SECRET2`).
 - For each key it issues a token on the real-trading server; if that fails it retries on the paper-trading server (`https://openapivts.koreainvestment.com:29443`) to tell you it is a paper-trading key. It then requests the current price of Samsung Electronics (005930).
-- A token issued by the real-trading server is saved to the token cache, so the app reuses it right away.
+- A token issued by the real-trading server is saved to the token cache, so the app reuses it right away. If `.env` sets `HANTU_TOKEN_CACHE_PATH`, the script uses that path, the same one as the app.
 - Only the first and last four characters of an app key are shown; secrets and tokens are never printed. The exit code is 0 when every key passes.
 - Each run issues a new token, so running it again within a minute can hit the issuance limit.
 
