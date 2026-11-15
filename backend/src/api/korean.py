@@ -1,7 +1,6 @@
 """API routes for Korean market endpoints."""
 
 from fastapi import APIRouter, HTTPException, Query
-from datetime import datetime
 from typing import Optional, Dict, Any, List
 from enum import Enum
 from ..models.korean import (
@@ -38,7 +37,13 @@ from ..services.option_parity import (
 )
 from ..services.korean_market import korean_market_service
 from ..utils.config import settings
+from ..utils.helpers import current_year_kst
 from ..integrations.opendart import opendart_client
+
+
+def _fiscal_year(year: Optional[int], years_back: int = 0) -> int:
+    """Resolve an omitted ``year`` per request, not once at import time."""
+    return year if year is not None else current_year_kst() - years_back
 
 
 class PeriodType(str, Enum):
@@ -101,7 +106,9 @@ async def get_korean_quote(symbol: str) -> KoreanStockQuote:
 @router.get("/valuation/{symbol}", response_model=KoreanValuationMetrics)
 async def get_korean_valuation(
     symbol: str,
-    year: int = Query(datetime.now().year - 1, description="Fiscal year"),
+    year: Optional[int] = Query(
+        None, description="Fiscal year (default: last year in KST)"
+    ),
     quarter: Optional[int] = Query(
         None, ge=1, le=4, description="Quarter (1-4)"
     ),
@@ -114,6 +121,7 @@ async def get_korean_valuation(
 
     Uses KDevelopers for price and OpenDART for financials.
     """
+    year = _fiscal_year(year, years_back=1)
     metrics = await korean_market_service.get_valuation_metrics(
         symbol, year, quarter, fs_div
     )
@@ -128,7 +136,9 @@ async def get_korean_valuation(
 @router.get("/financials/{symbol}", response_model=KoreanFinancialStatement)
 async def get_korean_financials(
     symbol: str,
-    year: int = Query(datetime.now().year, description="Fiscal year"),
+    year: Optional[int] = Query(
+        None, description="Fiscal year (default: this year in KST)"
+    ),
     quarter: Optional[int] = Query(
         None, ge=1, le=4, description="Quarter (1-4)"
     ),
@@ -146,6 +156,7 @@ async def get_korean_financials(
     Returns:
         Financial statement data
     """
+    year = _fiscal_year(year)
     financials = await korean_market_service.get_financials(
         symbol, year, quarter, use_cache
     )
@@ -953,7 +964,9 @@ async def get_korean_basis_options(
 @router.get("/financials/{symbol}/balance-sheet")
 async def get_balance_sheet(
     symbol: str,
-    year: int = Query(datetime.now().year - 1, description="Fiscal year"),
+    year: Optional[int] = Query(
+        None, description="Fiscal year (default: last year in KST)"
+    ),
     quarter: Optional[int] = Query(
         None,
         ge=1,
@@ -981,6 +994,7 @@ async def get_balance_sheet(
     Returns:
         Dictionary with all balance sheet line items
     """
+    year = _fiscal_year(year, years_back=1)
     balance_sheet = opendart_client.get_balance_sheet(symbol, year, quarter)
 
     if not balance_sheet:
@@ -1001,7 +1015,9 @@ async def get_balance_sheet(
 @router.get("/financials/{symbol}/income-statement")
 async def get_income_statement(
     symbol: str,
-    year: int = Query(datetime.now().year - 1, description="Fiscal year"),
+    year: Optional[int] = Query(
+        None, description="Fiscal year (default: last year in KST)"
+    ),
     quarter: Optional[int] = Query(
         None,
         ge=1,
@@ -1030,6 +1046,7 @@ async def get_income_statement(
     Returns:
         Dictionary with all income statement line items
     """
+    year = _fiscal_year(year, years_back=1)
     income_statement = opendart_client.get_income_statement(
         symbol, year, quarter
     )
@@ -1176,7 +1193,9 @@ async def get_disclosures(
 @router.get("/financials/{symbol}/all")
 async def get_all_financials(
     symbol: str,
-    year: int = Query(datetime.now().year - 1, description="Fiscal year"),
+    year: Optional[int] = Query(
+        None, description="Fiscal year (default: last year in KST)"
+    ),
     quarter: Optional[int] = Query(
         None,
         ge=1,
@@ -1203,6 +1222,8 @@ async def get_all_financials(
     Returns:
         Dictionary with comprehensive financial data
     """
+    year = _fiscal_year(year, years_back=1)
+
     # Determine report code
     if quarter:
         quarter_codes = {1: "11013", 2: "11012", 3: "11014", 4: "11011"}

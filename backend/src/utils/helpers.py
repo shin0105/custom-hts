@@ -1,8 +1,15 @@
 """Utility helper functions for the HTS backend."""
 
 from typing import Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import pandas as pd
+
+KST = timezone(timedelta(hours=9))
+
+
+def current_year_kst() -> int:
+    """Return the current calendar year in Korea (evaluated per call)."""
+    return datetime.now(KST).year
 
 
 def format_currency(
