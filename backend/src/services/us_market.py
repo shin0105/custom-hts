@@ -1,8 +1,6 @@
 """Service layer for US market operations."""
 
 from typing import Optional, List
-from starlette.concurrency import run_in_threadpool
-from datetime import datetime
 from ..models.us import (
     USStockQuote,
     USFinancialStatement,
@@ -10,7 +8,6 @@ from ..models.us import (
     USValuationMetrics,
 )
 from ..integrations.yfinance_client import yfinance_client
-from ..integrations.supabase_client import supabase_client
 
 
 class USMarketService:
@@ -36,36 +33,13 @@ class USMarketService:
 
         Args:
             symbol: Stock ticker symbol
-            use_cache: Whether to use cached data
+            use_cache: Kept for API compatibility; ignored. Statements always
+                come from Yahoo Finance (there is no Supabase cache table).
 
         Returns:
             List of USFinancialStatement or None
         """
-        # Try to get from cache first if enabled
-        if use_cache:
-            cached = await run_in_threadpool(
-                supabase_client.get_financial_statement,
-                "us_financials",
-                symbol,
-                datetime.now().year,
-            )
-            if cached:
-                # Return cached data as list
-                return [USFinancialStatement(**cached)]
-
-        # Fetch from Yahoo Finance
-        statements = yfinance_client.get_financials(symbol)
-
-        # Cache the data if fetched successfully
-        if statements and supabase_client.client:
-            for statement in statements:
-                await run_in_threadpool(
-                    supabase_client.save_financial_statement,
-                    "us_financials",
-                    statement.model_dump(),
-                )
-
-        return statements
+        return yfinance_client.get_financials(symbol)
 
     async def get_historical_data(
         self,

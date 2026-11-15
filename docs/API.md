@@ -123,10 +123,10 @@ Custom HTS 백엔드(FastAPI)가 제공하는 REST 엔드포인트 전체 목록
 |---|---|---|---|
 | GET | `/api/us/quote/{symbol}` | — | 시세 |
 | GET | `/api/us/valuation/{symbol}` | — | PER·PBR·EPS·BPS 등 밸류에이션 지표 |
-| GET | `/api/us/financials/{symbol}` | `use_cache` (기본 `true`) | 재무제표 목록 |
+| GET | `/api/us/financials/{symbol}` | `use_cache` (무시됨) | 재무제표 목록 |
 | GET | `/api/us/candle/{symbol}` | `period`=`1d`/`5d`/`1mo`/`3mo`/`6mo`/`1y`/`2y`/`5y`/`10y`/`ytd`/`max` (기본 `1mo`), `interval`=`1m`/`5m`/`15m`/`30m`/`60m`/`1d`/`1wk`/`1mo` (기본 `1d`), `start`·`end` (YYYY-MM-DD) | 캔들(OHLCV) 목록 |
 
-`use_cache`는 Supabase의 `us_financials` 테이블을 캐시로 사용하려 하지만, 이 테이블은 [`database/financial_statements.sql`](../database/financial_statements.sql)에 정의되어 있지 않습니다. 따라서 기본 구성에서는 항상 yfinance에서 조회합니다.
+재무제표는 항상 yfinance에서 조회합니다. `use_cache`는 호환성 때문에 남아 있을 뿐 무시됩니다.
 
 #### 저장된 재무제표 (Supabase, 선택 사항)
 
@@ -292,10 +292,10 @@ The quote, order book and candle endpoints share `symbol` (required, futures/opt
 |---|---|---|---|
 | GET | `/api/us/quote/{symbol}` | — | Quote |
 | GET | `/api/us/valuation/{symbol}` | — | Valuation metrics such as PER, PBR, EPS, BPS |
-| GET | `/api/us/financials/{symbol}` | `use_cache` (default `true`) | Financial statements |
+| GET | `/api/us/financials/{symbol}` | `use_cache` (ignored) | Financial statements |
 | GET | `/api/us/candle/{symbol}` | `period`=`1d`/`5d`/`1mo`/`3mo`/`6mo`/`1y`/`2y`/`5y`/`10y`/`ytd`/`max` (default `1mo`), `interval`=`1m`/`5m`/`15m`/`30m`/`60m`/`1d`/`1wk`/`1mo` (default `1d`), `start`·`end` (YYYY-MM-DD) | Candles (OHLCV) |
 
-`use_cache` tries to use a Supabase table named `us_financials` as a cache, but that table is not defined in [`database/financial_statements.sql`](../database/financial_statements.sql). With the standard setup the data always comes from yfinance.
+Financial statements always come from yfinance. `use_cache` is kept only for compatibility and is ignored.
 
 #### Stored financial statements (Supabase, optional)
 

@@ -93,17 +93,7 @@ npm install
 
 #### 5. (선택) Supabase 테이블
 
-Supabase 대시보드의 SQL Editor에서 `database/financial_statements.sql`을 실행하면 국내·미국 재무상태표, 손익계산서, 현금흐름표 테이블 6개가 만들어집니다. 이 스크립트의 트리거가 쓰는 `update_updated_at_column()` 함수는 저장소 안에 정의되어 있지 않으므로 아래 SQL을 먼저 실행하세요.
-
-```sql
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-```
+Supabase 대시보드의 SQL Editor에서 `database/financial_statements.sql`을 실행하면 국내·미국 재무상태표, 손익계산서, 현금흐름표 테이블 6개가 만들어집니다. 스크립트는 트리거가 쓰는 함수까지 모두 정의하므로 따로 준비할 것이 없고, 여러 번 실행해도 됩니다.
 
 자세한 내용은 [Supabase 연동](SUPABASE_INTEGRATION.md)을 참고하세요.
 
@@ -171,7 +161,6 @@ KIS 접근 토큰은 약 24시간 유효하며, 발급은 앱키당 1분에 1회
 | 계좌조회에서 `HANTU_ACCOUNT_NUMBER ... is not configured correctly` | 계좌번호를 숫자 8자리로 입력했는지 확인합니다. |
 | 화면의 모든 API 호출이 실패 | 백엔드가 8000번 포트에서 실행 중인지 확인합니다. |
 | `npm run dev`가 Node 버전 오류로 실패 | Node.js를 20.19 이상 또는 22.12 이상으로 올립니다. |
-| `Skipping cache read/save: table '...' not found in Supabase` | 해당 Supabase 테이블이 없다는 뜻이며, 조회는 계속 동작합니다. Supabase를 쓰지 않으면 무시해도 됩니다. |
 | Python `ModuleNotFoundError` | `backend/`에서 `uv sync`를 다시 실행하고, 명령은 `uv run`으로 실행합니다. |
 
 ---
@@ -265,17 +254,7 @@ npm install
 
 #### 5. (Optional) Supabase tables
 
-Run `database/financial_statements.sql` in the Supabase SQL Editor. It creates six tables: balance sheet, income statement and cash-flow statement for Korean and US companies. Its triggers call an `update_updated_at_column()` function that is not defined anywhere in the repository, so run this SQL first:
-
-```sql
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-```
+Run `database/financial_statements.sql` in the Supabase SQL Editor. It creates six tables: balance sheet, income statement and cash-flow statement for Korean and US companies. The script defines everything it needs, including the trigger function, and is safe to run more than once.
 
 See [Supabase integration](SUPABASE_INTEGRATION.md) for details.
 
@@ -343,5 +322,4 @@ See [Running tests locally](RUNNING_TESTS_LOCALLY.md). It separates the offline 
 | Account page shows `HANTU_ACCOUNT_NUMBER ... is not configured correctly` | Make sure the account number is exactly 8 digits. |
 | Every API call in the UI fails | Make sure the backend is running on port 8000. |
 | `npm run dev` fails with a Node version error | Upgrade Node.js to 20.19+ or 22.12+. |
-| `Skipping cache read/save: table '...' not found in Supabase` | That Supabase table does not exist; lookups still work. Ignore it if you do not use Supabase. |
 | Python `ModuleNotFoundError` | Run `uv sync` again in `backend/` and run commands through `uv run`. |

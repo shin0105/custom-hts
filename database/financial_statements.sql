@@ -1,14 +1,28 @@
--- Enhanced Database schema for Custom HTS with Field Mapping Comments
--- This script extends the existing schema with detailed financial statement tables
--- Run this script in your Supabase SQL editor AFTER running the base init.sql
+-- Financial statement tables for Custom HTS (Supabase / PostgreSQL)
+-- Self-contained: run the whole file in the Supabase SQL editor. It defines
+-- every table, index, trigger and helper function it needs, and is safe to
+-- run again on a database that already has these tables.
 --
 -- IMPORTANT NOTES:
 -- - US values (yfinance): Actual USD amounts (e.g., 100000000 = $100M)
 -- - Korean values (OPENDART): Millions of KRW (e.g., 100000 = 100B KRW = 100,000 백만원)
 -- - All numeric fields use NUMERIC(20, 2) to handle large values and decimal precision
 --
--- VERSION: 2.0 - Updated with field mapping comments and corrected units
--- DATE: February 2026
+-- VERSION: 2.1 - Self-contained trigger function, re-runnable triggers
+-- DATE: November 2026
+
+-- ========================================================================
+-- HELPER FUNCTIONS
+-- ========================================================================
+
+-- Keeps updated_at current on every UPDATE (used by the triggers below).
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
 -- ========================================================================
 -- BALANCE SHEET TABLES
@@ -362,36 +376,42 @@ CREATE INDEX IF NOT EXISTS idx_us_cf_updated ON us_cashflow_statement(updated_at
 -- ========================================================================
 
 -- Korean Balance Sheet Trigger
+DROP TRIGGER IF EXISTS update_korean_balance_sheet_updated_at ON korean_balance_sheet;
 CREATE TRIGGER update_korean_balance_sheet_updated_at
 BEFORE UPDATE ON korean_balance_sheet
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
 -- US Balance Sheet Trigger
+DROP TRIGGER IF EXISTS update_us_balance_sheet_updated_at ON us_balance_sheet;
 CREATE TRIGGER update_us_balance_sheet_updated_at
 BEFORE UPDATE ON us_balance_sheet
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
 -- Korean Income Statement Trigger
+DROP TRIGGER IF EXISTS update_korean_income_statement_updated_at ON korean_income_statement;
 CREATE TRIGGER update_korean_income_statement_updated_at
 BEFORE UPDATE ON korean_income_statement
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
 -- US Income Statement Trigger
+DROP TRIGGER IF EXISTS update_us_income_statement_updated_at ON us_income_statement;
 CREATE TRIGGER update_us_income_statement_updated_at
 BEFORE UPDATE ON us_income_statement
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
 -- Korean Cash Flow Trigger
+DROP TRIGGER IF EXISTS update_korean_cashflow_statement_updated_at ON korean_cashflow_statement;
 CREATE TRIGGER update_korean_cashflow_statement_updated_at
 BEFORE UPDATE ON korean_cashflow_statement
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
 -- US Cash Flow Trigger
+DROP TRIGGER IF EXISTS update_us_cashflow_statement_updated_at ON us_cashflow_statement;
 CREATE TRIGGER update_us_cashflow_statement_updated_at
 BEFORE UPDATE ON us_cashflow_statement
 FOR EACH ROW
