@@ -850,7 +850,8 @@ class KDevelopersClient:
             interval: Minute interval (1, 5, 10, 30, 60)
             limit: Number of candles to retrieve (default: 100)
             date: Trading date (YYYYMMDD). Defaults to today in KST if not provided.
-            time_str: Time filter (HHMMSS). Empty string returns all.
+            time_str: Cut-off time (HHMMSS). Candles from 09:00 up to this
+                time are returned; empty means 15:30:00 (the close).
             include_previous: Whether to include previous data (FID_PW_DATA_INCU_YN)
 
         Returns:

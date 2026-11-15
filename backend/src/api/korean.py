@@ -222,7 +222,11 @@ async def get_korean_minute_candle(
         None, description="Trading date in YYYYMMDD (defaults to today in KST)"
     ),
     time_str: str = Query(
-        "", description="Time filter in HHMMSS (empty defaults to 09:00:00)"
+        "",
+        description=(
+            "Cut-off time in HHMMSS: candles from 09:00 up to this time "
+            "(empty defaults to 15:30:00)"
+        ),
     ),
 ) -> List[KoreanCandleData]:
     """
@@ -232,6 +236,8 @@ async def get_korean_minute_candle(
         symbol: Stock code
         interval: Minute interval (1, 5, 10, 30, or 60 minutes)
         limit: Number of candles to retrieve (1-500)
+        date: Trading date (YYYYMMDD, defaults to today in KST)
+        time_str: Cut-off time (HHMMSS); empty means 15:30:00
 
     Returns:
         List of minute candle data (OHLCV)

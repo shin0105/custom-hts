@@ -50,7 +50,7 @@ Custom HTS 백엔드(FastAPI)가 제공하는 REST 엔드포인트 전체 목록
 |---|---|---|---|
 | GET | `/api/korean/quote/{symbol}` | — | 현재가 시세 |
 | GET | `/api/korean/candle/{symbol}` | `period`=`D`/`W`/`M` (기본 `D`), `adjust_price` (기본 `true`), `limit` 1–500, `start_date`·`end_date` (YYYYMMDD) | 일·주·월 캔들(OHLCV) 목록 |
-| GET | `/api/korean/candle-minute/{symbol}` | `interval`=1/5/10/30/60 (기본 1), `limit` 1–500, `date` (YYYYMMDD, 기본 오늘 KST), `time_str` (HHMMSS) | 분봉 캔들 목록 |
+| GET | `/api/korean/candle-minute/{symbol}` | `interval`=1/5/10/30/60 (기본 1), `limit` 1–500, `date` (YYYYMMDD, 기본 오늘 KST), `time_str` (HHMMSS 기준시각, 09:00부터 이 시각까지. 기본 `153000`) | 분봉 캔들 목록 |
 | GET | `/api/korean/valuation/{symbol}` | `year` (기본 전년도), `quarter` 1–4, `fs_div`=`CFS`/`OFS` | PER·PBR·EPS·BPS 등 밸류에이션 지표 (KIS 가격 + OpenDART 재무) |
 | GET | `/api/korean/estimate-perform/{symbol}` | — | 추정실적 (KIS) |
 | GET | `/api/korean/stock-info/{pdno}` | `prdt_type_cd` (기본 `300` 주식·ETF·ETN·ELW, `301` 선물옵션, `302` 채권, `306` ELS) | 상품 기본정보 (KIS 원본 output 목록). ETN은 `Q`로 시작하는 코드 사용 |
@@ -219,7 +219,7 @@ The complete list of REST endpoints served by the Custom HTS backend (FastAPI). 
 |---|---|---|---|
 | GET | `/api/korean/quote/{symbol}` | — | Current quote |
 | GET | `/api/korean/candle/{symbol}` | `period`=`D`/`W`/`M` (default `D`), `adjust_price` (default `true`), `limit` 1–500, `start_date`·`end_date` (YYYYMMDD) | Daily/weekly/monthly candles (OHLCV) |
-| GET | `/api/korean/candle-minute/{symbol}` | `interval`=1/5/10/30/60 (default 1), `limit` 1–500, `date` (YYYYMMDD, default today in KST), `time_str` (HHMMSS) | Minute candles |
+| GET | `/api/korean/candle-minute/{symbol}` | `interval`=1/5/10/30/60 (default 1), `limit` 1–500, `date` (YYYYMMDD, default today in KST), `time_str` (HHMMSS cut-off: 09:00 up to this time, default `153000`) | Minute candles |
 | GET | `/api/korean/valuation/{symbol}` | `year` (default last year), `quarter` 1–4, `fs_div`=`CFS`/`OFS` | Valuation metrics such as PER, PBR, EPS, BPS (KIS price + OpenDART financials) |
 | GET | `/api/korean/estimate-perform/{symbol}` | — | Earnings estimates (KIS) |
 | GET | `/api/korean/stock-info/{pdno}` | `prdt_type_cd` (default `300` stock/ETF/ETN/ELW, `301` futures/options, `302` bonds, `306` ELS) | Product basic info (raw KIS output list). ETN codes start with `Q` |
