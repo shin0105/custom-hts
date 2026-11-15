@@ -73,7 +73,9 @@ HANTU_ACCOUNT_NUMBER=12345678
 
 ### 속도 제한
 
-- 클라이언트는 모든 요청 뒤에 0.05초 쉽니다(`_smart_sleep`). KIS의 초당 호출 한도는 포털 공지를 따릅니다.
+- 클라이언트는 모든 스레드에 걸쳐 요청 시작 간격을 0.06초 이상으로 둡니다(`RateLimiter`, 초당 약 16건). KIS 실전투자 한도는 앱키당 초당 20건이며, 정확한 한도는 포털 공지를 따릅니다.
+- 요청은 스레드마다 하나씩 둔 `requests.Session`으로 보내 KIS 서버와의 연결을 재사용합니다.
+- 토큰 발급은 잠금 안에서 한 스레드만 합니다. 여러 요청이 동시에 만료 응답을 받아도 토큰은 한 번만 다시 발급됩니다.
 - 옵션 전광판(`/futures-options/option-chain`)은 같은 조건을 1초 안에 다시 요청하면 직전 결과를 돌려줍니다.
 - 토큰 발급은 1분에 1회이므로 위의 캐시를 거칩니다.
 
@@ -223,7 +225,9 @@ Deleting the cache file makes the next request issue a new token. Because of the
 
 ### Rate limits
 
-- The client sleeps 0.05 seconds after every request (`_smart_sleep`). KIS's per-second call limits are announced on the portal.
+- The client starts requests at least 0.06 seconds apart across all threads (`RateLimiter`, about 16 per second). KIS's live-trading limit is 20 calls per second per app key; the exact limits are announced on the portal.
+- Requests go through one `requests.Session` per thread, which reuses the connection to the KIS server.
+- Only one thread at a time may issue a token, under a lock. When several requests get an expired-token response at once, the token is reissued only once.
 - The option board (`/futures-options/option-chain`) returns the previous result when the same request arrives within one second.
 - Token issuance is limited to once per minute, hence the cache above.
 

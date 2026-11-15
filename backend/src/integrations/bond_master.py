@@ -5,12 +5,15 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import threading
 import urllib.request
 import zipfile
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 import pandas as pd
+
+from ..utils.concurrency import holding_lock
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +60,9 @@ class BondMasterFileManager:
             self.data_dir = Path(data_dir)
 
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        # A refresh overwrites the files that parsing reads; reentrant
+        # because refresh_and_export parses through save_to_csv/json.
+        self._file_lock = threading.RLock()
 
     def download_bond_master(
         self,
@@ -111,6 +117,7 @@ class BondMasterFileManager:
         logger.error("Failed to download bond master from all candidate URLs")
         return None
 
+    @holding_lock("_file_lock")
     def parse_bond_master(
         self,
         auto_download: bool = False,
@@ -240,6 +247,7 @@ class BondMasterFileManager:
             logger.error("Failed to save bond codes JSON: %s", e)
             return None
 
+    @holding_lock("_file_lock")
     def refresh_and_export(
         self,
         output_format: str = "csv",

@@ -34,6 +34,7 @@ from ..integrations.stock_master import master_file_manager
 from ..integrations.opendart import opendart_client
 from ..integrations.supabase_client import supabase_client
 from .bond_analytics import bond_analytics_service
+from ..utils.concurrency import to_thread
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,8 @@ class KoreanMarketService:
     _option_chain_min_interval_sec = 1.0
     _option_chain_cache: Dict[str, Tuple[datetime, KoreanFuturesOptionChainResponse]] = {}
 
-    async def get_quote(self, symbol: str) -> Optional[KoreanStockQuote]:
+    @to_thread
+    def get_quote(self, symbol: str) -> Optional[KoreanStockQuote]:
         """
         Get real-time quote for a Korean stock.
 
@@ -73,7 +75,8 @@ class KoreanMarketService:
         """
         return kdevelopers_client.get_quote(symbol)
 
-    async def get_financials(
+    @to_thread
+    def get_financials(
         self,
         symbol: str,
         year: int,
@@ -99,7 +102,8 @@ class KoreanMarketService:
 
         return statement
 
-    async def get_daily_candle(
+    @to_thread
+    def get_daily_candle(
         self,
         symbol: str,
         period: str = "D",
@@ -129,7 +133,8 @@ class KoreanMarketService:
             end_date=end_date,
         )
 
-    async def get_minute_candle(
+    @to_thread
+    def get_minute_candle(
         self,
         symbol: str,
         interval: int = 1,
@@ -159,7 +164,8 @@ class KoreanMarketService:
             include_previous=include_previous,
         )
 
-    async def get_account_balance(
+    @to_thread
+    def get_account_balance(
         self, account_number: str, account_product_code: str = "01"
     ) -> Optional[Dict[str, Any]]:
         """
@@ -176,7 +182,8 @@ class KoreanMarketService:
             account_number, account_product_code
         )
 
-    async def get_stock_info(
+    @to_thread
+    def get_stock_info(
         self, prdt_type_cd: str, pdno: str
     ) -> List[Dict[str, Any]]:
         """
@@ -191,7 +198,8 @@ class KoreanMarketService:
         """
         return kdevelopers_client.search_stock_info(prdt_type_cd, pdno)
 
-    async def get_estimate_perform(
+    @to_thread
+    def get_estimate_perform(
         self, symbol: str
     ) -> Optional[KoreanEstimatePerform]:
         """
@@ -203,6 +211,12 @@ class KoreanMarketService:
         Returns:
             KoreanEstimatePerform or None
         """
+        return self._estimate_perform(symbol)
+
+    def _estimate_perform(
+        self, symbol: str
+    ) -> Optional[KoreanEstimatePerform]:
+        """Blocking body of ``get_estimate_perform``, for reuse on the pool."""
         data = kdevelopers_client.get_estimate_perform(symbol)
         if data is None:
             return None
@@ -325,7 +339,8 @@ class KoreanMarketService:
         )
         return KoreanEstimatePerform(symbol=symbol, **data)
 
-    async def get_valuation_metrics(
+    @to_thread
+    def get_valuation_metrics(
         self,
         symbol: str,
         year: int,
@@ -489,7 +504,7 @@ class KoreanMarketService:
         eps_12mf = None
         per_12mf = None
         estimate_12mf_labels: Optional[List[str]] = None
-        estimate_perform = await self.get_estimate_perform(symbol)
+        estimate_perform = self._estimate_perform(symbol)
         if estimate_perform:
             output4 = estimate_perform.output4 or []
             estimate_labels = [
@@ -761,7 +776,8 @@ class KoreanMarketService:
 
         return str(master_file), rows
 
-    async def get_bond_price(self, pdno: str) -> Optional[KoreanBondQuote]:
+    @to_thread
+    def get_bond_price(self, pdno: str) -> Optional[KoreanBondQuote]:
         output = kdevelopers_client.get_bond_price(pdno)
         if not output:
             return None
@@ -788,13 +804,16 @@ class KoreanMarketService:
             middle_price=middle_price,
         )
 
-    async def get_bond_basic_info(self, pdno: str) -> Optional[Dict[str, Any]]:
+    @to_thread
+    def get_bond_basic_info(self, pdno: str) -> Optional[Dict[str, Any]]:
         return kdevelopers_client.get_bond_basic_info(pdno)
 
-    async def get_bond_issue_info(self, pdno: str) -> Optional[Dict[str, Any]]:
+    @to_thread
+    def get_bond_issue_info(self, pdno: str) -> Optional[Dict[str, Any]]:
         return kdevelopers_client.get_bond_issue_info(pdno)
 
-    async def get_bond_valuation(self, pdno: str) -> Optional[KoreanBondValuation]:
+    @to_thread
+    def get_bond_valuation(self, pdno: str) -> Optional[KoreanBondValuation]:
         """Compare the market price with the pricing agencies' valuation.
 
         The theoretical price discounts the bond's cash flows at the
@@ -803,7 +822,8 @@ class KoreanMarketService:
         interest) and rescaled from the 10,000-face quote to face 100.
         """
         try:
-            analytics = await bond_analytics_service.get_analytics(pdno)
+            # Already on the blocking pool: call the synchronous method.
+            analytics = bond_analytics_service.analytics(pdno)
         except LookupError:
             return None
 
@@ -846,12 +866,14 @@ class KoreanMarketService:
             notes=notes,
         )
 
-    async def get_bond_daily_price(
+    @to_thread
+    def get_bond_daily_price(
         self, pdno: str, limit: Optional[int] = None
     ) -> Optional[List[KoreanCandleData]]:
         return kdevelopers_client.get_bond_daily_price(pdno, limit=limit)
 
-    async def get_bond_master(
+    @to_thread
+    def get_bond_master(
         self,
         query: Optional[str] = None,
         bond_type: Optional[str] = None,
@@ -1060,7 +1082,8 @@ class KoreanMarketService:
             "items": items,
         }
 
-    async def refresh_bond_master(
+    @to_thread
+    def refresh_bond_master(
         self,
         output_format: str = "csv",
         force: bool = False,
@@ -1073,7 +1096,8 @@ class KoreanMarketService:
             source_url=source_url,
         )
 
-    async def get_stock_master(
+    @to_thread
+    def get_stock_master(
         self,
         query: Optional[str] = None,
         market: str = "all",
@@ -1136,7 +1160,8 @@ class KoreanMarketService:
             "markets": target_markets,
         }
 
-    async def get_futures_options_master(
+    @to_thread
+    def get_futures_options_master(
         self,
         market: str = "all",
         query: Optional[str] = None,
@@ -1235,7 +1260,8 @@ class KoreanMarketService:
             "items": items,
         }
 
-    async def refresh_futures_options_master(
+    @to_thread
+    def refresh_futures_options_master(
         self,
         market: str = "all",
         output_format: str = "csv",
@@ -1247,7 +1273,8 @@ class KoreanMarketService:
             force=force,
         )
 
-    async def get_futures_option_quote(
+    @to_thread
+    def get_futures_option_quote(
         self,
         symbol: str,
         market_div_code: str = "F",
@@ -1313,7 +1340,8 @@ class KoreanMarketService:
             reference_indices=reference_indices,
         )
 
-    async def get_futures_option_orderbook(
+    @to_thread
+    def get_futures_option_orderbook(
         self,
         symbol: str,
         market_div_code: str = "F",
@@ -1359,7 +1387,8 @@ class KoreanMarketService:
             levels=levels,
         )
 
-    async def get_futures_option_minute_candles(
+    @to_thread
+    def get_futures_option_minute_candles(
         self,
         symbol: str,
         market_div_code: str = "F",
@@ -1428,7 +1457,8 @@ class KoreanMarketService:
             candles=candles,
         )
 
-    async def get_futures_option_daily_candles(
+    @to_thread
+    def get_futures_option_daily_candles(
         self,
         symbol: str,
         market_div_code: str = "F",
@@ -1519,7 +1549,8 @@ class KoreanMarketService:
             candles = candles[:limit]
         return candles or None
 
-    async def get_futures_option_chain(
+    @to_thread
+    def get_futures_option_chain(
         self,
         expiry: str,
         market_class: str = "",

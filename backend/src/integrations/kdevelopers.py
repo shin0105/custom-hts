@@ -14,6 +14,7 @@ Key features:
 import json
 import time
 import logging
+import threading
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone, timedelta
 from collections import namedtuple
@@ -123,6 +124,34 @@ class APIResponse:
         )
 
 
+# KIS allows 20 REST calls per second per app key on a real account (far
+# fewer on a paper account). Spacing request starts 60 ms apart (about 16
+# per second) leaves headroom for network jitter.
+MIN_REQUEST_INTERVAL_SEC = 0.06
+
+
+class RateLimiter:
+    """Space calls at least ``min_interval`` seconds apart, across threads.
+
+    Each caller reserves the next free slot under the lock and then sleeps
+    outside it, so waiting threads do not hold each other up.
+    """
+
+    def __init__(self, min_interval: float) -> None:
+        self._min_interval = min_interval
+        self._next_slot = 0.0
+        self._lock = threading.Lock()
+
+    def wait(self) -> None:
+        with self._lock:
+            now = time.monotonic()
+            slot = max(now, self._next_slot)
+            self._next_slot = slot + self._min_interval
+        delay = slot - now
+        if delay > 0:
+            time.sleep(delay)
+
+
 class KDevelopersClient:
     """
     Client for Korean Investment Securities OpenAPI.
@@ -131,6 +160,10 @@ class KDevelopersClient:
     https://github.com/koreainvestment/open-trading-api
 
     API Documentation: https://apiportal.koreainvestment.com/
+
+    The client is safe to call from several threads at once: requests share
+    one rate limiter, and only one thread at a time may issue a token (KIS
+    allows one issuance per minute).
     """
 
     def __init__(self) -> None:
@@ -143,12 +176,20 @@ class KDevelopersClient:
         self._last_auth_time = datetime.now()
         self._kst_tz = timezone(timedelta(hours=9))
 
-        # Rate limiting (0.05s for real trading, 0.5s for paper trading)
-        self._smart_sleep_time = 0.05
+        self._rate_limiter = RateLimiter(MIN_REQUEST_INTERVAL_SEC)
+        self._token_lock = threading.Lock()
+        # One requests.Session per thread: it reuses the TLS connection to
+        # the KIS host, and keeping it per thread avoids sharing one
+        # Session's state between threads.
+        self._thread_local = threading.local()
 
-    def _smart_sleep(self):
-        """Rate limiting sleep to avoid API throttling."""
-        time.sleep(self._smart_sleep_time)
+    @property
+    def _session(self) -> requests.Session:
+        session = getattr(self._thread_local, "session", None)
+        if session is None:
+            session = requests.Session()
+            self._thread_local.session = session
+        return session
 
     def _get_base_headers(self) -> Dict[str, str]:
         """Get base headers for API requests."""
@@ -168,6 +209,13 @@ class KDevelopersClient:
         Returns:
             Access token or None if authentication fails
         """
+        # Holding the lock while a token is issued makes other threads wait
+        # for that token instead of requesting their own.
+        with self._token_lock:
+            return self._get_access_token_locked()
+
+    def _get_access_token_locked(self) -> Optional[str]:
+        """Body of ``_get_access_token``; the caller holds ``_token_lock``."""
         if not self.api_key or not self.api_secret:
             logger.error("API credentials not configured")
             return None
@@ -211,7 +259,7 @@ class KDevelopersClient:
                 "appsecret": self.api_secret,
             }
 
-            response = requests.post(
+            response = self._session.post(
                 url, headers=headers, json=body, timeout=10
             )
             response.raise_for_status()
@@ -293,14 +341,12 @@ class KDevelopersClient:
                 "appsecret": self.api_secret,
                 "token": access_token,
             }
-            response = requests.post(
+            response = self._session.post(
                 url, headers=headers, json=body, timeout=10
             )
             if response.status_code == 200:
                 logger.info("Access token revoked successfully")
-                self.access_token = None
-                self.token_expiry = None
-                token_store.delete(api_key_hash)
+                self._invalidate_token(access_token)
                 return True
 
             logger.error(
@@ -347,17 +393,15 @@ class KDevelopersClient:
             headers["custtype"] = "P"  # Personal customer
             headers["tr_cont"] = tr_cont
 
+            self._rate_limiter.wait()
             if post_flag:
-                response = requests.post(
+                response = self._session.post(
                     url, headers=headers, data=json.dumps(params), timeout=10
                 )
             else:
-                response = requests.get(
+                response = self._session.get(
                     url, headers=headers, params=params, timeout=10
                 )
-
-            # Apply rate limiting
-            self._smart_sleep()
             return APIResponse(response)
 
         token = self._get_access_token()
@@ -367,7 +411,7 @@ class KDevelopersClient:
         try:
             res = _do_request(token)
             if not res.is_ok() and self._is_token_expired_response(res):
-                self._purge_cached_token()
+                self._invalidate_token(token)
                 refreshed = self._get_access_token()
                 if not refreshed:
                     return res
@@ -394,11 +438,23 @@ class KDevelopersClient:
             return True
         return False
 
-    def _purge_cached_token(self) -> None:
-        self.access_token = None
-        self.token_expiry = None
-        if self.api_key:
-            token_store.delete(hash_api_key(self.api_key))
+    def _invalidate_token(self, token: str) -> None:
+        """Forget ``token``, unless another thread has already replaced it.
+
+        When several in-flight requests learn at once that the token
+        expired, only the first clears it; the rest then pick up the new
+        token that thread issued instead of issuing one each.
+        """
+        with self._token_lock:
+            if self.access_token == token:
+                self.access_token = None
+                self.token_expiry = None
+            if not self.api_key:
+                return
+            api_key_hash = hash_api_key(self.api_key)
+            cached = token_store.get(api_key_hash)
+            if cached and cached.get("access_token") == token:
+                token_store.delete(api_key_hash)
 
     def _output_to_dict(self, output: Any) -> Optional[Dict[str, Any]]:
         """Normalize single API output payload to dict."""
@@ -1660,7 +1716,6 @@ class KDevelopersClient:
             next_tr_cont = res.get_header().tr_cont
             if next_tr_cont == "M":
                 logger.info("Calling next page for search_stock_info...")
-                self._smart_sleep()
                 current_tr_cont = "N"
                 depth += 1
                 continue
@@ -1849,7 +1904,6 @@ class KDevelopersClient:
             next_tr_cont = res.get_header().tr_cont
             if next_tr_cont in ["M", "F"]:
                 logger.info("Calling next page for estimate_perform...")
-                self._smart_sleep()
                 current_tr_cont = "N"
                 depth += 1
                 continue
