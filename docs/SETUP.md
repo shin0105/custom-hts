@@ -74,7 +74,7 @@ SUPABASE_KEY=your_supabase_key
 | `DART_API_KEY` | OpenDART 인증키 |
 | `SUPABASE_URL`, `SUPABASE_KEY` | (선택) Supabase 프로젝트 URL과 키 |
 
-빠진 변수가 있으면 백엔드가 시작할 때 `Warning: Missing environment variables: ...`를 출력하고, 그 키가 필요한 기능만 실패합니다.
+(선택)이 아닌 변수가 빠져 있으면 백엔드가 시작할 때 `Warning: Missing environment variables: ...`를 출력하고, 그 키가 필요한 기능만 실패합니다. Supabase 변수는 비워 두어도 경고하지 않으며, 둘 중 하나만 넣었을 때만 경고합니다.
 
 #### 3. 백엔드 의존성
 
@@ -156,7 +156,7 @@ KIS 접근 토큰은 약 24시간 유효하며, 발급은 앱키당 1분에 1회
 
 | 증상 | 해결 방법 |
 |------|-----------|
-| 시작할 때 `Missing environment variables` 경고 | 저장소 루트의 `.env`를 확인합니다. Supabase를 쓰지 않으면 `SUPABASE_*` 항목은 무시해도 됩니다. |
+| 시작할 때 `Missing environment variables` 경고 | 저장소 루트의 `.env`에서 경고에 나온 변수를 확인합니다. |
 | 국내 시세 조회 실패, 토큰 발급 오류 | `scripts/check_hantu_keys.py`로 키를 점검합니다. 모의투자 키라면 실전투자 키로 바꿉니다. 방금 토큰을 발급받았다면 1분 뒤 다시 시도합니다. |
 | 계좌조회에서 `HANTU_ACCOUNT_NUMBER ... is not configured correctly` | 계좌번호를 숫자 8자리로 입력했는지 확인합니다. |
 | 화면의 모든 API 호출이 실패 | 백엔드가 8000번 포트에서 실행 중인지 확인합니다. |
@@ -235,7 +235,7 @@ SUPABASE_KEY=your_supabase_key
 | `DART_API_KEY` | OpenDART API key |
 | `SUPABASE_URL`, `SUPABASE_KEY` | (Optional) Supabase project URL and key |
 
-If a variable is missing, the backend prints `Warning: Missing environment variables: ...` at startup, and only the features that need that key fail.
+If a variable not marked (Optional) is missing, the backend prints `Warning: Missing environment variables: ...` at startup, and only the features that need that key fail. Leaving the Supabase variables empty causes no warning; setting only one of the two does.
 
 #### 3. Backend dependencies
 
@@ -317,7 +317,7 @@ See [Running tests locally](RUNNING_TESTS_LOCALLY.md). It separates the offline 
 
 | Symptom | Fix |
 |---------|-----|
-| `Missing environment variables` warning at startup | Check `.env` at the repository root. If you do not use Supabase, ignore the `SUPABASE_*` entries. |
+| `Missing environment variables` warning at startup | Check the listed variables in `.env` at the repository root. |
 | Korean quotes fail, token errors | Check your keys with `scripts/check_hantu_keys.py`. Replace paper-trading keys with real-trading keys. If a token was just issued, wait a minute and retry. |
 | Account page shows `HANTU_ACCOUNT_NUMBER ... is not configured correctly` | Make sure the account number is exactly 8 digits. |
 | Every API call in the UI fails | Make sure the backend is running on port 8000. |

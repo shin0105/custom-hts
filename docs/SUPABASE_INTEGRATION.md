@@ -77,7 +77,7 @@ KIS 접근 토큰은 Supabase가 아니라 로컬 JSON 파일 `backend/.cache/ki
 
 | 상황 | 동작 |
 |---|---|
-| 서버 시작 | 누락된 환경 변수 경고(또는 클라이언트 초기화 실패 메시지)가 출력되지만 서버는 정상적으로 뜹니다 |
+| 서버 시작 | 정상적으로 뜹니다. Supabase 변수를 비워 두면 경고하지 않고, 둘 중 하나만 넣었거나 클라이언트 생성에 실패하면 경고(또는 초기화 실패 메시지)를 출력합니다 |
 | `GET /api/financials/...` | `503` `Database connection not available` |
 | `POST /api/financials/*/statements/insert`, `.../batch-insert` | `503` `Database connection not available`. 원천 데이터(OpenDART·yfinance)는 조회하지 않습니다 |
 | 그 밖의 모든 엔드포인트 | 영향 없음 |
@@ -169,7 +169,7 @@ If `SUPABASE_URL` is empty or the client cannot be created (for example, the `.e
 
 | Situation | Behaviour |
 |---|---|
-| Server start | Prints a missing-environment-variable warning (or a client-initialisation error), then starts normally |
+| Server start | Starts normally. Empty Supabase variables cause no warning; setting only one of them, or a client that fails to initialise, prints a warning (or an initialisation error) |
 | `GET /api/financials/...` | `503` `Database connection not available` |
 | `POST /api/financials/*/statements/insert`, `.../batch-insert` | `503` `Database connection not available`. The source data (OpenDART, yfinance) is not fetched |
 | Every other endpoint | Unaffected |
