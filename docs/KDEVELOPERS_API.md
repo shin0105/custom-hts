@@ -118,7 +118,7 @@ HANTU_ACCOUNT_NUMBER=12345678
 
 ### 동작 참고
 
-- **일·주·월봉**: `inquire-daily-price`는 최근 30개 봉만 돌려줍니다. `start_date`·`end_date`는 그 30개 안에서 범위를 좁히는 필터입니다.
+- **일·주·월봉**: `inquire-daily-price`는 최근 30개 봉만 돌려줍니다. `start_date`·`end_date`는 그 30개 안에서 범위를 좁히는 필터입니다. `adjust_price=true`(기본)이면 수정주가를 받습니다. 이 API의 `FID_ORG_ADJ_PRC`는 `1`이 수정주가 반영이며, 기간별 일봉(`inquire-daily-itemchartprice`)은 반대로 `0`이 수정주가입니다.
 - **분봉**: 한 번에 최대 120건씩 시각을 거슬러 올라가며 하루치를 모은 뒤 09:00부터 기준시각(기본 15:30)까지만 남깁니다. 5·10·30·60분봉은 1분봉을 합쳐 만듭니다.
 - **기간별 일봉(주식·지수)**: 한 번의 응답 상한(주식 100건, 지수 50건)을 넘는 구간은 종료일을 앞당기며 여러 번 조회합니다.
 - **계좌 잔고**: 첫 페이지만 조회하고 연속조회는 하지 않습니다. 한 페이지(실전 계좌 기준 50종목)를 넘게 보유하면 일부 종목이 빠질 수 있습니다.
@@ -268,7 +268,7 @@ Backend endpoint parameters are listed in [API.md](API.md).
 
 ### Behaviour notes
 
-- **Daily/weekly/monthly candles**: `inquire-daily-price` returns only the latest 30 candles. `start_date` and `end_date` filter within those 30.
+- **Daily/weekly/monthly candles**: `inquire-daily-price` returns only the latest 30 candles. `start_date` and `end_date` filter within those 30. `adjust_price=true` (the default) requests adjusted prices (수정주가). For this API `FID_ORG_ADJ_PRC=1` means adjusted, whereas the period daily chart (`inquire-daily-itemchartprice`) uses `0` for adjusted.
 - **Minute candles**: the client walks back in time up to 120 rows per call to collect one day, then keeps 09:00 up to the cut-off time (default 15:30). 5/10/30/60-minute candles are built from 1-minute candles.
 - **Period daily prices (stocks, indices)**: ranges longer than one response (100 rows for stocks, 50 for indices) are fetched in several calls, moving the end date back each time.
 - **Account balance**: only the first page is read; continuation is not implemented. Holdings beyond one page (50 stocks for a real account) may be missing.

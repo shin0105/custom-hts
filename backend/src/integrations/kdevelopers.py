@@ -741,12 +741,14 @@ class KDevelopersClient:
         """
         Get daily/period candle chart data for a Korean stock.
 
-        API: [국내주식] 기본시세 > 국내주식기간별시세(일/주/월/년)[v1_국내주식-016]
+        API: [국내주식] 기본시세 > 주식현재가 일자별[v1_국내주식-010]
+        (inquire-daily-price, latest 30 rows)
 
         Args:
             symbol: Stock code (e.g., "005930" for Samsung Electronics)
             period: Period type - "D" (daily), "W" (weekly), "M" (monthly)
-            adjust_price: Whether to adjust for stock splits
+            adjust_price: Whether to use adjusted prices (수정주가) that
+                restate past prices for splits, mergers and rights issues
             limit: Number of candles to retrieve (default: 100)
 
         Returns:
@@ -760,7 +762,9 @@ class KDevelopersClient:
                 "FID_COND_MRKT_DIV_CODE": "J",  # Market division
                 "FID_INPUT_ISCD": symbol,  # Stock code
                 "FID_PERIOD_DIV_CODE": period,  # Period (D/W/M)
-                "FID_ORG_ADJ_PRC": "0" if adjust_price else "1",
+                # inquire-daily-price: 0 = 수정주가 미반영, 1 = 수정주가 반영.
+                # (inquire-daily-itemchartprice uses the opposite coding.)
+                "FID_ORG_ADJ_PRC": "1" if adjust_price else "0",
             }
 
             res = self._url_fetch(api_url, tr_id, "", params)
