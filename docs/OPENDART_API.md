@@ -52,7 +52,7 @@ DART_API_KEY=your_dart_api_key
 | `GET /api/korean/disclosures` | 공시 목록 (`corp`, `start`, `end`, `kind`, `final`, `limit`) |
 
 - 재무 관련 엔드포인트는 `year`, `quarter`를 받고, `/all`과 `/valuation`은 `fs_div`도 받습니다. `year` 기본값은 `/financials/{symbol}`만 올해이고 나머지는 전년도입니다.
-- `/disclosures`의 `corp`는 6자리 종목코드만 인식합니다. 회사명을 넣으면 필터가 적용되지 않아 전체 회사의 공시가 돌아옵니다.
+- `/disclosures`의 `corp`는 종목코드, 상장사의 DART 회사명(공백·대소문자·`(주)` 무시, 예: `삼성전자`, `현대자동차`), 8자리 고유번호를 받습니다. 찾을 수 없는 회사면 `404`를 돌려주며, 전체 회사의 공시로 바꿔 돌려주지 않습니다. 회사명은 `corp_codes.json`의 `names`에서 찾는데, 커밋된 스냅샷에는 아직 `names`가 없으므로 처음 회사명으로 조회할 때 고유번호 목록을 한 번 내려받습니다.
 - (선택) [`backend/src/services/financial_statements.py`](../backend/src/services/financial_statements.py)는 같은 데이터를 Supabase 테이블에 저장하며 `/api/financials/korean/...` 엔드포인트가 이를 씁니다. [SUPABASE_INTEGRATION.md](SUPABASE_INTEGRATION.md)를 보세요.
 - 전체 파라미터는 [API.md](API.md)에 있습니다.
 
@@ -167,7 +167,7 @@ Without a key, financial statement, company and filing requests return no data, 
 | `GET /api/korean/disclosures` | Filing list (`corp`, `start`, `end`, `kind`, `final`, `limit`) |
 
 - The financial endpoints take `year` and `quarter`; `/all` and `/valuation` also take `fs_div`. `year` defaults to the current year for `/financials/{symbol}` and to the previous year everywhere else.
-- `corp` on `/disclosures` only recognises 6-digit stock codes. A company name is not applied as a filter, so filings for all companies come back.
+- `corp` on `/disclosures` takes a stock code, a listed company's DART name (ignoring spaces, letter case and `(주)`, e.g. `삼성전자`, `현대자동차`) or an 8-digit corp code. An unknown company returns `404` instead of falling back to every company's filings. Names are looked up in the `names` map of `corp_codes.json`; the committed snapshot has no `names` yet, so the first lookup by name downloads the corp code list once.
 - (Optional) [`backend/src/services/financial_statements.py`](../backend/src/services/financial_statements.py) stores the same data in Supabase tables, served by the `/api/financials/korean/...` endpoints. See [SUPABASE_INTEGRATION.md](SUPABASE_INTEGRATION.md).
 - All parameters are listed in [API.md](API.md).
 

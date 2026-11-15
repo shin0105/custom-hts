@@ -1130,7 +1130,8 @@ async def get_disclosures(
     date range, and disclosure type.
 
     Args:
-        corp: Stock code or company name (optional, if omitted returns all companies)
+        corp: Stock code, DART company name or corp code (optional; if
+            omitted returns all companies). An unknown company is a 404.
         start: Start date (YYYY-MM-DD or YYYYMMDD)
         end: End date (YYYY-MM-DD or YYYYMMDD)
         kind: Disclosure type code (A-J)
@@ -1140,9 +1141,12 @@ async def get_disclosures(
     Returns:
         Dictionary with disclosure listings
     """
-    disclosures = opendart_client.get_disclosure_list(
-        corp=corp, start=start, end=end, kind=kind, final=final
-    )
+    try:
+        disclosures = opendart_client.get_disclosure_list(
+            corp=corp, start=start, end=end, kind=kind, final=final
+        )
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
     if disclosures is None:
         raise HTTPException(

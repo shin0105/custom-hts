@@ -107,7 +107,7 @@ Custom HTS 백엔드(FastAPI)가 제공하는 REST 엔드포인트 전체 목록
 | GET | `/api/korean/financials/{symbol}/cash-flow` | `year`, `quarter` | 항상 `501`. OpenDART 주요계정 API에는 현금흐름표 항목이 없습니다 |
 | GET | `/api/korean/financials/{symbol}/all` | `year`, `quarter`, `fs_div`=`CFS` (연결)/`OFS` (별도) | 주요계정(재무상태표·손익계산서) 목록 (`count`, `data`) |
 | GET | `/api/korean/company/{symbol}` | — | 기업개황 (회사명, 대표자, 주소, 업종, 홈페이지, 설립일 등) |
-| GET | `/api/korean/disclosures` | `corp` (종목코드 또는 회사명), `start`·`end` (YYYY-MM-DD 또는 YYYYMMDD), `kind` (공시유형 `A`–`J`), `final` (기본 `true`), `limit` 1–1000 (기본 100) | 공시 목록 |
+| GET | `/api/korean/disclosures` | `corp` (종목코드, DART 회사명 또는 고유번호. 찾을 수 없으면 `404`), `start`·`end` (YYYY-MM-DD 또는 YYYYMMDD), `kind` (공시유형 `A`–`J`), `final` (기본 `true`), `limit` 1–1000 (기본 100) | 공시 목록 |
 
 #### 계좌
 
@@ -276,7 +276,7 @@ The quote, order book and candle endpoints share `symbol` (required, futures/opt
 | GET | `/api/korean/financials/{symbol}/cash-flow` | `year`, `quarter` | Always `501`: the OpenDART major-account APIs have no cash flow items |
 | GET | `/api/korean/financials/{symbol}/all` | `year`, `quarter`, `fs_div`=`CFS` (consolidated)/`OFS` (separate) | Major-account line items: balance sheet and income statement (`count`, `data`) |
 | GET | `/api/korean/company/{symbol}` | — | Company profile (name, CEO, address, industry, website, founding date, …) |
-| GET | `/api/korean/disclosures` | `corp` (stock code or company name), `start`·`end` (YYYY-MM-DD or YYYYMMDD), `kind` (disclosure type `A`–`J`), `final` (default `true`), `limit` 1–1000 (default 100) | Disclosure list |
+| GET | `/api/korean/disclosures` | `corp` (stock code, DART company name or corp code; `404` if not found), `start`·`end` (YYYY-MM-DD or YYYYMMDD), `kind` (disclosure type `A`–`J`), `final` (default `true`), `limit` 1–1000 (default 100) | Disclosure list |
 
 #### Account
 
