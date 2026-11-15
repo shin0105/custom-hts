@@ -70,6 +70,11 @@ async def insert_korean_financial_statements(
     Returns:
         Success status and details of what was inserted
     """
+    if not financial_statement_service.is_configured:
+        raise HTTPException(
+            status_code=503, detail="Database connection not available"
+        )
+
     try:
         results = financial_statement_service.insert_all_korean_statements(
             symbol=request.symbol, year=request.year, quarter=request.quarter
@@ -81,7 +86,10 @@ async def insert_korean_financial_statements(
         if success:
             message = f"Successfully inserted financial statements for {request.symbol} ({period})"
         else:
-            message = f"No data available for {request.symbol} ({period})"
+            message = (
+                f"Nothing stored for {request.symbol} ({period}): no source "
+                "data, or the database write failed (see the backend log)"
+            )
 
         return FinancialStatementInsertResponse(
             success=success, message=message, inserted=results
@@ -243,6 +251,11 @@ async def insert_us_financial_statements(
     Returns:
         Success status and details of what was inserted
     """
+    if not financial_statement_service.is_configured:
+        raise HTTPException(
+            status_code=503, detail="Database connection not available"
+        )
+
     try:
         results = financial_statement_service.insert_all_us_statements(
             symbol=request.symbol, year=request.year, quarter=request.quarter
@@ -254,7 +267,10 @@ async def insert_us_financial_statements(
         if success:
             message = f"Successfully inserted financial statements for {request.symbol} ({period})"
         else:
-            message = f"No data available for {request.symbol} ({period})"
+            message = (
+                f"Nothing stored for {request.symbol} ({period}): no source "
+                "data, or the database write failed (see the backend log)"
+            )
 
         return FinancialStatementInsertResponse(
             success=success, message=message, inserted=results
@@ -411,27 +427,19 @@ async def batch_insert_korean_statements(
         quarters: Optional list of quarters to insert (defaults to annual only)
 
     Returns:
-        Summary of insertions
+        ``success`` (true only when every symbol/period stored at least one
+        statement), ``stored``/``attempted`` statement counts, ``failed``
+        symbol/period labels, and per-statement ``results``
     """
+    if not financial_statement_service.is_configured:
+        raise HTTPException(
+            status_code=503, detail="Database connection not available"
+        )
+
     try:
-        if request.quarters is None:
-            quarters = [None]  # Annual only
-        else:
-            quarters = request.quarters
-
-        results = {}
-        for symbol in request.symbols:
-            symbol_results = {}
-            for quarter in quarters:
-                period_key = f"{request.year}Q{quarter}" if quarter else str(request.year)
-                symbol_results[period_key] = (
-                    financial_statement_service.insert_all_korean_statements(
-                        symbol, request.year, quarter
-                    )
-                )
-            results[symbol] = symbol_results
-
-        return {"success": True, "results": results}
+        return financial_statement_service.batch_insert_korean_statements(
+            request.symbols, request.year, request.quarters
+        )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -450,27 +458,19 @@ async def batch_insert_us_statements(
         quarters: Optional list of quarters to insert (defaults to annual only)
 
     Returns:
-        Summary of insertions
+        ``success`` (true only when every symbol/period stored at least one
+        statement), ``stored``/``attempted`` statement counts, ``failed``
+        symbol/period labels, and per-statement ``results``
     """
+    if not financial_statement_service.is_configured:
+        raise HTTPException(
+            status_code=503, detail="Database connection not available"
+        )
+
     try:
-        if request.quarters is None:
-            quarters = [None]  # Annual only
-        else:
-            quarters = request.quarters
-
-        results = {}
-        for symbol in request.symbols:
-            symbol_results = {}
-            for quarter in quarters:
-                period_key = f"{request.year}Q{quarter}" if quarter else str(request.year)
-                symbol_results[period_key] = (
-                    financial_statement_service.insert_all_us_statements(
-                        symbol, request.year, quarter
-                    )
-                )
-            results[symbol] = symbol_results
-
-        return {"success": True, "results": results}
+        return financial_statement_service.batch_insert_us_statements(
+            request.symbols, request.year, request.quarters
+        )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

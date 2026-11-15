@@ -49,14 +49,16 @@ async def get_us_valuation(symbol: str) -> USValuationMetrics:
 @router.get("/financials/{symbol}", response_model=List[USFinancialStatement])
 async def get_us_financials(
     symbol: str,
-    use_cache: bool = Query(True, description="Use cached data if available"),
+    use_cache: bool = Query(
+        True, description="Ignored; kept for API compatibility"
+    ),
 ) -> List[USFinancialStatement]:
     """
-    Get financial statements for a US company.
+    Get financial statements for a US company from Yahoo Finance.
 
     Args:
         symbol: Stock ticker symbol
-        use_cache: Whether to use cached data
+        use_cache: Ignored; kept for API compatibility
 
     Returns:
         List of financial statements

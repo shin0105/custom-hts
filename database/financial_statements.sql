@@ -1,14 +1,31 @@
--- Enhanced Database schema for Custom HTS with Field Mapping Comments
--- This script extends the existing schema with detailed financial statement tables
--- Run this script in your Supabase SQL editor AFTER running the base init.sql
+-- Financial statement tables for Custom HTS (Supabase / PostgreSQL)
+-- Self-contained: run the whole file in the Supabase SQL editor. It defines
+-- every table, index, trigger and helper function it needs, and is safe to
+-- run again on a database that already has these tables.
 --
 -- IMPORTANT NOTES:
 -- - US values (yfinance): Actual USD amounts (e.g., 100000000 = $100M)
 -- - Korean values (OPENDART): Millions of KRW (e.g., 100000 = 100B KRW = 100,000 백만원)
 -- - All numeric fields use NUMERIC(20, 2) to handle large values and decimal precision
+-- - Requires PostgreSQL 15+ (UNIQUE NULLS NOT DISTINCT); every current
+--   Supabase project qualifies.
 --
--- VERSION: 2.0 - Updated with field mapping comments and corrected units
--- DATE: February 2026
+-- VERSION: 2.1 - Self-contained trigger function, re-runnable triggers,
+--                annual rows (quarter NULL) covered by the unique key
+-- DATE: November 2026
+
+-- ========================================================================
+-- HELPER FUNCTIONS
+-- ========================================================================
+
+-- Keeps updated_at current on every UPDATE (used by the triggers below).
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
 -- ========================================================================
 -- BALANCE SHEET TABLES
@@ -63,7 +80,7 @@ CREATE TABLE IF NOT EXISTS korean_balance_sheet (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    CONSTRAINT korean_balance_sheet_unique UNIQUE(symbol, year, quarter)
+    CONSTRAINT korean_balance_sheet_unique UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)
 );
 
 -- US Balance Sheet
@@ -117,7 +134,7 @@ CREATE TABLE IF NOT EXISTS us_balance_sheet (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    CONSTRAINT us_balance_sheet_unique UNIQUE(symbol, year, quarter)
+    CONSTRAINT us_balance_sheet_unique UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)
 );
 
 -- ========================================================================
@@ -167,7 +184,7 @@ CREATE TABLE IF NOT EXISTS korean_income_statement (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    CONSTRAINT korean_income_statement_unique UNIQUE(symbol, year, quarter)
+    CONSTRAINT korean_income_statement_unique UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)
 );
 
 -- US Income Statement
@@ -214,7 +231,7 @@ CREATE TABLE IF NOT EXISTS us_income_statement (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    CONSTRAINT us_income_statement_unique UNIQUE(symbol, year, quarter)
+    CONSTRAINT us_income_statement_unique UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)
 );
 
 -- ========================================================================
@@ -267,7 +284,7 @@ CREATE TABLE IF NOT EXISTS korean_cashflow_statement (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    CONSTRAINT korean_cashflow_statement_unique UNIQUE(symbol, year, quarter)
+    CONSTRAINT korean_cashflow_statement_unique UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)
 );
 
 -- US Cash Flow Statement
@@ -320,8 +337,61 @@ CREATE TABLE IF NOT EXISTS us_cashflow_statement (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    CONSTRAINT us_cashflow_statement_unique UNIQUE(symbol, year, quarter)
+    CONSTRAINT us_cashflow_statement_unique UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)
 );
+
+-- ========================================================================
+-- UPGRADE TABLES CREATED BY OLDER VERSIONS OF THIS SCRIPT
+-- ========================================================================
+-- Older versions used UNIQUE(symbol, year, quarter), which treats every NULL
+-- quarter as distinct, so annual rows piled up instead of being updated.
+-- For each table still on that constraint: keep only the most recently
+-- updated annual row per (symbol, year), then switch the constraint to
+-- NULLS NOT DISTINCT. Tables that are already up to date are left alone.
+
+DO $$
+DECLARE
+    t TEXT;
+BEGIN
+    FOREACH t IN ARRAY ARRAY[
+        'korean_balance_sheet',
+        'us_balance_sheet',
+        'korean_income_statement',
+        'us_income_statement',
+        'korean_cashflow_statement',
+        'us_cashflow_statement'
+    ] LOOP
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint c
+            JOIN pg_index i ON i.indexrelid = c.conindid
+            WHERE c.conrelid = t::regclass
+              AND c.conname = t || '_unique'
+              AND i.indnullsnotdistinct
+        ) THEN
+            EXECUTE format(
+                'DELETE FROM %1$I a USING %1$I b
+                 WHERE a.symbol = b.symbol
+                   AND a.year = b.year
+                   AND a.quarter IS NULL
+                   AND b.quarter IS NULL
+                   AND (COALESCE(a.updated_at, ''-infinity''), a.id)
+                     < (COALESCE(b.updated_at, ''-infinity''), b.id)',
+                t
+            );
+            EXECUTE format(
+                'ALTER TABLE %I DROP CONSTRAINT IF EXISTS %I',
+                t, t || '_unique'
+            );
+            EXECUTE format(
+                'ALTER TABLE %I ADD CONSTRAINT %I
+                 UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)',
+                t, t || '_unique'
+            );
+        END IF;
+    END LOOP;
+END
+$$;
 
 -- ========================================================================
 -- INDEXES
@@ -362,36 +432,42 @@ CREATE INDEX IF NOT EXISTS idx_us_cf_updated ON us_cashflow_statement(updated_at
 -- ========================================================================
 
 -- Korean Balance Sheet Trigger
+DROP TRIGGER IF EXISTS update_korean_balance_sheet_updated_at ON korean_balance_sheet;
 CREATE TRIGGER update_korean_balance_sheet_updated_at
 BEFORE UPDATE ON korean_balance_sheet
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
 -- US Balance Sheet Trigger
+DROP TRIGGER IF EXISTS update_us_balance_sheet_updated_at ON us_balance_sheet;
 CREATE TRIGGER update_us_balance_sheet_updated_at
 BEFORE UPDATE ON us_balance_sheet
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
 -- Korean Income Statement Trigger
+DROP TRIGGER IF EXISTS update_korean_income_statement_updated_at ON korean_income_statement;
 CREATE TRIGGER update_korean_income_statement_updated_at
 BEFORE UPDATE ON korean_income_statement
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
 -- US Income Statement Trigger
+DROP TRIGGER IF EXISTS update_us_income_statement_updated_at ON us_income_statement;
 CREATE TRIGGER update_us_income_statement_updated_at
 BEFORE UPDATE ON us_income_statement
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
 -- Korean Cash Flow Trigger
+DROP TRIGGER IF EXISTS update_korean_cashflow_statement_updated_at ON korean_cashflow_statement;
 CREATE TRIGGER update_korean_cashflow_statement_updated_at
 BEFORE UPDATE ON korean_cashflow_statement
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
 -- US Cash Flow Trigger
+DROP TRIGGER IF EXISTS update_us_cashflow_statement_updated_at ON us_cashflow_statement;
 CREATE TRIGGER update_us_cashflow_statement_updated_at
 BEFORE UPDATE ON us_cashflow_statement
 FOR EACH ROW

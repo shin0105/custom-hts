@@ -29,6 +29,23 @@ class BondMasterFileManager:
         "domestic_bond_code.mst.zip",
     ]
 
+    # Normalised exports written by save_to_csv / save_to_json. They are
+    # readable fallbacks, but never count as a downloaded master file.
+    EXPORT_CSV = "bond_codes.csv"
+    EXPORT_JSON = "bond_codes.json"
+
+    # Row fields kept when reading a normalised export back in.
+    MASTER_FIELDS = (
+        "bond_type",
+        "bond_class_code",
+        "pdno",
+        "name",
+        "bond_interest_class_code",
+        "listed_date",
+        "issue_date",
+        "maturity_date",
+    )
+
     def __init__(self, data_dir: Optional[str] = None):
         if data_dir is None:
             self.data_dir = (
@@ -56,7 +73,7 @@ class BondMasterFileManager:
         Returns:
             Extracted file path or None on failure.
         """
-        existing = self._find_local_master_file()
+        existing = self._find_raw_master_file()
         if existing and not force:
             logger.info("Bond master already exists: %s", existing)
             return existing
@@ -79,7 +96,7 @@ class BondMasterFileManager:
                 if zip_path.exists():
                     zip_path.unlink()
 
-                extracted = self._find_local_master_file()
+                extracted = self._find_raw_master_file()
                 if extracted:
                     logger.info("Bond master ready: %s", extracted)
                     return extracted
@@ -109,7 +126,9 @@ class BondMasterFileManager:
         """
         master_file = self._find_local_master_file()
         if auto_download:
-            if force_download or not master_file:
+            # Only a downloaded master counts here: the committed JSON
+            # export must not stop a refresh on a fresh clone.
+            if force_download or not self._find_raw_master_file():
                 master_file = self.download_bond_master(
                     force=force_download, source_url=source_url
                 )
@@ -122,9 +141,15 @@ class BondMasterFileManager:
             if master_file.suffix.lower() == ".mst":
                 return self._parse_bond_mst(master_file)
 
+            if suffix == ".json":
+                return self._parse_json_export(master_file)
+
             if suffix in {".csv", ".tsv"}:
                 delimiter = "," if suffix == ".csv" else "\t"
-                with open(master_file, "r", encoding="utf-8", newline="") as f:
+                # save_to_csv writes utf-8-sig; strip the BOM on read.
+                with open(
+                    master_file, "r", encoding="utf-8-sig", newline=""
+                ) as f:
                     rows = list(csv.DictReader(f, delimiter=delimiter))
                 return self._normalize_rows(rows)
 
@@ -330,31 +355,55 @@ class BondMasterFileManager:
             df = df.drop_duplicates(subset=["pdno"]).reset_index(drop=True)
         return df
 
-    def _find_local_master_file(self) -> Optional[Path]:
-        # Prefer raw master file when present.
+    def _parse_json_export(self, file_path: Path) -> pd.DataFrame:
+        """Read a list-of-records JSON written by save_to_json."""
+        payload = json.loads(file_path.read_text(encoding="utf-8"))
+        if not isinstance(payload, list):
+            raise ValueError("bond master JSON must be a list of records")
+        records = [row for row in payload if isinstance(row, dict)]
+        return self._normalize_rows(records)
+
+    def _find_raw_master_file(self) -> Optional[Path]:
+        """Find a downloaded (not exported) master file."""
         raw_mst = self.data_dir / "bond_code.mst"
         if raw_mst.exists():
             return raw_mst
 
-        # Then fall back to normalized outputs.
-        preferred = self.data_dir / "bond_codes.csv"
-        if preferred.exists():
-            return preferred
-
-        # Search for common extracted names.
+        exports = {self.EXPORT_CSV, self.EXPORT_JSON}
         patterns = [
-            "bond_code.mst",
-            "*bond*code*.csv",
-            "*bond*code*.tsv",
-            "*bond*code*.txt",
             "*bond*code*.mst",
+            "*bond*code*.txt",
+            "*bond*code*.tsv",
+            "*bond*code*.csv",
             "*bond*code*",
         ]
         for pattern in patterns:
-            matches = sorted(self.data_dir.glob(pattern))
-            for match in matches:
-                if match.is_file() and match.suffix.lower() != ".zip":
+            for match in sorted(self.data_dir.glob(pattern)):
+                if (
+                    match.is_file()
+                    and match.name not in exports
+                    and match.suffix.lower() not in {".zip", ".json"}
+                ):
                     return match
+        return None
+
+    def _find_local_master_file(self) -> Optional[Path]:
+        """Find the best readable master: raw first, then exports."""
+        raw_mst = self.data_dir / "bond_code.mst"
+        if raw_mst.exists():
+            return raw_mst
+
+        export_csv = self.data_dir / self.EXPORT_CSV
+        if export_csv.exists():
+            return export_csv
+
+        raw = self._find_raw_master_file()
+        if raw:
+            return raw
+
+        export_json = self.data_dir / self.EXPORT_JSON
+        if export_json.exists():
+            return export_json
         return None
 
     def _normalize_rows(self, rows: List[Dict[str, Any]]) -> pd.DataFrame:
@@ -399,9 +448,20 @@ class BondMasterFileManager:
                     break
 
             seen.add(code)
-            normalized.append({"pdno": code, "name": name})
+            record: Dict[str, Any] = {"pdno": code, "name": name}
+            # Keep type/date fields from normalised exports so the bond
+            # page's filters still work without bond_code.mst.
+            for field in self.MASTER_FIELDS:
+                if field in record:
+                    continue
+                value = row.get(field)
+                if value is not None and str(value).strip():
+                    record[field] = str(value).strip()
+            normalized.append(record)
 
-        return pd.DataFrame(normalized)
+        df = pd.DataFrame(normalized)
+        # Rows missing a field would otherwise carry NaN into the API.
+        return df.astype(object).where(df.notna(), None)
 
     @staticmethod
     def _extract_code(text: str) -> Optional[str]:

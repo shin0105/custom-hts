@@ -28,7 +28,7 @@
 - **차트**: 차트 종류에서 일봉 또는 분봉을 고릅니다.
   - 일봉: 주기(일·주·월), 시작일·종료일(선택). 한국투자증권 API가 최근 30개 봉만 주므로 기간을 넓혀도 30개를 넘지 않고, 시작일·종료일은 그 안에서 범위를 좁힙니다.
   - 분봉: 간격(1·5·10·30·60분), 기준일(기본 오늘), 기준시각(기본 15:30). 그날 09:00부터 기준시각까지 그립니다.
-- **재무제표 (OpenDART)**: 연도(최근 5년, 기본 전년도), 연간/분기, 분기(1~4), 연결/별도를 고르고 손익계산서·재무상태표·현금흐름표 칩으로 표를 바꿉니다. 위쪽 타일에 핵심 값(매출액·영업이익·당기순이익, 자산·부채·자본총계 등)이 나오고, 아래 표는 계정과목 검색으로 거를 수 있습니다. 금액 단위는 원입니다. 현금흐름표는 OpenDART 주요계정 API 범위 밖이라 대개 비어 있습니다([OPENDART_API.md](OPENDART_API.md)).
+- **재무제표 (OpenDART)**: 연도(최근 5년, 기본 전년도), 연간/분기, 분기(1~4), 연결/별도를 고르고 손익계산서·재무상태표 칩으로 표를 바꿉니다. 위쪽 타일에 핵심 값(매출액·영업이익·당기순이익, 자산·부채·자본총계 등)이 나오고, 아래 표는 계정과목 검색으로 거를 수 있습니다. 금액 단위는 원입니다. OpenDART 주요계정 API에는 현금흐름표 항목이 없어 현금흐름표 칩은 없습니다([OPENDART_API.md](OPENDART_API.md)).
 - **추정실적 (KDevelopers)**: 종목 요약, 손익 추정, 투자지표 추정 표. 금액 단위는 억원입니다.
 - **새로고침** 버튼은 모든 패널을 다시 조회합니다. 같은 조건의 데이터는 1분 동안 캐시됩니다.
 
@@ -106,7 +106,7 @@ Cards link to the domestic stock, listed bond, futures/options, US stock and acc
 - **Chart**: choose daily (일봉) or minute (분봉) under chart type.
   - Daily: period (day/week/month) and optional start/end dates. The KIS API returns only the latest 30 candles, so a wider range never shows more than 30; the dates narrow the range within them.
   - Minute: interval (1/5/10/30/60 minutes), date (default today) and cut-off time (default 15:30). The chart covers 09:00 to the cut-off on that day.
-- **Financial statements (OpenDART)**: choose a year (last 5 years, default the previous year), annual/quarterly, quarter (1–4) and consolidated/separate, then switch between income statement, balance sheet and cash flow with the chips. Tiles show the key figures (revenue, operating income, net income, total assets/liabilities/equity and so on); the table below can be filtered by account name. Amounts are in KRW. The cash flow tab is usually empty because cash flow items are outside OpenDART's major-account APIs ([OPENDART_API.md](OPENDART_API.md)).
+- **Financial statements (OpenDART)**: choose a year (last 5 years, default the previous year), annual/quarterly, quarter (1–4) and consolidated/separate, then switch between income statement and balance sheet with the chips. Tiles show the key figures (revenue, operating income, net income, total assets/liabilities/equity and so on); the table below can be filtered by account name. Amounts are in KRW. There is no cash flow chip because OpenDART's major-account APIs have no cash flow items ([OPENDART_API.md](OPENDART_API.md)).
 - **Estimates (KDevelopers)**: stock summary, earnings estimates and valuation estimates tables. Amounts are in 억원 (100 million KRW).
 - The **새로고침** (refresh) button reloads every panel. Data for the same settings is cached for one minute.
 

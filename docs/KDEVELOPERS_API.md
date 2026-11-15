@@ -118,10 +118,10 @@ HANTU_ACCOUNT_NUMBER=12345678
 
 ### 동작 참고
 
-- **일·주·월봉**: `inquire-daily-price`는 최근 30개 봉만 돌려줍니다. `start_date`·`end_date`는 그 30개 안에서 범위를 좁히는 필터입니다.
+- **일·주·월봉**: `inquire-daily-price`는 최근 30개 봉만 돌려줍니다. `start_date`·`end_date`는 그 30개 안에서 범위를 좁히는 필터입니다. `adjust_price=true`(기본)이면 수정주가를 받습니다. 이 API의 `FID_ORG_ADJ_PRC`는 `1`이 수정주가 반영이며, 기간별 일봉(`inquire-daily-itemchartprice`)은 반대로 `0`이 수정주가입니다.
 - **분봉**: 한 번에 최대 120건씩 시각을 거슬러 올라가며 하루치를 모은 뒤 09:00부터 기준시각(기본 15:30)까지만 남깁니다. 5·10·30·60분봉은 1분봉을 합쳐 만듭니다.
 - **기간별 일봉(주식·지수)**: 한 번의 응답 상한(주식 100건, 지수 50건)을 넘는 구간은 종료일을 앞당기며 여러 번 조회합니다.
-- **계좌 잔고**: 첫 페이지만 조회하고 연속조회는 하지 않습니다. 한 페이지(실전 계좌 기준 50종목)를 넘게 보유하면 일부 종목이 빠질 수 있습니다.
+- **계좌 잔고**: 한 번에 최대 50종목(실전 계좌 기준)씩 받으며, 연속조회 키(`CTX_AREA_FK100`·`CTX_AREA_NK100`)를 따라 마지막 페이지까지 모읍니다(최대 20회). 중간 페이지 조회에 실패하면 일부만 보여 주지 않고 오류로 처리합니다.
 - **종목추정실적**: 매출액·영업이익 등 금액 단위는 억원입니다.
 
 ### 키 점검 스크립트
@@ -135,7 +135,7 @@ uv run python scripts/check_hantu_keys.py
 
 - 저장소 루트 `.env`에서 `HANTU_API_KEY`/`HANTU_API_SECRET`과, 있으면 두 번째 키(`HANTU_API_KEY_2`/`HANTU_API_SECRET_2` 또는 `HANTU_API_KEY2`/`HANTU_API_SECRET2`)를 읽습니다.
 - 키마다 실전투자 서버에서 토큰을 발급받고, 실패하면 모의투자 서버(`https://openapivts.koreainvestment.com:29443`)에서 다시 시도해 모의투자 키인지 알려 줍니다. 이어서 삼성전자(005930) 현재가를 조회합니다.
-- 실전투자 서버에서 받은 토큰은 토큰 캐시에 저장하므로 앱이 바로 재사용합니다.
+- 실전투자 서버에서 받은 토큰은 토큰 캐시에 저장하므로 앱이 바로 재사용합니다. `.env`에 `HANTU_TOKEN_CACHE_PATH`가 있으면 앱과 같은 그 경로를 씁니다.
 - 앱키는 앞뒤 4자리만 보여 주고 시크릿·토큰은 출력하지 않습니다. 모든 키가 통과하면 종료 코드 0을 돌려줍니다.
 - 실행할 때마다 새 토큰을 발급하므로 1분 안에 다시 실행하면 발급 제한에 걸릴 수 있습니다.
 
@@ -268,10 +268,10 @@ Backend endpoint parameters are listed in [API.md](API.md).
 
 ### Behaviour notes
 
-- **Daily/weekly/monthly candles**: `inquire-daily-price` returns only the latest 30 candles. `start_date` and `end_date` filter within those 30.
+- **Daily/weekly/monthly candles**: `inquire-daily-price` returns only the latest 30 candles. `start_date` and `end_date` filter within those 30. `adjust_price=true` (the default) requests adjusted prices (수정주가). For this API `FID_ORG_ADJ_PRC=1` means adjusted, whereas the period daily chart (`inquire-daily-itemchartprice`) uses `0` for adjusted.
 - **Minute candles**: the client walks back in time up to 120 rows per call to collect one day, then keeps 09:00 up to the cut-off time (default 15:30). 5/10/30/60-minute candles are built from 1-minute candles.
 - **Period daily prices (stocks, indices)**: ranges longer than one response (100 rows for stocks, 50 for indices) are fetched in several calls, moving the end date back each time.
-- **Account balance**: only the first page is read; continuation is not implemented. Holdings beyond one page (50 stocks for a real account) may be missing.
+- **Account balance**: each call returns up to 50 holdings (real account), and the client follows the continuation keys (`CTX_AREA_FK100`, `CTX_AREA_NK100`) to the last page (at most 20 calls). If a later page fails, the request fails instead of showing a partial list.
 - **Estimate performance**: amounts such as revenue and operating income are in 억원 (100 million KRW).
 
 ### Key check script
@@ -285,7 +285,7 @@ uv run python scripts/check_hantu_keys.py
 
 - Reads `HANTU_API_KEY`/`HANTU_API_SECRET` from the repository-root `.env`, plus an optional second pair (`HANTU_API_KEY_2`/`HANTU_API_SECRET_2` or `HANTU_API_KEY2`/`HANTU_API_SECRET2`).
 - For each key it issues a token on the real-trading server; if that fails it retries on the paper-trading server (`https://openapivts.koreainvestment.com:29443`) to tell you it is a paper-trading key. It then requests the current price of Samsung Electronics (005930).
-- A token issued by the real-trading server is saved to the token cache, so the app reuses it right away.
+- A token issued by the real-trading server is saved to the token cache, so the app reuses it right away. If `.env` sets `HANTU_TOKEN_CACHE_PATH`, the script uses that path, the same one as the app.
 - Only the first and last four characters of an app key are shown; secrets and tokens are never printed. The exit code is 0 when every key passes.
 - Each run issues a new token, so running it again within a minute can hit the issuance limit.
 

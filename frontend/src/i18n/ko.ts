@@ -85,7 +85,6 @@ export const ko = {
     title: '재무제표 (OpenDART)',
     incomeStatement: '손익계산서',
     balanceSheet: '재무상태표',
-    cashFlow: '현금흐름표',
     consolidated: '연결',
     separate: '별도',
     account: '계정과목',

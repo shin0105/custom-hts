@@ -1,6 +1,7 @@
 """OPENDART API client for Korean financial statements."""
 
 import json
+import re
 import zipfile
 import io
 import xml.etree.ElementTree as ET
@@ -29,12 +30,21 @@ class OpenDartClient:
     - corpCode.xml: Download corp code mapping (requires processing)
     """
 
-    def __init__(self) -> None:
-        """Initialize the OPENDART API client."""
+    def __init__(self, corp_code_cache_path: Optional[Path] = None) -> None:
+        """Initialize the OPENDART API client.
+
+        Args:
+            corp_code_cache_path: Where the stock-code → corp-code snapshot
+                lives. Defaults to ``src/data/opendart/corp_codes.json``.
+        """
         self.api_key = settings.DART_API_KEY
         self.base_url = settings.DART_BASE_URL
         self._corp_code_cache: Dict[str, str] = {}
-        self._corp_code_cache_path = (
+        # Listed companies' DART names → corp code (raw names, as persisted)
+        # and a normalised index for lookups by name.
+        self._corp_names: Dict[str, str] = {}
+        self._corp_name_index: Dict[str, str] = {}
+        self._corp_code_cache_path = corp_code_cache_path or (
             Path(__file__).parent.parent
             / "data"
             / "opendart"
@@ -43,34 +53,18 @@ class OpenDartClient:
         self._corp_code_cache_ttl = timedelta(hours=24)
         self._corp_code_cache_loaded_at: Optional[datetime] = None
         self._corp_code_cache_path.parent.mkdir(parents=True, exist_ok=True)
-        self._load_common_corp_codes()
+        # The full corp code list is downloaded lazily (on a cache miss) to
+        # avoid startup network calls; the committed snapshot covers every
+        # listed company in the meantime.
         self._load_cached_corp_codes()
 
-    def _load_common_corp_codes(self) -> None:
-        """
-        Load commonly used corp codes for major Korean companies.
-
-        In production, you should download the full corp code list from DART.
-        This is a hardcoded mapping for demonstration purposes.
-        """
-        # Mapping of stock codes to DART corp codes for major companies
-        self._corp_code_cache = {
-            "005930": "00126380",  # Samsung Electronics
-            "000660": "00164742",  # SK Hynix
-            "035420": "00234904",  # NAVER
-            "035720": "00164779",  # Kakao
-            "051910": "00164384",  # LG Chemicals
-            "006400": "00126186",  # Samsung SDI
-            "207940": "00401731",  # Samsung Biologics
-            "068270": "00356370",  # Celltrion
-            "028260": "00164308",  # Samsung C&T
-            "012330": "00164485",  # Hyundai Mobis
-            "300120": "00164779",  # Korean company (placeholder - should be updated with correct code)
-        }
-
-        # Full corp code list is loaded lazily to avoid startup network calls.
-
     def _load_cached_corp_codes(self) -> None:
+        """Load the corp code snapshot from disk, however old it is.
+
+        Corp codes are permanent per company, so a stale snapshot is still
+        correct for every company it lists. Its age only decides whether a
+        lookup miss triggers a fresh download.
+        """
         if not self._corp_code_cache_path.exists():
             return
 
@@ -88,17 +82,20 @@ class OpenDartClient:
             if loaded_at.tzinfo is None:
                 loaded_at = loaded_at.replace(tzinfo=timezone.utc)
 
+            self._corp_code_cache.update(codes)
+            names = payload.get("names")
+            if isinstance(names, dict):
+                self._set_corp_names(names)
+            self._corp_code_cache_loaded_at = loaded_at
+
             if (
                 datetime.now(timezone.utc) - loaded_at
                 > self._corp_code_cache_ttl
             ):
                 logger.info(
-                    "Cached corp code list expired; will refresh on demand."
+                    "Cached corp code list is more than 24 hours old; using "
+                    "it and refreshing on the next lookup miss."
                 )
-                return
-
-            self._corp_code_cache.update(codes)
-            self._corp_code_cache_loaded_at = loaded_at
         except Exception as e:
             logger.warning(f"Failed to load cached corp code list: {e}")
 
@@ -110,13 +107,28 @@ class OpenDartClient:
             > self._corp_code_cache_ttl
         )
 
+    @staticmethod
+    def _normalize_corp_name(name: str) -> str:
+        """Normalise a company name for lookups (spaces, case, (주))."""
+        name = re.sub(r"\(주\)|㈜|주식회사", "", name)
+        return re.sub(r"\s+", "", name).casefold()
+
+    def _set_corp_names(self, names: Dict[str, str]) -> None:
+        self._corp_names.update(names)
+        self._corp_name_index = {
+            self._normalize_corp_name(name): code
+            for name, code in self._corp_names.items()
+            if name and code
+        }
+
     def _persist_corp_code_cache(self) -> None:
         payload = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "codes": self._corp_code_cache,
+            "names": self._corp_names,
         }
         with self._corp_code_cache_path.open("w", encoding="utf-8") as handle:
-            json.dump(payload, handle)
+            json.dump(payload, handle, ensure_ascii=False)
 
     def get_corp_code(self, stock_code: str) -> Optional[str]:
         """
@@ -160,7 +172,7 @@ class OpenDartClient:
             True if successful, False otherwise
         """
         if not self.api_key:
-            print("DART API key not configured")
+            logger.warning("DART API key not configured")
             return False
 
         try:
@@ -177,16 +189,18 @@ class OpenDartClient:
             # Parse XML
             root = ET.fromstring(xml_content)
 
-            # Extract mappings
+            # Extract mappings (listed companies only)
+            names: Dict[str, str] = {}
             for corp in root.findall("list"):
-                corp_code = corp.findtext("corp_code", "")
-                stock_code = corp.findtext("stock_code", "")
+                corp_code = corp.findtext("corp_code", "").strip()
+                stock_code = corp.findtext("stock_code", "").strip()
+                corp_name = corp.findtext("corp_name", "").strip()
 
-                if corp_code and stock_code and stock_code.strip():
-                    # Only add entries with valid stock codes
-                    self._corp_code_cache[stock_code.strip()] = (
-                        corp_code.strip()
-                    )
+                if corp_code and stock_code:
+                    self._corp_code_cache[stock_code] = corp_code
+                    if corp_name:
+                        names[corp_name] = corp_code
+            self._set_corp_names(names)
 
             self._corp_code_cache_loaded_at = datetime.now(timezone.utc)
             self._persist_corp_code_cache()
@@ -558,83 +572,49 @@ class OpenDartClient:
 
         return income_statement
 
-    def get_cash_flow(
-        self, symbol: str, year: int, quarter: Optional[int] = None
-    ) -> Dict[str, Any]:
-        """
-        Get cash flow statement data for a Korean company.
-
-        Returns a dictionary with cash flow line items including:
-        - Operating activities
-        - Investing activities
-        - Financing activities
-
-        Args:
-            symbol: Stock code
-            year: Fiscal year
-            quarter: Optional quarter (1-4)
-
-        Returns:
-            Dictionary with cash flow data
-        """
-        raw_data = self.get_financial_statement_raw(symbol, year, quarter)
-        if not raw_data:
-            return {}
-
-        cash_flow = {}
-
-        # Filter for cash flow items (sj_div == "CF")
-        for item in raw_data:
-            if item.get("sj_div") == "CF":
-                account_nm = item.get("account_nm", "")
-                amount = item.get("thstrm_amount", "0")
-
-                # Convert amount to float
-                try:
-                    amount_str = str(amount).replace(",", "")
-                    if amount_str and amount_str != "-":
-                        cash_flow[account_nm] = float(amount_str)
-                except (ValueError, AttributeError):
-                    cash_flow[account_nm] = None
-
-        return cash_flow
-
     def find_corp_code(self, corp_name_or_stock_code: str) -> Optional[str]:
         """
-        Find corp code by company name or stock code.
+        Find a corp code by stock code, DART company name or corp code.
 
-        This method searches the local cache first. If the corp code is not found,
-        it will attempt to search through the downloaded corp code list if available.
+        Names are matched exactly against listed companies' DART names,
+        ignoring spaces, letter case and "(주)" (e.g. "삼성전자", "NAVER",
+        "현대자동차"). An 8-digit number is taken as a corp code as is.
+        On a miss, the corp code list is downloaded when the snapshot is
+        stale or has no company names yet.
 
         Args:
-            corp_name_or_stock_code: Company name or stock code
+            corp_name_or_stock_code: Company name, stock code or corp code
 
         Returns:
             Corp code if found, None otherwise
         """
-        # First try as stock code
-        stock_code = corp_name_or_stock_code.strip().zfill(6)
-        corp_code = self._corp_code_cache.get(stock_code)
-
-        if not corp_code and self._should_refresh_corp_code_cache():
-            if self.download_corp_code_list():
-                corp_code = self._corp_code_cache.get(stock_code)
-
-        if corp_code:
-            return corp_code
-
-        # If not found and looks like a stock code, log warning
-        if stock_code.isdigit() and len(stock_code) == 6:
-            logger.warning(f"Corp code not found for stock code {stock_code}")
+        query = corp_name_or_stock_code.strip()
+        if not query:
             return None
+        if re.fullmatch(r"\d{8}", query):
+            return query
 
-        # For company names, would need to download full corp code list
-        # For now, return None and suggest downloading the full list
-        logger.warning(
-            f"Corp code not found for '{corp_name_or_stock_code}'. "
-            "Call download_corp_code_list() to search by company name."
-        )
-        return None
+        stock_code = query.zfill(6) if query.isdigit() else query.upper()
+        name_key = self._normalize_corp_name(query)
+
+        def lookup() -> Optional[str]:
+            return self._corp_code_cache.get(
+                stock_code
+            ) or self._corp_name_index.get(name_key)
+
+        corp_code = lookup()
+        if not corp_code and (
+            self._should_refresh_corp_code_cache()
+            or not self._corp_name_index
+        ):
+            if self.download_corp_code_list():
+                corp_code = lookup()
+
+        if not corp_code:
+            logger.warning(
+                f"Corp code not found for '{corp_name_or_stock_code}'."
+            )
+        return corp_code
 
     def get_company_info(self, symbol: str) -> Optional[Dict[str, Any]]:
         """
@@ -694,7 +674,8 @@ class OpenDartClient:
         This uses the OPENDART list.json endpoint to retrieve disclosure listings.
 
         Args:
-            corp: Stock code or company name (optional)
+            corp: Stock code, DART company name or corp code (optional;
+                omit for every company)
             start: Start date (YYYY-MM-DD or YYYYMMDD)
             end: End date (YYYY-MM-DD or YYYYMMDD)
             kind: Disclosure type:
@@ -712,20 +693,25 @@ class OpenDartClient:
 
         Returns:
             List of disclosure dictionaries or None if not available
+
+        Raises:
+            LookupError: ``corp`` was given but matches no company. (Sending
+                the request without corp_code would return every company's
+                filings.)
         """
         if not self.api_key:
             logger.warning("DART API key not configured")
             return None
 
+        params: Dict[str, str] = {"crtfc_key": self.api_key}
+        if corp:
+            corp_code = self.find_corp_code(corp)
+            if not corp_code:
+                raise LookupError(f"Company not found: {corp}")
+            params["corp_code"] = corp_code
+
         try:
             url = f"{self.base_url}/list.json"
-            params = {"crtfc_key": self.api_key}
-
-            # Add corp_code if company specified
-            if corp:
-                corp_code = self.find_corp_code(corp)
-                if corp_code:
-                    params["corp_code"] = corp_code
 
             # Add date parameters (convert to YYYYMMDD format if needed)
             if start:
@@ -769,7 +755,8 @@ class OpenDartClient:
         Get merged major-account financial statement line items.
 
         This is an alias for get_financial_statement_raw() using the new
-        OPENDART major-account endpoints.
+        OPENDART major-account endpoints. They return balance sheet (BS) and
+        income statement (IS) accounts only; there are no cash flow items.
 
         Args:
             symbol: Stock code

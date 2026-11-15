@@ -9,7 +9,7 @@
 ### 개요
 
 - 데이터베이스(Supabase PostgreSQL)는 **선택 사항**이며, 재무제표 저장용 테이블 6개에만 사용됩니다. 시세, 차트, 채권, 선물옵션, 베이시스, 계좌 조회 등 나머지 기능은 데이터베이스 없이 동작합니다.
-- 스키마 정의 파일은 [financial_statements.sql](financial_statements.sql) 하나뿐입니다.
+- 스키마 정의 파일은 [financial_statements.sql](financial_statements.sql) 하나뿐입니다. 필요한 함수까지 모두 들어 있어 단독으로 실행되며, 여러 번 실행해도 됩니다.
 - 테이블 생성 순서와 환경 변수 설정은 [Supabase 연동 가이드](../docs/SUPABASE_INTEGRATION.md)를 참고하십시오.
 - 이 테이블을 읽고 쓰는 API는 `/api/financials/*`입니다 ([API 레퍼런스](../docs/API.md)).
 - KIS 접근 토큰은 데이터베이스가 아니라 로컬 파일(`backend/.cache/kis_tokens.json`)에 캐시됩니다.
@@ -39,9 +39,9 @@
 | `raw_data` | `JSONB` | 원본 계정 데이터 전체 |
 | `created_at`, `updated_at` | `TIMESTAMPTZ DEFAULT NOW()` | 생성·수정 시각 |
 
-- **고유 제약:** 테이블마다 `UNIQUE(symbol, year, quarter)` (`<테이블명>_unique`)
+- **고유 제약:** 테이블마다 `UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)` (`<테이블명>_unique`). 연간 데이터(`quarter`가 `NULL`)도 기간마다 한 행만 허용되며, 저장 서비스는 이 컬럼을 기준으로 upsert합니다. PostgreSQL 15 이상이 필요합니다.
 - **인덱스:** 테이블마다 `symbol`, `year`, `updated_at`에 인덱스 (`idx_kr_bs_symbol`, `idx_us_cf_updated` 등)
-- **트리거:** 테이블마다 `BEFORE UPDATE` 트리거가 `update_updated_at_column()` 함수로 `updated_at`을 갱신합니다.
+- **트리거:** 테이블마다 `BEFORE UPDATE` 트리거가 `update_updated_at_column()` 함수(같은 SQL 파일에 정의)로 `updated_at`을 갱신합니다.
 - **주석:** 각 컬럼이 어떤 OpenDART 계정명 또는 yfinance 항목에서 오는지는 SQL 파일의 `COMMENT ON COLUMN`에 적혀 있습니다.
 
 ### 금액 컬럼
@@ -81,9 +81,6 @@
 
 ### 알려진 제약
 
-- `financial_statements.sql`의 트리거는 `update_updated_at_column()` 함수가 미리 있어야 생성됩니다. 이 함수는 SQL 파일에 들어 있지 않으므로 먼저 만들어야 합니다 ([설정 방법](../docs/SUPABASE_INTEGRATION.md)).
-- 테이블과 인덱스는 `IF NOT EXISTS`로 만들지만 `CREATE TRIGGER`는 그렇지 않으므로, 스크립트를 두 번 실행하면 트리거 단계에서 오류가 납니다.
-- 저장 서비스의 upsert는 충돌 기준 컬럼을 지정하지 않습니다. 그래서 같은 분기 데이터를 다시 저장하면 고유 제약 위반으로 실패하고, 연간 데이터(`quarter`가 `NULL`)는 고유 제약에 걸리지 않아 중복 행이 쌓일 수 있습니다.
 - 행 수준 보안(RLS)은 설정되어 있지 않습니다. 권장 설정은 [Supabase 연동 가이드](../docs/SUPABASE_INTEGRATION.md)를 참고하십시오.
 
 ---
@@ -93,7 +90,7 @@
 ### Overview
 
 - The database (Supabase PostgreSQL) is **optional** and is only used for six financial-statement tables. Quotes, charts, bonds, futures/options, basis and the account check all work without it.
-- The only schema file is [financial_statements.sql](financial_statements.sql).
+- The only schema file is [financial_statements.sql](financial_statements.sql). It is self-contained, including the helper function it needs, and safe to run more than once.
 - For the setup order and environment variables, see the [Supabase integration guide](../docs/SUPABASE_INTEGRATION.md).
 - The API that reads and writes these tables is `/api/financials/*` ([API reference](../docs/API.md)).
 - KIS access tokens are cached in a local file (`backend/.cache/kis_tokens.json`), not in the database.
@@ -123,9 +120,9 @@
 | `raw_data` | `JSONB` | Full raw line items |
 | `created_at`, `updated_at` | `TIMESTAMPTZ DEFAULT NOW()` | Creation and update times |
 
-- **Unique constraint:** `UNIQUE(symbol, year, quarter)` on every table (`<table>_unique`)
+- **Unique constraint:** `UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)` on every table (`<table>_unique`). Annual rows (`quarter` is `NULL`) are also limited to one per period, and the storage service upserts on these columns. Requires PostgreSQL 15 or later.
 - **Indexes:** on `symbol`, `year` and `updated_at` for every table (`idx_kr_bs_symbol`, `idx_us_cf_updated`, …)
-- **Triggers:** a `BEFORE UPDATE` trigger on every table sets `updated_at` via the `update_updated_at_column()` function.
+- **Triggers:** a `BEFORE UPDATE` trigger on every table sets `updated_at` via the `update_updated_at_column()` function, defined in the same SQL file.
 - **Comments:** the OpenDART account name or yfinance field behind each column is recorded in the SQL file's `COMMENT ON COLUMN` statements.
 
 ### Amount columns
@@ -165,7 +162,4 @@
 
 ### Known limitations
 
-- The triggers in `financial_statements.sql` need the `update_updated_at_column()` function to exist first. The SQL file does not define it, so create it beforehand ([how](../docs/SUPABASE_INTEGRATION.md)).
-- Tables and indexes use `IF NOT EXISTS`, but `CREATE TRIGGER` does not, so running the script twice fails at the trigger step.
-- The storage service's upsert does not name a conflict target. Re-storing the same quarter therefore fails on the unique constraint, while annual rows (`quarter` is `NULL`) are not caught by it and can be duplicated.
 - Row Level Security (RLS) is not configured. See the [Supabase integration guide](../docs/SUPABASE_INTEGRATION.md) for the recommended setting.

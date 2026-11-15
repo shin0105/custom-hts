@@ -1,7 +1,6 @@
 """API routes for Korean market endpoints."""
 
 from fastapi import APIRouter, HTTPException, Query
-from datetime import datetime
 from typing import Optional, Dict, Any, List
 from enum import Enum
 from ..models.korean import (
@@ -38,7 +37,13 @@ from ..services.option_parity import (
 )
 from ..services.korean_market import korean_market_service
 from ..utils.config import settings
+from ..utils.helpers import current_year_kst
 from ..integrations.opendart import opendart_client
+
+
+def _fiscal_year(year: Optional[int], years_back: int = 0) -> int:
+    """Resolve an omitted ``year`` per request, not once at import time."""
+    return year if year is not None else current_year_kst() - years_back
 
 
 class PeriodType(str, Enum):
@@ -101,7 +106,9 @@ async def get_korean_quote(symbol: str) -> KoreanStockQuote:
 @router.get("/valuation/{symbol}", response_model=KoreanValuationMetrics)
 async def get_korean_valuation(
     symbol: str,
-    year: int = Query(datetime.now().year - 1, description="Fiscal year"),
+    year: Optional[int] = Query(
+        None, description="Fiscal year (default: last year in KST)"
+    ),
     quarter: Optional[int] = Query(
         None, ge=1, le=4, description="Quarter (1-4)"
     ),
@@ -114,6 +121,7 @@ async def get_korean_valuation(
 
     Uses KDevelopers for price and OpenDART for financials.
     """
+    year = _fiscal_year(year, years_back=1)
     metrics = await korean_market_service.get_valuation_metrics(
         symbol, year, quarter, fs_div
     )
@@ -128,7 +136,9 @@ async def get_korean_valuation(
 @router.get("/financials/{symbol}", response_model=KoreanFinancialStatement)
 async def get_korean_financials(
     symbol: str,
-    year: int = Query(datetime.now().year, description="Fiscal year"),
+    year: Optional[int] = Query(
+        None, description="Fiscal year (default: this year in KST)"
+    ),
     quarter: Optional[int] = Query(
         None, ge=1, le=4, description="Quarter (1-4)"
     ),
@@ -146,6 +156,7 @@ async def get_korean_financials(
     Returns:
         Financial statement data
     """
+    year = _fiscal_year(year)
     financials = await korean_market_service.get_financials(
         symbol, year, quarter, use_cache
     )
@@ -222,7 +233,11 @@ async def get_korean_minute_candle(
         None, description="Trading date in YYYYMMDD (defaults to today in KST)"
     ),
     time_str: str = Query(
-        "", description="Time filter in HHMMSS (empty defaults to 09:00:00)"
+        "",
+        description=(
+            "Cut-off time in HHMMSS: candles from 09:00 up to this time "
+            "(empty defaults to 15:30:00)"
+        ),
     ),
 ) -> List[KoreanCandleData]:
     """
@@ -232,6 +247,8 @@ async def get_korean_minute_candle(
         symbol: Stock code
         interval: Minute interval (1, 5, 10, 30, or 60 minutes)
         limit: Number of candles to retrieve (1-500)
+        date: Trading date (YYYYMMDD, defaults to today in KST)
+        time_str: Cut-off time (HHMMSS); empty means 15:30:00
 
     Returns:
         List of minute candle data (OHLCV)
@@ -410,10 +427,9 @@ async def get_korean_bond_master(
     """
     Get domestic listed bond master list from local bond code master file.
 
-    Master source file should exist at one of:
-    - backend/data/kr_bond_master/bond_codes.csv
-    - backend/data/kr_bond_master/bond_codes.tsv
-    - backend/data/kr_bond_master/bond_codes.txt
+    Reads backend/data/kr_bond_master/ in this order: bond_code.mst
+    (downloaded), bond_codes.csv (export), any other *bond*code* file,
+    then the committed bond_codes.json snapshot.
     """
     result = await korean_market_service.get_bond_master(
         query=query,
@@ -948,7 +964,9 @@ async def get_korean_basis_options(
 @router.get("/financials/{symbol}/balance-sheet")
 async def get_balance_sheet(
     symbol: str,
-    year: int = Query(datetime.now().year - 1, description="Fiscal year"),
+    year: Optional[int] = Query(
+        None, description="Fiscal year (default: last year in KST)"
+    ),
     quarter: Optional[int] = Query(
         None,
         ge=1,
@@ -976,6 +994,7 @@ async def get_balance_sheet(
     Returns:
         Dictionary with all balance sheet line items
     """
+    year = _fiscal_year(year, years_back=1)
     balance_sheet = opendart_client.get_balance_sheet(symbol, year, quarter)
 
     if not balance_sheet:
@@ -996,7 +1015,9 @@ async def get_balance_sheet(
 @router.get("/financials/{symbol}/income-statement")
 async def get_income_statement(
     symbol: str,
-    year: int = Query(datetime.now().year - 1, description="Fiscal year"),
+    year: Optional[int] = Query(
+        None, description="Fiscal year (default: last year in KST)"
+    ),
     quarter: Optional[int] = Query(
         None,
         ge=1,
@@ -1025,6 +1046,7 @@ async def get_income_statement(
     Returns:
         Dictionary with all income statement line items
     """
+    year = _fiscal_year(year, years_back=1)
     income_statement = opendart_client.get_income_statement(
         symbol, year, quarter
     )
@@ -1047,7 +1069,7 @@ async def get_income_statement(
 @router.get("/financials/{symbol}/cash-flow")
 async def get_cash_flow(
     symbol: str,
-    year: int = Query(datetime.now().year - 1, description="Fiscal year"),
+    year: Optional[int] = Query(None, description="Fiscal year"),
     quarter: Optional[int] = Query(
         None,
         ge=1,
@@ -1056,37 +1078,20 @@ async def get_cash_flow(
     ),
 ) -> Dict[str, Any]:
     """
-    Get detailed cash flow statement for a Korean company.
+    Cash flow statements are not available.
 
-    Returns all cash flow statement line items including:
-    - Operating activities
-    - Investing activities
-    - Financing activities
-    - Net change in cash
-
-    Args:
-        symbol: Stock code (e.g., 005930 for Samsung Electronics)
-        year: Fiscal year (defaults to previous year)
-        quarter: Optional quarter (1-4)
-
-    Returns:
-        Dictionary with all cash flow line items
+    The OpenDART major-account APIs this backend uses (fnlttSinglAcnt,
+    fnlttMultiAcnt) return balance sheet and income statement accounts
+    only, so this route always answers 501 instead of an empty statement.
     """
-    cash_flow = opendart_client.get_cash_flow(symbol, year, quarter)
-
-    if not cash_flow:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Cash flow statement not found for {symbol} (year: {year}, quarter: {quarter})",
-        )
-
-    return {
-        "symbol": symbol,
-        "year": year,
-        "quarter": quarter,
-        "statement_type": "cash_flow",
-        "data": cash_flow,
-    }
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "Cash flow statements are not available: the OpenDART "
+            "major-account APIs return balance sheet and income statement "
+            "accounts only."
+        ),
+    )
 
 
 @router.get("/company/{symbol}")
@@ -1148,7 +1153,8 @@ async def get_disclosures(
     date range, and disclosure type.
 
     Args:
-        corp: Stock code or company name (optional, if omitted returns all companies)
+        corp: Stock code, DART company name or corp code (optional; if
+            omitted returns all companies). An unknown company is a 404.
         start: Start date (YYYY-MM-DD or YYYYMMDD)
         end: End date (YYYY-MM-DD or YYYYMMDD)
         kind: Disclosure type code (A-J)
@@ -1158,9 +1164,12 @@ async def get_disclosures(
     Returns:
         Dictionary with disclosure listings
     """
-    disclosures = opendart_client.get_disclosure_list(
-        corp=corp, start=start, end=end, kind=kind, final=final
-    )
+    try:
+        disclosures = opendart_client.get_disclosure_list(
+            corp=corp, start=start, end=end, kind=kind, final=final
+        )
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
     if disclosures is None:
         raise HTTPException(
@@ -1184,7 +1193,9 @@ async def get_disclosures(
 @router.get("/financials/{symbol}/all")
 async def get_all_financials(
     symbol: str,
-    year: int = Query(datetime.now().year - 1, description="Fiscal year"),
+    year: Optional[int] = Query(
+        None, description="Fiscal year (default: last year in KST)"
+    ),
     quarter: Optional[int] = Query(
         None,
         ge=1,
@@ -1196,14 +1207,11 @@ async def get_all_financials(
     ),
 ) -> Dict[str, Any]:
     """
-    Get comprehensive financial statements with all line items.
+    Get every major-account line item for a period.
 
-    Returns complete financial data including all accounts from:
-    - Balance Sheet
-    - Income Statement
-    - Cash Flow Statement
-
-    This is more comprehensive than the summary endpoint.
+    Returns the balance sheet (sj_div BS) and income statement (IS)
+    accounts from the OpenDART major-account APIs. They include no cash
+    flow items.
 
     Args:
         symbol: Stock code (e.g., 005930 for Samsung Electronics)
@@ -1214,6 +1222,8 @@ async def get_all_financials(
     Returns:
         Dictionary with comprehensive financial data
     """
+    year = _fiscal_year(year, years_back=1)
+
     # Determine report code
     if quarter:
         quarter_codes = {1: "11013", 2: "11012", 3: "11014", 4: "11011"}

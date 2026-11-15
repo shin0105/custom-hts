@@ -32,7 +32,7 @@ Custom HTS는 증권사 HTS(Home Trading System)처럼 시세·차트·재무 �
 
 | 화면 | 기능 |
 |------|------|
-| **국내주식** | 종목명·코드 검색(KIS 종목 마스터), 현재가·등락, 일/주/월봉과 분봉 캔들 차트, 밸류에이션 지표, 예상실적(컨센서스), DART 재무제표(재무상태표·손익계산서·현금흐름표) |
+| **국내주식** | 종목명·코드 검색(KIS 종목 마스터), 현재가·등락, 일/주/월봉과 분봉 캔들 차트, 밸류에이션 지표, 예상실적(컨센서스), DART 재무제표(재무상태표·손익계산서) |
 | **장내채권** | 채권 검색, 시세·호가 기반 수익률, 듀레이션·볼록성 등 위험 지표, 수익률 추이 |
 | **선물옵션** | 지수·주식 선물/옵션 검색(마스터), 현재가, 일봉/분봉 캔들 |
 | **베이시스** | 선물과 현물(지수·주식) 사이의 베이시스, 베이시스 추이, 풋콜 패리티로 본 선물 이론가 |
@@ -167,7 +167,7 @@ You run it on your own machine with **your own API keys**. The app is **read-onl
 
 | Page | What it does |
 |------|--------------|
-| **KR stocks** (국내주식) | Search by name or code (KIS stock master), live price and change, daily/weekly/monthly and minute candle charts, valuation metrics, earnings estimates (consensus), DART financial statements (balance sheet, income statement, cash flow) |
+| **KR stocks** (국내주식) | Search by name or code (KIS stock master), live price and change, daily/weekly/monthly and minute candle charts, valuation metrics, earnings estimates (consensus), DART financial statements (balance sheet, income statement) |
 | **KR bonds** (장내채권) | Bond search, yields derived from prices and order book, risk metrics such as duration and convexity, yield history |
 | **Futures & options** (선물옵션) | Index and single-stock futures/options search (master), current price, daily/minute candles |
 | **Basis** (베이시스) | Basis between futures and their underlying (index or stock), basis history, fair futures price implied by put-call parity |

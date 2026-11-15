@@ -45,8 +45,13 @@ class Settings:
     ]
 
     @classmethod
-    def validate(cls) -> None:
-        """Validate that required environment variables are set."""
+    def validate(cls) -> list[str]:
+        """Warn about missing required variables and return their names.
+
+        Supabase is optional (it only stores financial statements), so its
+        variables are not required. Setting just one of SUPABASE_URL and
+        SUPABASE_KEY is still reported, because that can never work.
+        """
         missing = []
         if not cls.HANTU_API_KEY:
             missing.append("HANTU_API_KEY")
@@ -54,10 +59,6 @@ class Settings:
             missing.append("HANTU_API_SECRET")
         if not cls.DART_API_KEY:
             missing.append("DART_API_KEY")
-        if not cls.SUPABASE_URL:
-            missing.append("SUPABASE_URL")
-        if not cls.SUPABASE_KEY:
-            missing.append("SUPABASE_KEY")
         if not cls.HANTU_ACCOUNT_NUMBER:
             missing.append("HANTU_ACCOUNT_NUMBER or HANTU_BANK_ACCOUNT")
 
@@ -69,6 +70,14 @@ class Settings:
                 "Please set these variables in your .env file "
                 "for full functionality."
             )
+
+        if bool(cls.SUPABASE_URL) != bool(cls.SUPABASE_KEY):
+            print(
+                "Warning: Set both SUPABASE_URL and SUPABASE_KEY to store "
+                "financial statements, or neither to run without Supabase."
+            )
+
+        return missing
 
 
 settings = Settings()

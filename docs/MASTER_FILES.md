@@ -25,7 +25,7 @@
 ### Git에 포함되는 파일
 
 - 내려받은 `.mst`와 내보낸 `.csv`는 `.gitignore`(`*.mst`, `*.csv`)에 걸려 커밋되지 않습니다. 실행 중이나 refresh 때 새로 받습니다.
-- 예외로 `backend/data/kr_bond_master/bond_codes.json`(채권 마스터를 JSON으로 내보낸 스냅샷)은 커밋되어 있습니다. 채권 refresh를 `output_format=json`으로 실행하면 이 파일이 바뀝니다.
+- 예외로 `backend/data/kr_bond_master/bond_codes.json`(채권 마스터를 JSON으로 내보낸 스냅샷)은 커밋되어 있어, 처음 클론한 뒤 내려받기 전에도 채권 목록과 필터를 쓸 수 있습니다. 채권 refresh를 `output_format=json`으로 실행하면 이 파일이 바뀝니다.
 - 선물옵션 refresh를 `output_format=json`으로 실행해 생기는 `*_fo_master.json`은 무시 대상이 아니니 커밋하지 마세요.
 
 ### 주식 마스터
@@ -78,13 +78,13 @@ master_file_manager.save_to_csv("kospi")
 | `enrich` | 행마다 장내채권 기본조회(`CTPF1114R`)를 호출해 이름·표면금리 등을 보강 (기본 `false`) |
 | `include_quotes` | 행마다 현재가를 함께 조회 (기본 `false`) |
 
-- 이 엔드포인트는 내려받지 않고 저장 위치의 파일만 읽습니다. `bond_code.mst` → `bond_codes.csv` → 그 밖의 `*bond*code*` 파일 순으로 찾습니다.
+- 이 엔드포인트는 내려받지 않고 저장 위치의 파일만 읽습니다. `bond_code.mst` → `bond_codes.csv` → 그 밖의 `*bond*code*` 파일 → 커밋된 `bond_codes.json` 순으로 찾습니다. `bond_codes.json`은 JSON으로 읽고, 내보낸 CSV·JSON에서도 유형·분류·날짜 필드를 그대로 씁니다.
 - `bond_code.mst`에서 읽는 필드: `bond_type`, `bond_class_code`, `pdno`(KR로 시작하는 12자리 표준코드), `name`, `bond_interest_class_code`, `listed_date`, `issue_date`, `maturity_date`
 - 응답에는 필터 선택지에 쓰는 `available_bond_types`와 유형별 분류코드·이자유형코드 건수도 들어 있습니다.
 
-`POST /api/korean/bonds/master/refresh`는 로컬 마스터가 없거나 `force=true`일 때 `bond_code.mst`를 받고, 파싱 결과를 `bond_codes.csv`(기본) 또는 `bond_codes.json`(`output_format=json`)으로 씁니다. `source_url`로 다운로드 주소를 바꿀 수 있습니다.
+`POST /api/korean/bonds/master/refresh`는 내려받은 `bond_code.mst`가 없거나 `force=true`일 때 `bond_code.mst`를 받고, 파싱 결과를 `bond_codes.csv`(기본) 또는 `bond_codes.json`(`output_format=json`)으로 씁니다. 내보낸 `bond_codes.csv`·`bond_codes.json`은 내려받은 파일로 치지 않으므로, 처음 클론한 뒤에는 `force` 없이 호출해도 내려받습니다. 내려받기에 실패하면 500을 돌려줍니다. `source_url`로 다운로드 주소를 바꿀 수 있습니다.
 
-처음 클론한 뒤에는 `force=true`로 한 번 실행해 `bond_code.mst`를 받으세요. 이 파일이 있어야 채권명·유형·날짜 필터가 제대로 동작하며, 커밋된 `bond_codes.json`만으로는 부족합니다.
+커밋된 `bond_codes.json`은 만든 시점의 스냅샷이므로, 그 뒤 상장된 채권을 보려면 refresh를 한 번 실행하세요.
 
 ```bash
 curl -X POST "http://localhost:8000/api/korean/bonds/master/refresh?force=true"
@@ -153,7 +153,7 @@ Files are downloaded without an API key from `https://new.real.download.dws.co.k
 ### What is in git
 
 - Downloaded `.mst` files and exported `.csv` files match `.gitignore` (`*.mst`, `*.csv`) and are not committed. They are fetched at runtime or on refresh.
-- The exception is `backend/data/kr_bond_master/bond_codes.json`, a committed JSON export of the bond master. Running the bond refresh with `output_format=json` overwrites it.
+- The exception is `backend/data/kr_bond_master/bond_codes.json`, a committed JSON export of the bond master, so the bond list and its filters work on a fresh clone before any download. Running the bond refresh with `output_format=json` overwrites it.
 - The `*_fo_master.json` files written by the futures/options refresh with `output_format=json` are not ignored; do not commit them.
 
 ### Stock master
@@ -206,13 +206,13 @@ master_file_manager.save_to_csv("kospi")
 | `enrich` | Call bond basic info (`CTPF1114R`) per row to add name, coupon and more (default `false`) |
 | `include_quotes` | Fetch the current price per row (default `false`) |
 
-- This endpoint never downloads; it reads files in the master folder in the order `bond_code.mst` → `bond_codes.csv` → any other `*bond*code*` file.
+- This endpoint never downloads; it reads files in the master folder in the order `bond_code.mst` → `bond_codes.csv` → any other `*bond*code*` file → the committed `bond_codes.json`. `bond_codes.json` is read as JSON, and the type, class and date fields are kept when reading an exported CSV or JSON.
 - Fields read from `bond_code.mst`: `bond_type`, `bond_class_code`, `pdno` (12-character standard code starting with KR), `name`, `bond_interest_class_code`, `listed_date`, `issue_date`, `maturity_date`
 - The response also carries `available_bond_types` and per-type counts of class and interest codes for the filter drop-downs.
 
-`POST /api/korean/bonds/master/refresh` downloads `bond_code.mst` when no local master exists or `force=true`, then writes the parsed rows to `bond_codes.csv` (default) or `bond_codes.json` (`output_format=json`). `source_url` overrides the download URL.
+`POST /api/korean/bonds/master/refresh` downloads `bond_code.mst` when no downloaded master exists or `force=true`, then writes the parsed rows to `bond_codes.csv` (default) or `bond_codes.json` (`output_format=json`). The exported `bond_codes.csv` and `bond_codes.json` do not count as a downloaded master, so on a fresh clone the call downloads even without `force`. If the download fails, it returns 500. `source_url` overrides the download URL.
 
-After a fresh clone, run it once with `force=true` to get `bond_code.mst`. Bond names, types and date filters only work properly with that file; the committed `bond_codes.json` alone is not enough.
+The committed `bond_codes.json` is a snapshot from when it was made; run the refresh once to see bonds listed since then.
 
 ```bash
 curl -X POST "http://localhost:8000/api/korean/bonds/master/refresh?force=true"

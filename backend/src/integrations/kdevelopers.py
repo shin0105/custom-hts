@@ -741,12 +741,14 @@ class KDevelopersClient:
         """
         Get daily/period candle chart data for a Korean stock.
 
-        API: [국내주식] 기본시세 > 국내주식기간별시세(일/주/월/년)[v1_국내주식-016]
+        API: [국내주식] 기본시세 > 주식현재가 일자별[v1_국내주식-010]
+        (inquire-daily-price, latest 30 rows)
 
         Args:
             symbol: Stock code (e.g., "005930" for Samsung Electronics)
             period: Period type - "D" (daily), "W" (weekly), "M" (monthly)
-            adjust_price: Whether to adjust for stock splits
+            adjust_price: Whether to use adjusted prices (수정주가) that
+                restate past prices for splits, mergers and rights issues
             limit: Number of candles to retrieve (default: 100)
 
         Returns:
@@ -760,7 +762,9 @@ class KDevelopersClient:
                 "FID_COND_MRKT_DIV_CODE": "J",  # Market division
                 "FID_INPUT_ISCD": symbol,  # Stock code
                 "FID_PERIOD_DIV_CODE": period,  # Period (D/W/M)
-                "FID_ORG_ADJ_PRC": "0" if adjust_price else "1",
+                # inquire-daily-price: 0 = 수정주가 미반영, 1 = 수정주가 반영.
+                # (inquire-daily-itemchartprice uses the opposite coding.)
+                "FID_ORG_ADJ_PRC": "1" if adjust_price else "0",
             }
 
             res = self._url_fetch(api_url, tr_id, "", params)
@@ -846,7 +850,8 @@ class KDevelopersClient:
             interval: Minute interval (1, 5, 10, 30, 60)
             limit: Number of candles to retrieve (default: 100)
             date: Trading date (YYYYMMDD). Defaults to today in KST if not provided.
-            time_str: Time filter (HHMMSS). Empty string returns all.
+            time_str: Cut-off time (HHMMSS). Candles from 09:00 up to this
+                time are returned; empty means 15:30:00 (the close).
             include_previous: Whether to include previous data (FID_PW_DATA_INCU_YN)
 
         Returns:
@@ -1454,16 +1459,25 @@ class KDevelopersClient:
             return []
 
     def get_account_balance(
-        self, account_number: str, account_product_code: str = "01"
+        self,
+        account_number: str,
+        account_product_code: str = "01",
+        max_pages: int = 20,
     ) -> Optional[Dict[str, Any]]:
         """
         Get account balance and positions.
 
         API: [국내주식] 계좌/잔고 > 주식잔고조회[v1_국내주식-006]
 
+        A real account returns at most 50 holdings per call, so follow the
+        continuation keys (CTX_AREA_FK100/NK100, header tr_cont F/M) until
+        the last page. A failed continuation returns None rather than a
+        silently truncated list.
+
         Args:
             account_number: Account number (8 digits)
             account_product_code: Account product code (default: "01")
+            max_pages: Upper bound on requests (50 holdings each)
 
         Returns:
             Dictionary containing balance info and positions, or None if fails
@@ -1472,85 +1486,104 @@ class KDevelopersClient:
             api_url = "/uapi/domestic-stock/v1/trading/inquire-balance"
             tr_id = "TTTC8434R"  # Real account (use VTTC8434R for mock)
 
-            params = {
-                "CANO": account_number,  # Account number
-                "ACNT_PRDT_CD": account_product_code,  # Account product code
-                "AFHR_FLPR_YN": "N",  # After-hours flag
-                "OFL_YN": "",  # Offline flag
-                "INQR_DVSN": "02",  # Inquiry division (01: total, 02: detail)
-                "UNPR_DVSN": "01",  # Unit price division
-                "FUND_STTL_ICLD_YN": "N",  # Fund settlement included
-                "FNCG_AMT_AUTO_RDPT_YN": "N",  # Financing auto redemption
-                "PRCS_DVSN": "01",  # Process division
-                "CTX_AREA_FK100": "",  # Continuation key
-                "CTX_AREA_NK100": "",  # Continuation key
-            }
-
-            res = self._url_fetch(api_url, tr_id, "", params)
-
-            if res.is_ok():
-                output1 = res.get_body().output1  # Stock positions
-
-                # Safely access output2 with proper handling for empty lists
-                raw_output2 = res.get_body().output2
-                if isinstance(raw_output2, list) and raw_output2:
-                    output2 = raw_output2[0]  # Account summary
-                else:
-                    output2 = (
-                        {}
-                    )  # Fallback when account summary is missing or empty
-
-                # Parse account balance
-                total_evaluation = safe_float(output2.get("tot_evlu_amt"))
-                cash_balance = safe_float(output2.get("dnca_tot_amt"))
-                total_purchase = safe_float(output2.get("pchs_amt_smtl_amt"))
-                profit_loss = safe_float(output2.get("evlu_pfls_smtl_amt"))
-                profit_loss_percent = safe_float(
-                    output2.get("tot_evlu_pfls_rt")
-                )
-
-                balance = KoreanAccountBalance(
-                    account_number=account_number,
-                    total_evaluation=total_evaluation,
-                    cash_balance=cash_balance,
-                    investment_amount=total_purchase,
-                    profit_loss=profit_loss,
-                    profit_loss_percent=profit_loss_percent,
-                    timestamp=datetime.now(),
-                )
-
-                # Parse stock positions
-                positions = []
-                for item in output1:
-                    symbol = item.get("pdno", "")
-                    if not symbol:
-                        continue
-
-                    position = KoreanStockPosition(
-                        symbol=symbol,
-                        name=item.get("prdt_name", symbol),
-                        quantity=safe_int(item.get("hldg_qty")),
-                        average_price=safe_float(item.get("pchs_avg_pric")),
-                        current_price=safe_float(item.get("prpr")),
-                        evaluation_amount=safe_float(item.get("evlu_amt")),
-                        profit_loss=safe_float(item.get("evlu_pfls_amt")),
-                        profit_loss_percent=safe_float(
-                            item.get("evlu_pfls_rt")
-                        ),
-                    )
-                    positions.append(position)
-
-                return {
-                    "balance": balance,
-                    "positions": positions,
+            holdings: List[Dict[str, Any]] = []
+            output2: Dict[str, Any] = {}
+            search_key = ""  # CTX_AREA_FK100
+            next_key = ""  # CTX_AREA_NK100
+            tr_cont = ""
+            for page in range(max(1, max_pages)):
+                params = {
+                    "CANO": account_number,  # Account number
+                    "ACNT_PRDT_CD": account_product_code,  # Product code
+                    "AFHR_FLPR_YN": "N",  # After-hours flag
+                    "OFL_YN": "",  # Offline flag
+                    "INQR_DVSN": "02",  # Inquiry division (02: by stock)
+                    "UNPR_DVSN": "01",  # Unit price division
+                    "FUND_STTL_ICLD_YN": "N",  # Fund settlement included
+                    "FNCG_AMT_AUTO_RDPT_YN": "N",  # Financing auto redemption
+                    "PRCS_DVSN": "01",  # Process division
+                    "CTX_AREA_FK100": search_key,  # Continuation condition
+                    "CTX_AREA_NK100": next_key,  # Continuation key
                 }
-            else:
-                res.print_error(api_url)
-                logger.error(
-                    "Failed to get account balance for account ****%s",
-                    account_number[-2:],
+
+                res = self._url_fetch(api_url, tr_id, tr_cont, params)
+                if not res.is_ok():
+                    res.print_error(api_url)
+                    logger.error(
+                        "Failed to get account balance (page %d) for "
+                        "account ****%s",
+                        page + 1,
+                        account_number[-2:],
+                    )
+                    return None
+
+                body = res.get_body()
+                holdings.extend(
+                    self._output_to_list(getattr(body, "output1", None))
                 )
-                return None
+                # Account summary; identical on every page, keep the first.
+                if not output2:
+                    output2 = (
+                        self._output_to_list(getattr(body, "output2", None))
+                        or [{}]
+                    )[0]
+
+                has_more = getattr(res.get_header(), "tr_cont", "") in (
+                    "F",
+                    "M",
+                )
+                search_key = getattr(body, "ctx_area_fk100", "") or ""
+                next_key = getattr(body, "ctx_area_nk100", "") or ""
+                if not has_more or not next_key.strip():
+                    break
+                tr_cont = "N"
+            else:
+                logger.warning(
+                    "Account balance still had more pages after %d requests; "
+                    "the position list is truncated.",
+                    max_pages,
+                )
+
+            # Parse account balance
+            total_evaluation = safe_float(output2.get("tot_evlu_amt"))
+            cash_balance = safe_float(output2.get("dnca_tot_amt"))
+            total_purchase = safe_float(output2.get("pchs_amt_smtl_amt"))
+            profit_loss = safe_float(output2.get("evlu_pfls_smtl_amt"))
+            profit_loss_percent = safe_float(output2.get("tot_evlu_pfls_rt"))
+
+            balance = KoreanAccountBalance(
+                account_number=account_number,
+                total_evaluation=total_evaluation,
+                cash_balance=cash_balance,
+                investment_amount=total_purchase,
+                profit_loss=profit_loss,
+                profit_loss_percent=profit_loss_percent,
+                timestamp=datetime.now(),
+            )
+
+            # Parse stock positions
+            positions = []
+            for item in holdings:
+                symbol = item.get("pdno", "")
+                if not symbol:
+                    continue
+
+                position = KoreanStockPosition(
+                    symbol=symbol,
+                    name=item.get("prdt_name", symbol),
+                    quantity=safe_int(item.get("hldg_qty")),
+                    average_price=safe_float(item.get("pchs_avg_pric")),
+                    current_price=safe_float(item.get("prpr")),
+                    evaluation_amount=safe_float(item.get("evlu_amt")),
+                    profit_loss=safe_float(item.get("evlu_pfls_amt")),
+                    profit_loss_percent=safe_float(item.get("evlu_pfls_rt")),
+                )
+                positions.append(position)
+
+            return {
+                "balance": balance,
+                "positions": positions,
+            }
 
         except Exception as e:
             logger.error(f"Exception in get_account_balance: {e}")

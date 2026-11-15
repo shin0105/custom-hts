@@ -29,7 +29,7 @@ Custom HTS 백엔드(FastAPI)가 제공하는 REST 엔드포인트 전체 목록
 | `404` | 데이터가 없거나 외부 API 조회에 실패함 |
 | `422` | FastAPI 파라미터 검증 실패 (범위 초과, 필수값 누락 등) |
 | `500` | 서버 설정 오류 또는 처리 중 예외 (예: 계좌번호 미설정) |
-| `503` | Supabase가 설정되지 않음 (`/api/financials/*` 조회 엔드포인트) |
+| `503` | Supabase가 설정되지 않음 (`/api/financials/*` 전체) |
 
 ### 엔드포인트
 
@@ -50,7 +50,7 @@ Custom HTS 백엔드(FastAPI)가 제공하는 REST 엔드포인트 전체 목록
 |---|---|---|---|
 | GET | `/api/korean/quote/{symbol}` | — | 현재가 시세 |
 | GET | `/api/korean/candle/{symbol}` | `period`=`D`/`W`/`M` (기본 `D`), `adjust_price` (기본 `true`), `limit` 1–500, `start_date`·`end_date` (YYYYMMDD) | 일·주·월 캔들(OHLCV) 목록 |
-| GET | `/api/korean/candle-minute/{symbol}` | `interval`=1/5/10/30/60 (기본 1), `limit` 1–500, `date` (YYYYMMDD, 기본 오늘 KST), `time_str` (HHMMSS) | 분봉 캔들 목록 |
+| GET | `/api/korean/candle-minute/{symbol}` | `interval`=1/5/10/30/60 (기본 1), `limit` 1–500, `date` (YYYYMMDD, 기본 오늘 KST), `time_str` (HHMMSS 기준시각, 09:00부터 이 시각까지. 기본 `153000`) | 분봉 캔들 목록 |
 | GET | `/api/korean/valuation/{symbol}` | `year` (기본 전년도), `quarter` 1–4, `fs_div`=`CFS`/`OFS` | PER·PBR·EPS·BPS 등 밸류에이션 지표 (KIS 가격 + OpenDART 재무) |
 | GET | `/api/korean/estimate-perform/{symbol}` | — | 추정실적 (KIS) |
 | GET | `/api/korean/stock-info/{pdno}` | `prdt_type_cd` (기본 `300` 주식·ETF·ETN·ELW, `301` 선물옵션, `302` 채권, `306` ELS) | 상품 기본정보 (KIS 원본 output 목록). ETN은 `Q`로 시작하는 코드 사용 |
@@ -104,10 +104,10 @@ Custom HTS 백엔드(FastAPI)가 제공하는 REST 엔드포인트 전체 목록
 | GET | `/api/korean/financials/{symbol}` | `year` (기본 올해), `quarter` 1–4, `use_cache` (호환용으로 남아 있으며 무시됨) | 주요 재무 요약 |
 | GET | `/api/korean/financials/{symbol}/balance-sheet` | `year` (기본 전년도), `quarter` 1–4 (생략 시 연간) | 재무상태표 계정별 금액 |
 | GET | `/api/korean/financials/{symbol}/income-statement` | `year`, `quarter` | 손익계산서 계정별 금액 |
-| GET | `/api/korean/financials/{symbol}/cash-flow` | `year`, `quarter` | 현금흐름표 계정별 금액 |
-| GET | `/api/korean/financials/{symbol}/all` | `year`, `quarter`, `fs_div`=`CFS` (연결)/`OFS` (별도) | 전체 재무제표 계정 목록 (`count`, `data`) |
+| GET | `/api/korean/financials/{symbol}/cash-flow` | `year`, `quarter` | 항상 `501`. OpenDART 주요계정 API에는 현금흐름표 항목이 없습니다 |
+| GET | `/api/korean/financials/{symbol}/all` | `year`, `quarter`, `fs_div`=`CFS` (연결)/`OFS` (별도) | 주요계정(재무상태표·손익계산서) 목록 (`count`, `data`) |
 | GET | `/api/korean/company/{symbol}` | — | 기업개황 (회사명, 대표자, 주소, 업종, 홈페이지, 설립일 등) |
-| GET | `/api/korean/disclosures` | `corp` (종목코드 또는 회사명), `start`·`end` (YYYY-MM-DD 또는 YYYYMMDD), `kind` (공시유형 `A`–`J`), `final` (기본 `true`), `limit` 1–1000 (기본 100) | 공시 목록 |
+| GET | `/api/korean/disclosures` | `corp` (종목코드, DART 회사명 또는 고유번호. 찾을 수 없으면 `404`), `start`·`end` (YYYY-MM-DD 또는 YYYYMMDD), `kind` (공시유형 `A`–`J`), `final` (기본 `true`), `limit` 1–1000 (기본 100) | 공시 목록 |
 
 #### 계좌
 
@@ -123,10 +123,10 @@ Custom HTS 백엔드(FastAPI)가 제공하는 REST 엔드포인트 전체 목록
 |---|---|---|---|
 | GET | `/api/us/quote/{symbol}` | — | 시세 |
 | GET | `/api/us/valuation/{symbol}` | — | PER·PBR·EPS·BPS 등 밸류에이션 지표 |
-| GET | `/api/us/financials/{symbol}` | `use_cache` (기본 `true`) | 재무제표 목록 |
+| GET | `/api/us/financials/{symbol}` | `use_cache` (무시됨) | 재무제표 목록 |
 | GET | `/api/us/candle/{symbol}` | `period`=`1d`/`5d`/`1mo`/`3mo`/`6mo`/`1y`/`2y`/`5y`/`10y`/`ytd`/`max` (기본 `1mo`), `interval`=`1m`/`5m`/`15m`/`30m`/`60m`/`1d`/`1wk`/`1mo` (기본 `1d`), `start`·`end` (YYYY-MM-DD) | 캔들(OHLCV) 목록 |
 
-`use_cache`는 Supabase의 `us_financials` 테이블을 캐시로 사용하려 하지만, 이 테이블은 [`database/financial_statements.sql`](../database/financial_statements.sql)에 정의되어 있지 않습니다. 따라서 기본 구성에서는 항상 yfinance에서 조회합니다.
+재무제표는 항상 yfinance에서 조회합니다. `use_cache`는 호환성 때문에 남아 있을 뿐 무시됩니다.
 
 #### 저장된 재무제표 (Supabase, 선택 사항)
 
@@ -135,7 +135,7 @@ OpenDART(국내)·yfinance(미국)에서 재무제표를 가져와 Supabase 테�
 | Method | Path | 주요 파라미터 | 반환 |
 |---|---|---|---|
 | POST | `/api/financials/korean/statements/insert` | 본문 `{"symbol", "year", "quarter"?}` | `korean_*` 3개 테이블 저장 결과 (`success`, `message`, `inserted`) |
-| POST | `/api/financials/korean/statements/batch-insert` | 본문 `{"symbols": [...], "year", "quarters"?: [...]}` (`quarters` 생략 시 연간만) | 종목·기간별 저장 결과 |
+| POST | `/api/financials/korean/statements/batch-insert` | 본문 `{"symbols": [...], "year", "quarters"?: [...]}` (`quarters` 생략 시 연간만) | 종목·기간별 저장 결과 (`success`, `stored`, `attempted`, `failed`, `results`) |
 | GET | `/api/financials/korean/balance-sheet/{symbol}` | `year`, `quarter` (선택 필터) | 저장된 행 (`success`, `data`, `count`) |
 | GET | `/api/financials/korean/income-statement/{symbol}` | `year`, `quarter` | 저장된 행 |
 | GET | `/api/financials/korean/cashflow/{symbol}` | `year`, `quarter` | 저장된 행 |
@@ -198,7 +198,7 @@ The complete list of REST endpoints served by the Custom HTS backend (FastAPI). 
 | `404` | No data, or the upstream API call failed |
 | `422` | FastAPI validation failed (out of range, missing required parameter, …) |
 | `500` | Server misconfiguration or an exception while processing (e.g. account number not set) |
-| `503` | Supabase not configured (`/api/financials/*` read endpoints) |
+| `503` | Supabase not configured (all of `/api/financials/*`) |
 
 ### Endpoints
 
@@ -219,7 +219,7 @@ The complete list of REST endpoints served by the Custom HTS backend (FastAPI). 
 |---|---|---|---|
 | GET | `/api/korean/quote/{symbol}` | — | Current quote |
 | GET | `/api/korean/candle/{symbol}` | `period`=`D`/`W`/`M` (default `D`), `adjust_price` (default `true`), `limit` 1–500, `start_date`·`end_date` (YYYYMMDD) | Daily/weekly/monthly candles (OHLCV) |
-| GET | `/api/korean/candle-minute/{symbol}` | `interval`=1/5/10/30/60 (default 1), `limit` 1–500, `date` (YYYYMMDD, default today in KST), `time_str` (HHMMSS) | Minute candles |
+| GET | `/api/korean/candle-minute/{symbol}` | `interval`=1/5/10/30/60 (default 1), `limit` 1–500, `date` (YYYYMMDD, default today in KST), `time_str` (HHMMSS cut-off: 09:00 up to this time, default `153000`) | Minute candles |
 | GET | `/api/korean/valuation/{symbol}` | `year` (default last year), `quarter` 1–4, `fs_div`=`CFS`/`OFS` | Valuation metrics such as PER, PBR, EPS, BPS (KIS price + OpenDART financials) |
 | GET | `/api/korean/estimate-perform/{symbol}` | — | Earnings estimates (KIS) |
 | GET | `/api/korean/stock-info/{pdno}` | `prdt_type_cd` (default `300` stock/ETF/ETN/ELW, `301` futures/options, `302` bonds, `306` ELS) | Product basic info (raw KIS output list). ETN codes start with `Q` |
@@ -273,10 +273,10 @@ The quote, order book and candle endpoints share `symbol` (required, futures/opt
 | GET | `/api/korean/financials/{symbol}` | `year` (default this year), `quarter` 1–4, `use_cache` (kept for compatibility, ignored) | Key financials summary |
 | GET | `/api/korean/financials/{symbol}/balance-sheet` | `year` (default last year), `quarter` 1–4 (omit for annual) | Balance sheet line items |
 | GET | `/api/korean/financials/{symbol}/income-statement` | `year`, `quarter` | Income statement line items |
-| GET | `/api/korean/financials/{symbol}/cash-flow` | `year`, `quarter` | Cash flow statement line items |
-| GET | `/api/korean/financials/{symbol}/all` | `year`, `quarter`, `fs_div`=`CFS` (consolidated)/`OFS` (separate) | Every statement line item (`count`, `data`) |
+| GET | `/api/korean/financials/{symbol}/cash-flow` | `year`, `quarter` | Always `501`: the OpenDART major-account APIs have no cash flow items |
+| GET | `/api/korean/financials/{symbol}/all` | `year`, `quarter`, `fs_div`=`CFS` (consolidated)/`OFS` (separate) | Major-account line items: balance sheet and income statement (`count`, `data`) |
 | GET | `/api/korean/company/{symbol}` | — | Company profile (name, CEO, address, industry, website, founding date, …) |
-| GET | `/api/korean/disclosures` | `corp` (stock code or company name), `start`·`end` (YYYY-MM-DD or YYYYMMDD), `kind` (disclosure type `A`–`J`), `final` (default `true`), `limit` 1–1000 (default 100) | Disclosure list |
+| GET | `/api/korean/disclosures` | `corp` (stock code, DART company name or corp code; `404` if not found), `start`·`end` (YYYY-MM-DD or YYYYMMDD), `kind` (disclosure type `A`–`J`), `final` (default `true`), `limit` 1–1000 (default 100) | Disclosure list |
 
 #### Account
 
@@ -292,10 +292,10 @@ The quote, order book and candle endpoints share `symbol` (required, futures/opt
 |---|---|---|---|
 | GET | `/api/us/quote/{symbol}` | — | Quote |
 | GET | `/api/us/valuation/{symbol}` | — | Valuation metrics such as PER, PBR, EPS, BPS |
-| GET | `/api/us/financials/{symbol}` | `use_cache` (default `true`) | Financial statements |
+| GET | `/api/us/financials/{symbol}` | `use_cache` (ignored) | Financial statements |
 | GET | `/api/us/candle/{symbol}` | `period`=`1d`/`5d`/`1mo`/`3mo`/`6mo`/`1y`/`2y`/`5y`/`10y`/`ytd`/`max` (default `1mo`), `interval`=`1m`/`5m`/`15m`/`30m`/`60m`/`1d`/`1wk`/`1mo` (default `1d`), `start`·`end` (YYYY-MM-DD) | Candles (OHLCV) |
 
-`use_cache` tries to use a Supabase table named `us_financials` as a cache, but that table is not defined in [`database/financial_statements.sql`](../database/financial_statements.sql). With the standard setup the data always comes from yfinance.
+Financial statements always come from yfinance. `use_cache` is kept only for compatibility and is ignored.
 
 #### Stored financial statements (Supabase, optional)
 
@@ -304,7 +304,7 @@ Fetch financial statements from OpenDART (Korea) or yfinance (US), store them in
 | Method | Path | Key parameters | Returns |
 |---|---|---|---|
 | POST | `/api/financials/korean/statements/insert` | Body `{"symbol", "year", "quarter"?}` | Result for the three `korean_*` tables (`success`, `message`, `inserted`) |
-| POST | `/api/financials/korean/statements/batch-insert` | Body `{"symbols": [...], "year", "quarters"?: [...]}` (annual only when `quarters` is omitted) | Result per symbol and period |
+| POST | `/api/financials/korean/statements/batch-insert` | Body `{"symbols": [...], "year", "quarters"?: [...]}` (annual only when `quarters` is omitted) | Result per symbol and period (`success`, `stored`, `attempted`, `failed`, `results`) |
 | GET | `/api/financials/korean/balance-sheet/{symbol}` | `year`, `quarter` (optional filters) | Stored rows (`success`, `data`, `count`) |
 | GET | `/api/financials/korean/income-statement/{symbol}` | `year`, `quarter` | Stored rows |
 | GET | `/api/financials/korean/cashflow/{symbol}` | `year`, `quarter` | Stored rows |
