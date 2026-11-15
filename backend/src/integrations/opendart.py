@@ -29,12 +29,17 @@ class OpenDartClient:
     - corpCode.xml: Download corp code mapping (requires processing)
     """
 
-    def __init__(self) -> None:
-        """Initialize the OPENDART API client."""
+    def __init__(self, corp_code_cache_path: Optional[Path] = None) -> None:
+        """Initialize the OPENDART API client.
+
+        Args:
+            corp_code_cache_path: Where the stock-code → corp-code snapshot
+                lives. Defaults to ``src/data/opendart/corp_codes.json``.
+        """
         self.api_key = settings.DART_API_KEY
         self.base_url = settings.DART_BASE_URL
         self._corp_code_cache: Dict[str, str] = {}
-        self._corp_code_cache_path = (
+        self._corp_code_cache_path = corp_code_cache_path or (
             Path(__file__).parent.parent
             / "data"
             / "opendart"
@@ -43,34 +48,18 @@ class OpenDartClient:
         self._corp_code_cache_ttl = timedelta(hours=24)
         self._corp_code_cache_loaded_at: Optional[datetime] = None
         self._corp_code_cache_path.parent.mkdir(parents=True, exist_ok=True)
-        self._load_common_corp_codes()
+        # The full corp code list is downloaded lazily (on a cache miss) to
+        # avoid startup network calls; the committed snapshot covers every
+        # listed company in the meantime.
         self._load_cached_corp_codes()
 
-    def _load_common_corp_codes(self) -> None:
-        """
-        Load commonly used corp codes for major Korean companies.
-
-        In production, you should download the full corp code list from DART.
-        This is a hardcoded mapping for demonstration purposes.
-        """
-        # Mapping of stock codes to DART corp codes for major companies
-        self._corp_code_cache = {
-            "005930": "00126380",  # Samsung Electronics
-            "000660": "00164742",  # SK Hynix
-            "035420": "00234904",  # NAVER
-            "035720": "00164779",  # Kakao
-            "051910": "00164384",  # LG Chemicals
-            "006400": "00126186",  # Samsung SDI
-            "207940": "00401731",  # Samsung Biologics
-            "068270": "00356370",  # Celltrion
-            "028260": "00164308",  # Samsung C&T
-            "012330": "00164485",  # Hyundai Mobis
-            "300120": "00164779",  # Korean company (placeholder - should be updated with correct code)
-        }
-
-        # Full corp code list is loaded lazily to avoid startup network calls.
-
     def _load_cached_corp_codes(self) -> None:
+        """Load the corp code snapshot from disk, however old it is.
+
+        Corp codes are permanent per company, so a stale snapshot is still
+        correct for every company it lists. Its age only decides whether a
+        lookup miss triggers a fresh download.
+        """
         if not self._corp_code_cache_path.exists():
             return
 
@@ -88,17 +77,18 @@ class OpenDartClient:
             if loaded_at.tzinfo is None:
                 loaded_at = loaded_at.replace(tzinfo=timezone.utc)
 
+            self._corp_code_cache.update(codes)
+            self._corp_code_cache_loaded_at = loaded_at
+
             if (
                 datetime.now(timezone.utc) - loaded_at
                 > self._corp_code_cache_ttl
             ):
                 logger.info(
-                    "Cached corp code list expired; will refresh on demand."
+                    "Cached corp code list is older than %s; using it and "
+                    "refreshing on the next lookup miss.",
+                    self._corp_code_cache_ttl,
                 )
-                return
-
-            self._corp_code_cache.update(codes)
-            self._corp_code_cache_loaded_at = loaded_at
         except Exception as e:
             logger.warning(f"Failed to load cached corp code list: {e}")
 
@@ -160,7 +150,7 @@ class OpenDartClient:
             True if successful, False otherwise
         """
         if not self.api_key:
-            print("DART API key not configured")
+            logger.warning("DART API key not configured")
             return False
 
         try:
