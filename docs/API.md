@@ -29,7 +29,7 @@ Custom HTS 백엔드(FastAPI)가 제공하는 REST 엔드포인트 전체 목록
 | `404` | 데이터가 없거나 외부 API 조회에 실패함 |
 | `422` | FastAPI 파라미터 검증 실패 (범위 초과, 필수값 누락 등) |
 | `500` | 서버 설정 오류 또는 처리 중 예외 (예: 계좌번호 미설정) |
-| `503` | Supabase가 설정되지 않음 (`/api/financials/*` 조회 엔드포인트) |
+| `503` | Supabase가 설정되지 않음 (`/api/financials/*` 전체) |
 
 ### 엔드포인트
 
@@ -135,7 +135,7 @@ OpenDART(국내)·yfinance(미국)에서 재무제표를 가져와 Supabase 테�
 | Method | Path | 주요 파라미터 | 반환 |
 |---|---|---|---|
 | POST | `/api/financials/korean/statements/insert` | 본문 `{"symbol", "year", "quarter"?}` | `korean_*` 3개 테이블 저장 결과 (`success`, `message`, `inserted`) |
-| POST | `/api/financials/korean/statements/batch-insert` | 본문 `{"symbols": [...], "year", "quarters"?: [...]}` (`quarters` 생략 시 연간만) | 종목·기간별 저장 결과 |
+| POST | `/api/financials/korean/statements/batch-insert` | 본문 `{"symbols": [...], "year", "quarters"?: [...]}` (`quarters` 생략 시 연간만) | 종목·기간별 저장 결과 (`success`, `stored`, `attempted`, `failed`, `results`) |
 | GET | `/api/financials/korean/balance-sheet/{symbol}` | `year`, `quarter` (선택 필터) | 저장된 행 (`success`, `data`, `count`) |
 | GET | `/api/financials/korean/income-statement/{symbol}` | `year`, `quarter` | 저장된 행 |
 | GET | `/api/financials/korean/cashflow/{symbol}` | `year`, `quarter` | 저장된 행 |
@@ -198,7 +198,7 @@ The complete list of REST endpoints served by the Custom HTS backend (FastAPI). 
 | `404` | No data, or the upstream API call failed |
 | `422` | FastAPI validation failed (out of range, missing required parameter, …) |
 | `500` | Server misconfiguration or an exception while processing (e.g. account number not set) |
-| `503` | Supabase not configured (`/api/financials/*` read endpoints) |
+| `503` | Supabase not configured (all of `/api/financials/*`) |
 
 ### Endpoints
 
@@ -304,7 +304,7 @@ Fetch financial statements from OpenDART (Korea) or yfinance (US), store them in
 | Method | Path | Key parameters | Returns |
 |---|---|---|---|
 | POST | `/api/financials/korean/statements/insert` | Body `{"symbol", "year", "quarter"?}` | Result for the three `korean_*` tables (`success`, `message`, `inserted`) |
-| POST | `/api/financials/korean/statements/batch-insert` | Body `{"symbols": [...], "year", "quarters"?: [...]}` (annual only when `quarters` is omitted) | Result per symbol and period |
+| POST | `/api/financials/korean/statements/batch-insert` | Body `{"symbols": [...], "year", "quarters"?: [...]}` (annual only when `quarters` is omitted) | Result per symbol and period (`success`, `stored`, `attempted`, `failed`, `results`) |
 | GET | `/api/financials/korean/balance-sheet/{symbol}` | `year`, `quarter` (optional filters) | Stored rows (`success`, `data`, `count`) |
 | GET | `/api/financials/korean/income-statement/{symbol}` | `year`, `quarter` | Stored rows |
 | GET | `/api/financials/korean/cashflow/{symbol}` | `year`, `quarter` | Stored rows |

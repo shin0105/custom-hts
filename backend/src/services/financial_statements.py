@@ -1,7 +1,7 @@
 """Service for managing financial statement data insertion to Supabase."""
 
 import logging
-from typing import Optional, Dict, Any
+from typing import Callable, Optional, Dict, Any, List
 from ..integrations.supabase_client import supabase_client
 from ..integrations.opendart import opendart_client
 from ..integrations.yfinance_client import yfinance_client
@@ -17,6 +17,22 @@ class FinancialStatementService:
         self.supabase = supabase_client
         self.opendart = opendart_client
         self.yfinance = yfinance_client
+
+    # Unique key of every statement table (database/financial_statements.sql).
+    # Annual rows have quarter NULL; the constraint is NULLS NOT DISTINCT, so
+    # they are updated in place like quarterly rows instead of piling up.
+    CONFLICT_COLUMNS = "symbol,year,quarter"
+
+    @property
+    def is_configured(self) -> bool:
+        """Whether a Supabase client is available to store statements."""
+        return self.supabase.client is not None
+
+    def _upsert(self, table: str, row: Dict[str, Any]) -> None:
+        """Insert or update one statement row keyed by symbol/year/quarter."""
+        self.supabase.client.table(table).upsert(
+            row, on_conflict=self.CONFLICT_COLUMNS
+        ).execute()
 
     # =========================================================================
     # Korean Financial Statements (OPENDART)
@@ -36,6 +52,10 @@ class FinancialStatementService:
         Returns:
             True if successful, False otherwise
         """
+        if not self.is_configured:
+            logger.error("Supabase client not initialized")
+            return False
+
         try:
             # Get raw balance sheet data from OPENDART
             raw_data = self.opendart.get_balance_sheet(symbol, year, quarter)
@@ -51,16 +71,7 @@ class FinancialStatementService:
                 symbol, year, quarter, raw_data
             )
 
-            # Insert to database
-            if not self.supabase.client:
-                logger.error("Supabase client not initialized")
-                return False
-
-            response = (
-                self.supabase.client.table("korean_balance_sheet")
-                .upsert(balance_sheet_data)
-                .execute()
-            )
+            self._upsert("korean_balance_sheet", balance_sheet_data)
 
             logger.info(
                 f"✅ Inserted Korean balance sheet: {symbol} ({year}Q{quarter or 'Annual'})"
@@ -85,6 +96,10 @@ class FinancialStatementService:
         Returns:
             True if successful, False otherwise
         """
+        if not self.is_configured:
+            logger.error("Supabase client not initialized")
+            return False
+
         try:
             # Get raw income statement data from OPENDART
             raw_data = self.opendart.get_income_statement(
@@ -102,16 +117,7 @@ class FinancialStatementService:
                 symbol, year, quarter, raw_data
             )
 
-            # Insert to database
-            if not self.supabase.client:
-                logger.error("Supabase client not initialized")
-                return False
-
-            response = (
-                self.supabase.client.table("korean_income_statement")
-                .upsert(income_statement_data)
-                .execute()
-            )
+            self._upsert("korean_income_statement", income_statement_data)
 
             logger.info(
                 f"✅ Inserted Korean income statement: {symbol} ({year}Q{quarter or 'Annual'})"
@@ -136,6 +142,10 @@ class FinancialStatementService:
         Returns:
             True if successful, False otherwise
         """
+        if not self.is_configured:
+            logger.error("Supabase client not initialized")
+            return False
+
         try:
             # Get raw cash flow data from OPENDART
             raw_data = self.opendart.get_cash_flow(symbol, year, quarter)
@@ -151,16 +161,7 @@ class FinancialStatementService:
                 symbol, year, quarter, raw_data
             )
 
-            # Insert to database
-            if not self.supabase.client:
-                logger.error("Supabase client not initialized")
-                return False
-
-            response = (
-                self.supabase.client.table("korean_cashflow_statement")
-                .upsert(cashflow_data)
-                .execute()
-            )
+            self._upsert("korean_cashflow_statement", cashflow_data)
 
             logger.info(
                 f"✅ Inserted Korean cash flow: {symbol} ({year}Q{quarter or 'Annual'})"
@@ -222,6 +223,10 @@ class FinancialStatementService:
         Returns:
             True if successful, False otherwise
         """
+        if not self.is_configured:
+            logger.error("Supabase client not initialized")
+            return False
+
         try:
             import yfinance as yf
 
@@ -252,16 +257,7 @@ class FinancialStatementService:
                 symbol, year, quarter, balance_sheet_df, target_col
             )
 
-            # Insert to database
-            if not self.supabase.client:
-                logger.error("Supabase client not initialized")
-                return False
-
-            response = (
-                self.supabase.client.table("us_balance_sheet")
-                .upsert(balance_sheet_data)
-                .execute()
-            )
+            self._upsert("us_balance_sheet", balance_sheet_data)
 
             logger.info(
                 f"✅ Inserted US balance sheet: {symbol} ({year}Q{quarter or 'Annual'})"
@@ -286,6 +282,10 @@ class FinancialStatementService:
         Returns:
             True if successful, False otherwise
         """
+        if not self.is_configured:
+            logger.error("Supabase client not initialized")
+            return False
+
         try:
             import yfinance as yf
 
@@ -317,16 +317,7 @@ class FinancialStatementService:
                 symbol, year, quarter, financials_df, target_col, info
             )
 
-            # Insert to database
-            if not self.supabase.client:
-                logger.error("Supabase client not initialized")
-                return False
-
-            response = (
-                self.supabase.client.table("us_income_statement")
-                .upsert(income_statement_data)
-                .execute()
-            )
+            self._upsert("us_income_statement", income_statement_data)
 
             logger.info(
                 f"✅ Inserted US income statement: {symbol} ({year}Q{quarter or 'Annual'})"
@@ -351,6 +342,10 @@ class FinancialStatementService:
         Returns:
             True if successful, False otherwise
         """
+        if not self.is_configured:
+            logger.error("Supabase client not initialized")
+            return False
+
         try:
             import yfinance as yf
 
@@ -381,16 +376,7 @@ class FinancialStatementService:
                 symbol, year, quarter, cashflow_df, target_col
             )
 
-            # Insert to database
-            if not self.supabase.client:
-                logger.error("Supabase client not initialized")
-                return False
-
-            response = (
-                self.supabase.client.table("us_cashflow_statement")
-                .upsert(cashflow_data)
-                .execute()
-            )
+            self._upsert("us_cashflow_statement", cashflow_data)
 
             logger.info(
                 f"✅ Inserted US cash flow: {symbol} ({year}Q{quarter or 'Annual'})"
@@ -433,6 +419,66 @@ class FinancialStatementService:
         )
 
         return results
+
+    # =========================================================================
+    # Batch insertion
+    # =========================================================================
+
+    def batch_insert_korean_statements(
+        self, symbols: List[str], year: int, quarters: Optional[List[int]]
+    ) -> Dict[str, Any]:
+        """Insert Korean statements for several symbols and periods."""
+        return self._batch_insert(
+            self.insert_all_korean_statements, symbols, year, quarters
+        )
+
+    def batch_insert_us_statements(
+        self, symbols: List[str], year: int, quarters: Optional[List[int]]
+    ) -> Dict[str, Any]:
+        """Insert US statements for several symbols and periods."""
+        return self._batch_insert(
+            self.insert_all_us_statements, symbols, year, quarters
+        )
+
+    @staticmethod
+    def _batch_insert(
+        insert_all: Callable[[str, int, Optional[int]], Dict[str, bool]],
+        symbols: List[str],
+        year: int,
+        quarters: Optional[List[int]],
+    ) -> Dict[str, Any]:
+        """Run insert_all per symbol/period and summarise honestly.
+
+        ``success`` is true only when every requested symbol/period stored at
+        least one statement (the same rule as the single-insert endpoint).
+        """
+        periods: List[Optional[int]] = (
+            [None] if quarters is None else list(quarters)
+        )
+        results: Dict[str, Dict[str, Dict[str, bool]]] = {}
+        stored = 0
+        attempted = 0
+        failed_periods: List[str] = []
+
+        for symbol in symbols:
+            symbol_results: Dict[str, Dict[str, bool]] = {}
+            for quarter in periods:
+                period_key = f"{year}Q{quarter}" if quarter else str(year)
+                outcome = insert_all(symbol, year, quarter)
+                symbol_results[period_key] = outcome
+                stored += sum(1 for ok in outcome.values() if ok)
+                attempted += len(outcome)
+                if not any(outcome.values()):
+                    failed_periods.append(f"{symbol} {period_key}")
+            results[symbol] = symbol_results
+
+        return {
+            "success": bool(results) and not failed_periods,
+            "stored": stored,
+            "attempted": attempted,
+            "failed": failed_periods,
+            "results": results,
+        }
 
     # =========================================================================
     # Helper Methods - Korean Data Parsing

@@ -39,7 +39,7 @@
 | `raw_data` | `JSONB` | 원본 계정 데이터 전체 |
 | `created_at`, `updated_at` | `TIMESTAMPTZ DEFAULT NOW()` | 생성·수정 시각 |
 
-- **고유 제약:** 테이블마다 `UNIQUE(symbol, year, quarter)` (`<테이블명>_unique`)
+- **고유 제약:** 테이블마다 `UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)` (`<테이블명>_unique`). 연간 데이터(`quarter`가 `NULL`)도 기간마다 한 행만 허용되며, 저장 서비스는 이 컬럼을 기준으로 upsert합니다. PostgreSQL 15 이상이 필요합니다.
 - **인덱스:** 테이블마다 `symbol`, `year`, `updated_at`에 인덱스 (`idx_kr_bs_symbol`, `idx_us_cf_updated` 등)
 - **트리거:** 테이블마다 `BEFORE UPDATE` 트리거가 `update_updated_at_column()` 함수(같은 SQL 파일에 정의)로 `updated_at`을 갱신합니다.
 - **주석:** 각 컬럼이 어떤 OpenDART 계정명 또는 yfinance 항목에서 오는지는 SQL 파일의 `COMMENT ON COLUMN`에 적혀 있습니다.
@@ -81,7 +81,6 @@
 
 ### 알려진 제약
 
-- 저장 서비스의 upsert는 충돌 기준 컬럼을 지정하지 않습니다. 그래서 같은 분기 데이터를 다시 저장하면 고유 제약 위반으로 실패하고, 연간 데이터(`quarter`가 `NULL`)는 고유 제약에 걸리지 않아 중복 행이 쌓일 수 있습니다.
 - 행 수준 보안(RLS)은 설정되어 있지 않습니다. 권장 설정은 [Supabase 연동 가이드](../docs/SUPABASE_INTEGRATION.md)를 참고하십시오.
 
 ---
@@ -121,7 +120,7 @@
 | `raw_data` | `JSONB` | Full raw line items |
 | `created_at`, `updated_at` | `TIMESTAMPTZ DEFAULT NOW()` | Creation and update times |
 
-- **Unique constraint:** `UNIQUE(symbol, year, quarter)` on every table (`<table>_unique`)
+- **Unique constraint:** `UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)` on every table (`<table>_unique`). Annual rows (`quarter` is `NULL`) are also limited to one per period, and the storage service upserts on these columns. Requires PostgreSQL 15 or later.
 - **Indexes:** on `symbol`, `year` and `updated_at` for every table (`idx_kr_bs_symbol`, `idx_us_cf_updated`, …)
 - **Triggers:** a `BEFORE UPDATE` trigger on every table sets `updated_at` via the `update_updated_at_column()` function, defined in the same SQL file.
 - **Comments:** the OpenDART account name or yfinance field behind each column is recorded in the SQL file's `COMMENT ON COLUMN` statements.
@@ -163,5 +162,4 @@
 
 ### Known limitations
 
-- The storage service's upsert does not name a conflict target. Re-storing the same quarter therefore fails on the unique constraint, while annual rows (`quarter` is `NULL`) are not caught by it and can be duplicated.
 - Row Level Security (RLS) is not configured. See the [Supabase integration guide](../docs/SUPABASE_INTEGRATION.md) for the recommended setting.

@@ -37,7 +37,7 @@ KIS 접근 토큰은 Supabase가 아니라 로컬 JSON 파일 `backend/.cache/ki
 ### 설정 방법
 
 1. [Supabase](https://supabase.com)에서 프로젝트를 만듭니다.
-2. [`database/financial_statements.sql`](../database/financial_statements.sql) 전체를 SQL Editor에서 실행합니다. 트리거 함수(`update_updated_at_column()`)까지 이 파일 안에 정의되어 있어 따로 준비할 것이 없고, 이미 테이블이 있는 데이터베이스에서 다시 실행해도 됩니다.
+2. [`database/financial_statements.sql`](../database/financial_statements.sql) 전체를 SQL Editor에서 실행합니다. 트리거 함수(`update_updated_at_column()`)까지 이 파일 안에 정의되어 있어 따로 준비할 것이 없고, 이미 테이블이 있는 데이터베이스에서 다시 실행해도 됩니다. PostgreSQL 15 이상이 필요하며 현재 Supabase 프로젝트는 모두 해당합니다. 이전 버전 스크립트로 만든 테이블은 다시 실행하면 고유 제약이 갱신되고, 중복된 연간 행은 가장 최근에 갱신된 행만 남습니다.
 3. (권장) 행 수준 보안(RLS)을 켭니다. 정책 없이 RLS를 켜 두면 공개(anon/publishable) 키로는 이 테이블에 접근할 수 없고, RLS를 우회하는 서버용 키를 쓰는 백엔드만 읽고 쓸 수 있습니다.
 
    ```sql
@@ -79,15 +79,20 @@ KIS 접근 토큰은 Supabase가 아니라 로컬 JSON 파일 `backend/.cache/ki
 |---|---|
 | 서버 시작 | 누락된 환경 변수 경고(또는 클라이언트 초기화 실패 메시지)가 출력되지만 서버는 정상적으로 뜹니다 |
 | `GET /api/financials/...` | `503` `Database connection not available` |
-| `POST /api/financials/*/statements/insert` | `200`, `success: false`, `inserted`의 값이 모두 `false`. 원천 데이터는 먼저 조회하며, 메시지는 `No data available ...`로 표시됩니다 |
-| `POST /api/financials/*/statements/batch-insert` | `200`, `success: true`이지만 종목·기간별 결과가 모두 `false` |
+| `POST /api/financials/*/statements/insert`, `.../batch-insert` | `503` `Database connection not available`. 원천 데이터(OpenDART·yfinance)는 조회하지 않습니다 |
 | 그 밖의 모든 엔드포인트 | 영향 없음 |
 
-Supabase는 설정했지만 테이블을 만들지 않았다면, 조회 엔드포인트는 PostgREST 오류 메시지와 함께 `500`을 반환하고 저장 엔드포인트는 `false`를 반환합니다.
+Supabase는 설정했지만 테이블을 만들지 않았다면, 조회 엔드포인트는 PostgREST 오류 메시지와 함께 `500`을 반환하고 저장 엔드포인트는 해당 재무제표를 `false`로 표시합니다.
+
+### 저장 동작
+
+- 저장은 `(symbol, year, quarter)`를 기준으로 upsert합니다. 같은 기간을 다시 저장하면 기존 행을 갱신하며, 연간 데이터(`quarter`가 `NULL`)도 마찬가지입니다.
+- `insert`의 `success`는 재무제표 3종 중 하나라도 저장되면 `true`입니다.
+- `batch-insert`는 요청한 모든 종목·기간에서 하나 이상 저장됐을 때만 `success: true`이며, 저장 건수(`stored`/`attempted`), 아무것도 저장하지 못한 종목·기간 목록(`failed`), 재무제표별 결과(`results`)를 함께 돌려줍니다.
 
 ### 알려진 제약
 
-중복 저장 시 동작, 국내 금액 단위 등 스키마 관련 제약은 [database/schema.md](../database/schema.md#알려진-제약)에 정리되어 있습니다.
+스키마 관련 제약은 [database/schema.md](../database/schema.md#알려진-제약)에, 국내 금액 단위는 [같은 문서의 단위 항목](../database/schema.md#단위)에 정리되어 있습니다.
 
 ---
 
@@ -124,7 +129,7 @@ KIS access tokens are cached in a local JSON file, `backend/.cache/kis_tokens.js
 ### Setup
 
 1. Create a project on [Supabase](https://supabase.com).
-2. Run all of [`database/financial_statements.sql`](../database/financial_statements.sql) in the SQL Editor. It defines everything it needs, including the trigger function (`update_updated_at_column()`), and is safe to run again on a database that already has the tables.
+2. Run all of [`database/financial_statements.sql`](../database/financial_statements.sql) in the SQL Editor. It defines everything it needs, including the trigger function (`update_updated_at_column()`), and is safe to run again on a database that already has the tables. It needs PostgreSQL 15 or later, which every current Supabase project runs. Re-running it on tables made by an older version of the script updates the unique constraint and keeps only the most recently updated row of any duplicated annual rows.
 3. (Recommended) Turn on Row Level Security. With RLS on and no policies, the public (anon/publishable) key cannot touch these tables; only the backend, using a server key that bypasses RLS, can read and write them.
 
    ```sql
@@ -166,12 +171,17 @@ If `SUPABASE_URL` is empty or the client cannot be created (for example, the `.e
 |---|---|
 | Server start | Prints a missing-environment-variable warning (or a client-initialisation error), then starts normally |
 | `GET /api/financials/...` | `503` `Database connection not available` |
-| `POST /api/financials/*/statements/insert` | `200`, `success: false`, every value in `inserted` is `false`. The source data is still fetched first, and the message reads `No data available ...` |
-| `POST /api/financials/*/statements/batch-insert` | `200`, `success: true`, but every per-symbol, per-period result is `false` |
+| `POST /api/financials/*/statements/insert`, `.../batch-insert` | `503` `Database connection not available`. The source data (OpenDART, yfinance) is not fetched |
 | Every other endpoint | Unaffected |
 
-If Supabase is configured but the tables were not created, the read endpoints return `500` with the PostgREST error message and the store endpoints return `false`.
+If Supabase is configured but the tables were not created, the read endpoints return `500` with the PostgREST error message and the store endpoints mark the affected statements `false`.
+
+### How storing works
+
+- Rows are upserted on `(symbol, year, quarter)`. Storing the same period again updates the existing row, including annual rows (`quarter` is `NULL`).
+- `success` from `insert` is `true` when at least one of the three statements was stored.
+- `batch-insert` returns `success: true` only when every requested symbol and period stored at least one statement. It also returns the statement counts (`stored`/`attempted`), the symbol/period pairs that stored nothing (`failed`), and per-statement `results`.
 
 ### Known limitations
 
-Schema-level limitations, such as what happens when the same period is stored twice and the unit of Korean amounts, are listed in [database/schema.md](../database/schema.md#known-limitations).
+Schema-level limitations are listed in [database/schema.md](../database/schema.md#known-limitations), and the unit of Korean amounts under [Units](../database/schema.md#units) in the same document.

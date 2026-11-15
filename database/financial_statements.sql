@@ -7,8 +7,11 @@
 -- - US values (yfinance): Actual USD amounts (e.g., 100000000 = $100M)
 -- - Korean values (OPENDART): Millions of KRW (e.g., 100000 = 100B KRW = 100,000 백만원)
 -- - All numeric fields use NUMERIC(20, 2) to handle large values and decimal precision
+-- - Requires PostgreSQL 15+ (UNIQUE NULLS NOT DISTINCT); every current
+--   Supabase project qualifies.
 --
--- VERSION: 2.1 - Self-contained trigger function, re-runnable triggers
+-- VERSION: 2.1 - Self-contained trigger function, re-runnable triggers,
+--                annual rows (quarter NULL) covered by the unique key
 -- DATE: November 2026
 
 -- ========================================================================
@@ -77,7 +80,7 @@ CREATE TABLE IF NOT EXISTS korean_balance_sheet (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    CONSTRAINT korean_balance_sheet_unique UNIQUE(symbol, year, quarter)
+    CONSTRAINT korean_balance_sheet_unique UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)
 );
 
 -- US Balance Sheet
@@ -131,7 +134,7 @@ CREATE TABLE IF NOT EXISTS us_balance_sheet (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    CONSTRAINT us_balance_sheet_unique UNIQUE(symbol, year, quarter)
+    CONSTRAINT us_balance_sheet_unique UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)
 );
 
 -- ========================================================================
@@ -181,7 +184,7 @@ CREATE TABLE IF NOT EXISTS korean_income_statement (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    CONSTRAINT korean_income_statement_unique UNIQUE(symbol, year, quarter)
+    CONSTRAINT korean_income_statement_unique UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)
 );
 
 -- US Income Statement
@@ -228,7 +231,7 @@ CREATE TABLE IF NOT EXISTS us_income_statement (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    CONSTRAINT us_income_statement_unique UNIQUE(symbol, year, quarter)
+    CONSTRAINT us_income_statement_unique UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)
 );
 
 -- ========================================================================
@@ -281,7 +284,7 @@ CREATE TABLE IF NOT EXISTS korean_cashflow_statement (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    CONSTRAINT korean_cashflow_statement_unique UNIQUE(symbol, year, quarter)
+    CONSTRAINT korean_cashflow_statement_unique UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)
 );
 
 -- US Cash Flow Statement
@@ -334,8 +337,61 @@ CREATE TABLE IF NOT EXISTS us_cashflow_statement (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    CONSTRAINT us_cashflow_statement_unique UNIQUE(symbol, year, quarter)
+    CONSTRAINT us_cashflow_statement_unique UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)
 );
+
+-- ========================================================================
+-- UPGRADE TABLES CREATED BY OLDER VERSIONS OF THIS SCRIPT
+-- ========================================================================
+-- Older versions used UNIQUE(symbol, year, quarter), which treats every NULL
+-- quarter as distinct, so annual rows piled up instead of being updated.
+-- For each table still on that constraint: keep only the most recently
+-- updated annual row per (symbol, year), then switch the constraint to
+-- NULLS NOT DISTINCT. Tables that are already up to date are left alone.
+
+DO $$
+DECLARE
+    t TEXT;
+BEGIN
+    FOREACH t IN ARRAY ARRAY[
+        'korean_balance_sheet',
+        'us_balance_sheet',
+        'korean_income_statement',
+        'us_income_statement',
+        'korean_cashflow_statement',
+        'us_cashflow_statement'
+    ] LOOP
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint c
+            JOIN pg_index i ON i.indexrelid = c.conindid
+            WHERE c.conrelid = t::regclass
+              AND c.conname = t || '_unique'
+              AND i.indnullsnotdistinct
+        ) THEN
+            EXECUTE format(
+                'DELETE FROM %1$I a USING %1$I b
+                 WHERE a.symbol = b.symbol
+                   AND a.year = b.year
+                   AND a.quarter IS NULL
+                   AND b.quarter IS NULL
+                   AND (COALESCE(a.updated_at, ''-infinity''), a.id)
+                     < (COALESCE(b.updated_at, ''-infinity''), b.id)',
+                t
+            );
+            EXECUTE format(
+                'ALTER TABLE %I DROP CONSTRAINT IF EXISTS %I',
+                t, t || '_unique'
+            );
+            EXECUTE format(
+                'ALTER TABLE %I ADD CONSTRAINT %I
+                 UNIQUE NULLS NOT DISTINCT (symbol, year, quarter)',
+                t, t || '_unique'
+            );
+        END IF;
+    END LOOP;
+END
+$$;
 
 -- ========================================================================
 -- INDEXES
