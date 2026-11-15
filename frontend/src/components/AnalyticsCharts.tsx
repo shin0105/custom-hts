@@ -19,7 +19,16 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { chartTheme, isoDate, shortDate } from './chartTheme';
+import {
+  fontSize,
+  fontWeight,
+  radius,
+  shadow,
+  space,
+  tabularNums,
+} from '../theme/tokens';
+import { formatYyyymmdd } from '../utils/format';
+import { chartTheme, shortDate } from './chartTheme';
 
 type TooltipEntry = {
   name?: string;
@@ -48,34 +57,41 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
     <div
       style={{
         backgroundColor: chartTheme.surface,
-        border: `1px solid ${chartTheme.grid}`,
-        borderRadius: '6px',
-        padding: '8px 10px',
-        fontSize: '12px',
+        border: `1px solid ${chartTheme.axis}`,
+        borderRadius: radius.md,
+        padding: `${space.sm} ${space.md}`,
+        fontSize: fontSize.sm,
         color: chartTheme.ink,
-        boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+        boxShadow: shadow.raised,
+        ...tabularNums,
       }}
     >
-      <div style={{ color: chartTheme.inkMuted, marginBottom: '4px' }}>
-        {label ? isoDate(label) : ''}
+      <div style={{ color: chartTheme.inkMuted, marginBottom: space.xs }}>
+        {label ? formatYyyymmdd(label) : ''}
       </div>
       {payload
         .filter((entry) => entry.value !== null && entry.value !== undefined)
         .map((entry) => (
           <div
             key={String(entry.dataKey)}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{ display: 'flex', alignItems: 'center', gap: space.sm }}
           >
             <span
               style={{
-                width: '8px',
-                height: '8px',
+                width: space.sm,
+                height: space.sm,
                 borderRadius: '2px',
                 backgroundColor: colorFor?.(entry) ?? entry.color,
               }}
             />
             <span style={{ color: chartTheme.inkSecondary }}>{entry.name}</span>
-            <strong style={{ marginLeft: 'auto', paddingLeft: '12px' }}>
+            <strong
+              style={{
+                marginLeft: 'auto',
+                paddingLeft: space.md,
+                fontWeight: fontWeight.semibold,
+              }}
+            >
               {format(entry.value as number)}
             </strong>
           </div>
@@ -85,10 +101,10 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
 };
 
 const legendText = (value: string) => (
-  <span style={{ color: chartTheme.inkSecondary, fontSize: '12px' }}>{value}</span>
+  <span style={{ color: chartTheme.inkSecondary, fontSize: fontSize.sm }}>{value}</span>
 );
 
-const axisTick = { fontSize: 12, fill: chartTheme.inkMuted };
+const axisTick = { fontSize: fontSize.sm, fill: chartTheme.inkMuted };
 
 export type TwoLinePoint = {
   date: string;
@@ -124,7 +140,7 @@ export const TwoLineChart: React.FC<TwoLineChartProps> = ({
         dataKey="date"
         tick={axisTick}
         tickLine={false}
-        axisLine={{ stroke: chartTheme.grid }}
+        axisLine={{ stroke: chartTheme.axis }}
         minTickGap={32}
         tickFormatter={shortDate}
       />
@@ -217,7 +233,7 @@ export const SignedBarChart: React.FC<SignedBarChartProps> = ({
           dataKey="date"
           tick={axisTick}
           tickLine={false}
-          axisLine={{ stroke: chartTheme.grid }}
+          axisLine={{ stroke: chartTheme.axis }}
           minTickGap={32}
           tickFormatter={shortDate}
         />
@@ -232,7 +248,7 @@ export const SignedBarChart: React.FC<SignedBarChartProps> = ({
           content={
             <ChartTooltip format={format} colorFor={(entry) => colorOf(entry.value)} />
           }
-          cursor={{ fill: 'rgba(107,114,128,0.08)' }}
+          cursor={{ fill: chartTheme.inkMuted, fillOpacity: 0.08 }}
         />
         <Legend
           verticalAlign="top"

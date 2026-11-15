@@ -14,15 +14,6 @@ import type {
 
 const API_BASE_URL = '/api';
 
-/** Pull the backend's `detail` message out of an axios error, if any. */
-export const apiErrorMessage = (err: unknown, fallback: string): string => {
-  if (axios.isAxiosError(err)) {
-    const detail = err.response?.data?.detail;
-    if (typeof detail === 'string' && detail) return detail;
-  }
-  return err instanceof Error && err.message ? err.message : fallback;
-};
-
 export const koreanAnalyticsService = {
   /**
    * Stocks and indexes that have listed futures.
