@@ -548,47 +548,6 @@ class OpenDartClient:
 
         return income_statement
 
-    def get_cash_flow(
-        self, symbol: str, year: int, quarter: Optional[int] = None
-    ) -> Dict[str, Any]:
-        """
-        Get cash flow statement data for a Korean company.
-
-        Returns a dictionary with cash flow line items including:
-        - Operating activities
-        - Investing activities
-        - Financing activities
-
-        Args:
-            symbol: Stock code
-            year: Fiscal year
-            quarter: Optional quarter (1-4)
-
-        Returns:
-            Dictionary with cash flow data
-        """
-        raw_data = self.get_financial_statement_raw(symbol, year, quarter)
-        if not raw_data:
-            return {}
-
-        cash_flow = {}
-
-        # Filter for cash flow items (sj_div == "CF")
-        for item in raw_data:
-            if item.get("sj_div") == "CF":
-                account_nm = item.get("account_nm", "")
-                amount = item.get("thstrm_amount", "0")
-
-                # Convert amount to float
-                try:
-                    amount_str = str(amount).replace(",", "")
-                    if amount_str and amount_str != "-":
-                        cash_flow[account_nm] = float(amount_str)
-                except (ValueError, AttributeError):
-                    cash_flow[account_nm] = None
-
-        return cash_flow
-
     def find_corp_code(self, corp_name_or_stock_code: str) -> Optional[str]:
         """
         Find corp code by company name or stock code.
@@ -759,7 +718,8 @@ class OpenDartClient:
         Get merged major-account financial statement line items.
 
         This is an alias for get_financial_statement_raw() using the new
-        OPENDART major-account endpoints.
+        OPENDART major-account endpoints. They return balance sheet (BS) and
+        income statement (IS) accounts only; there are no cash flow items.
 
         Args:
             symbol: Stock code

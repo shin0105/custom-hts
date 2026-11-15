@@ -53,9 +53,6 @@ class FakeDart:
     def get_income_statement(self, symbol, year, quarter=None):
         return self._statement(symbol, {"매출액": 10.0})
 
-    def get_cash_flow(self, symbol, year, quarter=None):
-        return self._statement(symbol, {})
-
     def get_corp_code(self, symbol):
         return "00126380"
 
@@ -87,6 +84,12 @@ def test_unconfigured_supabase_skips_the_source_fetch(service):
     assert service.is_configured is False
     assert service.insert_korean_balance_sheet("005930", 2024) is False
     assert service.opendart.requests == []
+
+
+def test_korean_cash_flow_is_skipped_without_calling_opendart(service):
+    assert service.insert_korean_cashflow_statement("005930", 2024) is False
+    assert service.opendart.requests == []
+    assert service.supabase.client.calls == []
 
 
 def test_batch_reports_failure_when_a_symbol_stores_nothing(service):

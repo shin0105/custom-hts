@@ -132,45 +132,19 @@ class FinancialStatementService:
         self, symbol: str, year: int, quarter: Optional[int] = None
     ) -> bool:
         """
-        Fetch and insert Korean cash flow statement data.
+        Korean cash flow statements cannot be stored.
 
-        Args:
-            symbol: Korean stock code
-            year: Fiscal year
-            quarter: Optional quarter (1-4)
-
-        Returns:
-            True if successful, False otherwise
+        The OpenDART major-account APIs return balance sheet and income
+        statement accounts only, so there is nothing to fetch. Always
+        returns False without calling OpenDART; the korean_cashflow_statement
+        table stays in the schema for a future full-statement source.
         """
-        if not self.is_configured:
-            logger.error("Supabase client not initialized")
-            return False
-
-        try:
-            # Get raw cash flow data from OPENDART
-            raw_data = self.opendart.get_cash_flow(symbol, year, quarter)
-
-            if not raw_data:
-                logger.warning(
-                    f"No cash flow data for {symbol} ({year}Q{quarter or 'Annual'})"
-                )
-                return False
-
-            # Parse and map data
-            cashflow_data = self._parse_korean_cashflow_statement(
-                symbol, year, quarter, raw_data
-            )
-
-            self._upsert("korean_cashflow_statement", cashflow_data)
-
-            logger.info(
-                f"✅ Inserted Korean cash flow: {symbol} ({year}Q{quarter or 'Annual'})"
-            )
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to insert Korean cash flow: {e}")
-            return False
+        logger.info(
+            "Skipping Korean cash flow for %s: not provided by the OpenDART "
+            "major-account APIs",
+            symbol,
+        )
+        return False
 
     def insert_all_korean_statements(
         self, symbol: str, year: int, quarter: Optional[int] = None
@@ -560,48 +534,6 @@ class FinancialStatementService:
             "법인세비용차감전순이익": "income_before_tax",
             "법인세비용": "income_tax_expense",
             "당기순이익": "net_income",
-        }
-
-        corp_code = self.opendart.get_corp_code(symbol)
-        company_info = (
-            self.opendart.get_company_info(symbol) if corp_code else None
-        )
-        company_name = (
-            company_info.get("corp_name", symbol) if company_info else symbol
-        )
-
-        data = {
-            "symbol": symbol,
-            "company_name": company_name,
-            "year": year,
-            "quarter": quarter,
-            "raw_data": raw_data,
-        }
-
-        for kr_name, field_name in mapping.items():
-            for account_name, value in raw_data.items():
-                if kr_name in account_name and value is not None:
-                    data[field_name] = value
-                    break
-
-        return data
-
-    def _parse_korean_cashflow_statement(
-        self,
-        symbol: str,
-        year: int,
-        quarter: Optional[int],
-        raw_data: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """Parse OPENDART cash flow data into database format."""
-        mapping = {
-            "영업활동현금흐름": "operating_cash_flow",
-            "당기순이익": "net_income_for_cf",
-            "감가상각비": "depreciation_amortization",
-            "투자활동현금흐름": "investing_cash_flow",
-            "유형자산의취득": "capital_expenditure",
-            "재무활동현금흐름": "financing_cash_flow",
-            "배당금지급": "dividends_paid",
         }
 
         corp_code = self.opendart.get_corp_code(symbol)

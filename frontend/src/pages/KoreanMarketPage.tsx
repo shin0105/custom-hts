@@ -78,10 +78,13 @@ const POPULAR_STOCKS: Array<{ code: string; name: string }> = [
   { code: '035720', name: '카카오' },
 ];
 
-const STATEMENTS: Array<{ value: 'IS' | 'BS' | 'CF'; label: string }> = [
+// OpenDART's major-account APIs return only balance-sheet (BS) and
+// income-statement (IS) accounts, so there is no cash-flow tab.
+type StatementKind = 'IS' | 'BS';
+
+const STATEMENTS: Array<{ value: StatementKind; label: string }> = [
   { value: 'IS', label: ko.financials.incomeStatement },
   { value: 'BS', label: ko.financials.balanceSheet },
-  { value: 'CF', label: ko.financials.cashFlow },
 ];
 
 export const KoreanMarketPage: React.FC = () => {
@@ -106,7 +109,7 @@ export const KoreanMarketPage: React.FC = () => {
   const [finYear, setFinYear] = useState<number>(new Date().getFullYear() - 1);
   const [finPeriod, setFinPeriod] = useState<'annual' | 'quarterly'>('annual');
   const [finQuarter, setFinQuarter] = useState<number>(1);
-  const [finStatement, setFinStatement] = useState<'IS' | 'BS' | 'CF'>('IS');
+  const [finStatement, setFinStatement] = useState<StatementKind>('IS');
   const [fsDivision, setFsDivision] = useState<'CFS' | 'OFS'>('CFS');
   const [accountFilter, setAccountFilter] = useState('');
 
@@ -273,13 +276,11 @@ export const KoreanMarketPage: React.FC = () => {
     if (sjDiv) {
       if (finStatement === 'IS') return sjDiv === 'IS' || sjDiv === 'CIS';
       if (finStatement === 'BS') return sjDiv === 'BS';
-      if (finStatement === 'CF') return sjDiv === 'CF';
     }
     const sjName = item.sj_nm || '';
     if (finStatement === 'BS') return sjName.includes('재무상태표');
     if (finStatement === 'IS')
       return sjName.includes('손익계산서') || sjName.includes('포괄손익');
-    if (finStatement === 'CF') return sjName.includes('현금흐름');
     return false;
   };
 

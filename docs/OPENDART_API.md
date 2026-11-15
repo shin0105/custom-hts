@@ -36,7 +36,7 @@ DART_API_KEY=your_dart_api_key
 
 - 재무제표 요청 파라미터는 `corp_code`, `bsns_year`, `reprt_code`입니다. 두 주요계정 API 결과를 합치고 `fs_div`(`CFS` 연결, `OFS` 별도)로 거른 뒤 중복을 없앱니다.
 - 보고서 코드: `11013` 1분기, `11012` 반기, `11014` 3분기, `11011` 사업보고서. 백엔드는 `quarter` 1·2·3·4를 각각 이 순서로 매핑하고, 분기를 주지 않으면 `11011`을 씁니다.
-- 주요계정 API는 재무상태표(BS)와 손익계산서(IS)의 주요 계정을 제공합니다. 현금흐름표(CF) 항목은 이 API 범위 밖이라 현금흐름 응답과 화면의 현금흐름표 탭은 대개 비어 있습니다.
+- 주요계정 API는 재무상태표(BS)와 손익계산서(IS)의 주요 계정만 제공하고 현금흐름표(CF) 항목은 없습니다(삼성전자 실제 응답으로 확인). 그래서 화면에는 현금흐름표 탭이 없고, `/cash-flow` 엔드포인트는 `501`을 돌려주며, Supabase 저장도 국내 현금흐름표는 건너뜁니다.
 - 응답 `status`: `000` 정상, `013` 데이터 없음(빈 결과로 처리), `020` 요청 한도 초과. 그 밖의 값은 오류로 보고 404를 돌려줍니다.
 
 ### 백엔드 엔드포인트
@@ -45,7 +45,8 @@ DART_API_KEY=your_dart_api_key
 |------------|------|
 | `GET /api/korean/financials/{symbol}` | 요약 값(매출액, 영업이익, 당기순이익, 자산·부채·자본총계, EPS, BPS) |
 | `GET /api/korean/financials/{symbol}/all` | 주요계정 원본 항목 전체. 국내주식 화면의 재무제표 표가 사용 |
-| `GET /api/korean/financials/{symbol}/balance-sheet`, `/income-statement`, `/cash-flow` | `sj_div`가 BS·IS·CF인 항목만 |
+| `GET /api/korean/financials/{symbol}/balance-sheet`, `/income-statement` | `sj_div`가 BS·IS인 항목만 |
+| `GET /api/korean/financials/{symbol}/cash-flow` | 항상 `501` (주요계정 API에 현금흐름표 항목이 없음) |
 | `GET /api/korean/valuation/{symbol}` | KIS 현재가와 DART 재무로 계산한 PER·PBR·EPS·BPS |
 | `GET /api/korean/company/{symbol}` | 기업개황 |
 | `GET /api/korean/disclosures` | 공시 목록 (`corp`, `start`, `end`, `kind`, `final`, `limit`) |
@@ -105,7 +106,7 @@ uv run python scripts/fetch_opendart_all_stocks.py --years 2025 --periods 2025Q1
 | `--retries`, `--retry-sleep` | 실패 시 재시도 횟수(기본 2)와 대기(기본 30초) |
 | `--output-root` | 출력 폴더, 기본 저장소 루트의 `database/raw_data` |
 
-- 결과: `<output-root>/<연도>/<기간>/{balance_sheet,income_statement,cashflow_statement}.csv`와 같은 이름의 `.schema.json`
+- 결과: `<output-root>/<연도>/<기간>/{balance_sheet,income_statement,cashflow_statement}.csv`와 같은 이름의 `.schema.json`. 주요계정 API에는 현금흐름표 항목이 없으므로 `cashflow_statement.csv`에는 금액이 들어가지 않습니다.
 - 진행 상황은 `<output-root>/progress/opendart_<연도>.json`에 저장되어, 다시 실행하면 끝난 종목은 건너뜁니다. 재시도 후에도 실패하면 진행 상황을 저장하고 멈춥니다.
 - 연결·별도를 모두 받으므로 종목·연도마다 최대 16건을 요청합니다. 전 종목 수집은 하루 한도를 넘을 수 있으니 며칠에 나눠 실행하세요.
 - 분기 값: 스크립트는 반기·사업보고서의 손익·현금흐름 금액을 누적값, 3분기 금액을 3개월 값으로 보고 2분기 = 반기 − 1분기, 4분기 = 연간 − 반기 − 3분기로 계산합니다. 재무상태표는 시점 값을 그대로 씁니다.
@@ -150,7 +151,7 @@ Without a key, financial statement, company and filing requests return no data, 
 
 - Financial statement requests take `corp_code`, `bsns_year` and `reprt_code`. Results from both major-account APIs are merged, filtered by `fs_div` (`CFS` consolidated, `OFS` separate) and de-duplicated.
 - Report codes: `11013` Q1, `11012` half-year, `11014` Q3, `11011` annual report. The backend maps `quarter` 1, 2, 3, 4 to these in that order and uses `11011` when no quarter is given.
-- The major-account APIs provide the main balance sheet (BS) and income statement (IS) accounts. Cash flow (CF) items are outside their scope, so cash-flow responses and the cash-flow tab in the UI are usually empty.
+- The major-account APIs provide the main balance sheet (BS) and income statement (IS) accounts only; they have no cash flow (CF) items (confirmed against real responses for Samsung Electronics). So the UI has no cash-flow tab, the `/cash-flow` endpoint returns `501`, and Supabase storage skips Korean cash flow statements.
 - Response `status`: `000` OK, `013` no data (treated as an empty result), `020` request limit exceeded. Any other value is treated as an error and the endpoint returns 404.
 
 ### Backend endpoints
@@ -159,7 +160,8 @@ Without a key, financial statement, company and filing requests return no data, 
 |----------|---------|
 | `GET /api/korean/financials/{symbol}` | Summary values (revenue, operating income, net income, total assets/liabilities/equity, EPS, BPS) |
 | `GET /api/korean/financials/{symbol}/all` | Every raw major-account line item. Used by the statements table on the domestic stock page |
-| `GET /api/korean/financials/{symbol}/balance-sheet`, `/income-statement`, `/cash-flow` | Only items whose `sj_div` is BS, IS or CF |
+| `GET /api/korean/financials/{symbol}/balance-sheet`, `/income-statement` | Only items whose `sj_div` is BS or IS |
+| `GET /api/korean/financials/{symbol}/cash-flow` | Always `501` (the major-account APIs have no cash flow items) |
 | `GET /api/korean/valuation/{symbol}` | PER, PBR, EPS and BPS from the KIS price and DART financials |
 | `GET /api/korean/company/{symbol}` | Company overview |
 | `GET /api/korean/disclosures` | Filing list (`corp`, `start`, `end`, `kind`, `final`, `limit`) |
@@ -219,7 +221,7 @@ uv run python scripts/fetch_opendart_all_stocks.py --years 2025 --periods 2025Q1
 | `--retries`, `--retry-sleep` | Retries on failure (default 2) and the wait between them (default 30 s) |
 | `--output-root` | Output folder, default `database/raw_data` at the repository root |
 
-- Output: `<output-root>/<year>/<period>/{balance_sheet,income_statement,cashflow_statement}.csv`, each with a matching `.schema.json`
+- Output: `<output-root>/<year>/<period>/{balance_sheet,income_statement,cashflow_statement}.csv`, each with a matching `.schema.json`. The major-account APIs have no cash flow items, so `cashflow_statement.csv` carries no amounts.
 - Progress is saved to `<output-root>/progress/opendart_<year>.json`; a rerun skips finished stocks. If a request still fails after the retries, the script saves progress and stops.
 - It fetches both consolidated and separate statements, so each stock and year costs up to 16 requests. A run over all stocks can exceed the daily limit; spread it over several days.
 - Quarterly values: the script treats half-year and annual income and cash-flow amounts as cumulative and Q3 amounts as three-month figures, and derives Q2 = half-year − Q1 and Q4 = annual − half-year − Q3. Balance sheet values are used as-is.

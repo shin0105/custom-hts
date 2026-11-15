@@ -1046,7 +1046,7 @@ async def get_income_statement(
 @router.get("/financials/{symbol}/cash-flow")
 async def get_cash_flow(
     symbol: str,
-    year: int = Query(datetime.now().year - 1, description="Fiscal year"),
+    year: Optional[int] = Query(None, description="Fiscal year"),
     quarter: Optional[int] = Query(
         None,
         ge=1,
@@ -1055,37 +1055,20 @@ async def get_cash_flow(
     ),
 ) -> Dict[str, Any]:
     """
-    Get detailed cash flow statement for a Korean company.
+    Cash flow statements are not available.
 
-    Returns all cash flow statement line items including:
-    - Operating activities
-    - Investing activities
-    - Financing activities
-    - Net change in cash
-
-    Args:
-        symbol: Stock code (e.g., 005930 for Samsung Electronics)
-        year: Fiscal year (defaults to previous year)
-        quarter: Optional quarter (1-4)
-
-    Returns:
-        Dictionary with all cash flow line items
+    The OpenDART major-account APIs this backend uses (fnlttSinglAcnt,
+    fnlttMultiAcnt) return balance sheet and income statement accounts
+    only, so this route always answers 501 instead of an empty statement.
     """
-    cash_flow = opendart_client.get_cash_flow(symbol, year, quarter)
-
-    if not cash_flow:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Cash flow statement not found for {symbol} (year: {year}, quarter: {quarter})",
-        )
-
-    return {
-        "symbol": symbol,
-        "year": year,
-        "quarter": quarter,
-        "statement_type": "cash_flow",
-        "data": cash_flow,
-    }
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "Cash flow statements are not available: the OpenDART "
+            "major-account APIs return balance sheet and income statement "
+            "accounts only."
+        ),
+    )
 
 
 @router.get("/company/{symbol}")
@@ -1195,14 +1178,11 @@ async def get_all_financials(
     ),
 ) -> Dict[str, Any]:
     """
-    Get comprehensive financial statements with all line items.
+    Get every major-account line item for a period.
 
-    Returns complete financial data including all accounts from:
-    - Balance Sheet
-    - Income Statement
-    - Cash Flow Statement
-
-    This is more comprehensive than the summary endpoint.
+    Returns the balance sheet (sj_div BS) and income statement (IS)
+    accounts from the OpenDART major-account APIs. They include no cash
+    flow items.
 
     Args:
         symbol: Stock code (e.g., 005930 for Samsung Electronics)
