@@ -410,10 +410,9 @@ async def get_korean_bond_master(
     """
     Get domestic listed bond master list from local bond code master file.
 
-    Master source file should exist at one of:
-    - backend/data/kr_bond_master/bond_codes.csv
-    - backend/data/kr_bond_master/bond_codes.tsv
-    - backend/data/kr_bond_master/bond_codes.txt
+    Reads backend/data/kr_bond_master/ in this order: bond_code.mst
+    (downloaded), bond_codes.csv (export), any other *bond*code* file,
+    then the committed bond_codes.json snapshot.
     """
     result = await korean_market_service.get_bond_master(
         query=query,
